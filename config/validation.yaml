@@ -1,0 +1,9 @@
+windows:
+  development: {start: 2000-01-03, end: 2012-12-31}
+  walkforward: {start: 2013-01-02, end: 2020-12-31}
+  holdout:     {start: 2021-01-04, end: 2025-12-31}
+bootstrap_block_days: 63
+bootstrap_block_sensitivity: [21, 126]
+bootstrap_iterations: 10000
+seed: 20260916
+alpha: 0.05

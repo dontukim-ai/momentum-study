@@ -1,0 +1,5 @@
+min_close_usd: 5.0
+min_adv_usd: 20000000
+adv_lookback_days: 60
+min_history_days: 252
+max_names: 1000

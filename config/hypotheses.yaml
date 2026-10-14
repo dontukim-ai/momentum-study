@@ -1,0 +1,6 @@
+hypotheses:
+  - {id: H1, top_pct: 0.10, require_positive: true,  rebalance: daily,   lookback: 1d}
+  - {id: H2, top_pct: 0.10, require_positive: true,  rebalance: weekly,  lookback: 1w}
+  - {id: H3, top_pct: 0.10, require_positive: true,  rebalance: monthly, lookback: 1mo,
+     secondary_filter: turnover_top_30pct}
+  - {id: H4, top_pct: 0.10, require_positive: false, rebalance: monthly, lookback: 12mo, skip: 1mo}

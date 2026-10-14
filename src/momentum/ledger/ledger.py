@@ -1,0 +1,255 @@
+"""Cent-exact accounting ledger.
+
+Everything the project reports is arithmetic on this ledger's output, so the
+authority for its behaviour is the hand-calculated fixture
+``tests/fixtures/handcalc_ledger.csv`` — not this docstring.
+
+Invariants, enforced every day by the golden tests:
+
+* ``cash + positions_value + dividend_receivable == nav`` exactly (Decimal, cents)
+* ``cash >= 0`` — no borrowing, ever
+* no fill at a price that does not exist
+
+``nav`` is NOT derived from the other three fields. It is tracked
+independently, cash-flow by cash-flow (trade costs, realised gains/losses on
+sells, dividend accruals, mark-to-market deltas), precisely so that the
+accounting-identity test has a real chance to fail: if any mutation forgets to
+book a cost, drops a receivable, or mis-marks a position, the independently
+tracked ``nav`` and the recomputed ``cash + positions_value +
+dividend_receivable`` diverge.
+
+Fixed per-session processing order (``step`` / ``step_session``):
+corporate actions -> sell fills -> recomputed available cash -> buy fills
+(reduced when cash runs short) -> mark to market at the close.
+
+Dividends are accrued as a receivable on the ex-date (where the raw close has
+already dropped by the dividend) and only converted to cash on the pay date, so
+net assets jump on neither day. That is the cheapest available detector for the
+double-counting CLAUDE.md rule 4 warns about. A split multiplies the share
+count and divides the per-share cost basis (and the stored mark), leaving net
+assets unchanged.
+
+Calling contract for ``apply_corporate_actions``: a corporate-action row MUST
+be presented to the ledger on BOTH its ex-date and its pay-date (the same
+``CorporateAction`` tuple, passed again on the later date). The ex-date branch
+only fires when ``ca.ex_date == d`` and the pay-date branch only when
+``ca.pay_date == d``, so presenting the same action on both days is required,
+not merely harmless -- omitting the pay-date presentation leaves the
+receivable stuck forever, and omitting the ex-date presentation skips the
+accrual entirely.
+"""
+
+from __future__ import annotations
+
+from datetime import date
+from decimal import ROUND_HALF_UP, Decimal
+from typing import NamedTuple
+
+from momentum.config import ExecutionCfg, SpecUndefinedError
+from momentum.execution.engine import Fill, execute
+from momentum.portfolio.targets import TargetOrder
+
+CENT = Decimal("0.01")
+
+
+class CorporateAction(NamedTuple):
+    security_id: str
+    action_type: str  # "cash_dividend" | "split"
+    ex_date: date
+    pay_date: date | None
+    split_ratio: Decimal | None
+    cash_amount: Decimal | None
+
+
+class Ledger:
+    def __init__(self, starting_cash: Decimal, cfg: ExecutionCfg | None = None) -> None:
+        self.cash: Decimal = Decimal(starting_cash).quantize(CENT, ROUND_HALF_UP)
+        self.positions: dict[str, int] = {}
+        self.cost_basis: dict[str, Decimal] = {}  # per share, includes trading cost
+        self.marks: dict[str, Decimal] = {}  # per share, excludes trading cost
+        # Last session date on which each held security's mark was refreshed
+        # from an actual close (finding 8) -- lets callers tell "no close
+        # today" (one missing day) apart from a persistent delisting (many).
+        self.marks_asof: dict[str, date] = {}
+        self.receivables: dict[tuple[str, date], Decimal] = {}
+        self.fills: list[Fill] = []
+        self.cfg: ExecutionCfg = cfg if cfg is not None else ExecutionCfg()
+        self._nav: Decimal = self.cash
+
+    # ---- state -------------------------------------------------------
+    @property
+    def positions_value(self) -> Decimal:
+        total = Decimal("0.00")
+        for sid, qty in self.positions.items():
+            if qty == 0:
+                continue
+            mark = self.marks.get(sid)
+            if mark is None:
+                raise SpecUndefinedError(f"no mark price ever seen for held security {sid}")
+            total += qty * mark
+        return total.quantize(CENT)
+
+    @property
+    def dividend_receivable(self) -> Decimal:
+        return sum(self.receivables.values(), Decimal("0.00")).quantize(CENT)
+
+    @property
+    def nav(self) -> Decimal:
+        return self._nav
+
+    def stale_positions_value(self, d: date) -> Decimal:
+        """Portion of ``positions_value`` not refreshed by a close as of ``d``.
+
+        A security whose ``marks_asof`` is behind ``d`` is being carried at a
+        stale mark -- either a one-day feed gap (self-heals tomorrow) or a
+        delisting (never heals). Tasks 12/13 can watch how long a security
+        stays in this set to tell the two apart; this ledger does not guess.
+        """
+        total = Decimal("0.00")
+        for sid, qty in self.positions.items():
+            if qty == 0:
+                continue
+            if self.marks_asof.get(sid) != d:
+                mark = self.marks.get(sid)
+                if mark is not None:
+                    total += qty * mark
+        return total.quantize(CENT)
+
+    # ---- the three phases --------------------------------------------
+    def apply_corporate_actions(self, cas: list[CorporateAction], d: date) -> None:
+        for ca in cas:
+            if ca.action_type == "cash_dividend":
+                if ca.pay_date is None:
+                    raise SpecUndefinedError(f"dividend without pay_date: {ca}")
+                if ca.ex_date == d:
+                    if ca.cash_amount is None:
+                        raise SpecUndefinedError(f"dividend without cash_amount: {ca}")
+                    qty = self.positions.get(ca.security_id, 0)
+                    if qty:
+                        accrual = (qty * ca.cash_amount).quantize(CENT, ROUND_HALF_UP)
+                        key = (ca.security_id, ca.pay_date)
+                        self.receivables[key] = self.receivables.get(key, Decimal("0.00")) + accrual
+                        self._nav += accrual
+                if ca.pay_date == d:
+                    key = (ca.security_id, ca.pay_date)
+                    due = self.receivables.pop(key, Decimal("0.00"))
+                    self.cash = (self.cash + due).quantize(CENT, ROUND_HALF_UP)
+            elif ca.action_type == "split":
+                if ca.ex_date != d:
+                    continue
+                if ca.split_ratio is None or ca.split_ratio <= 0:
+                    raise SpecUndefinedError(f"split without a usable ratio: {ca}")
+                qty = self.positions.get(ca.security_id, 0)
+                if not qty:
+                    continue
+                new_qty = qty * ca.split_ratio
+                if new_qty != new_qty.to_integral_value():
+                    raise SpecUndefinedError(
+                        f"split of {qty} shares by {ca.split_ratio} is not a whole "
+                        f"number of shares for {ca.security_id}"
+                    )
+                self.positions[ca.security_id] = int(new_qty)
+                basis = self.cost_basis.get(ca.security_id)
+                if basis is not None:
+                    self.cost_basis[ca.security_id] = basis / ca.split_ratio
+                mark = self.marks.get(ca.security_id)
+                if mark is not None:
+                    self.marks[ca.security_id] = mark / ca.split_ratio
+            else:
+                raise SpecUndefinedError(f"unknown corporate action type {ca.action_type!r}")
+
+    def apply_fills(self, fills: list[Fill], d: date) -> None:
+        for f in fills:
+            self.fills.append(f)
+            if f.shares == 0:
+                continue
+            notional = (f.shares * f.price).quantize(CENT, ROUND_HALF_UP)
+            if f.side == "sell":
+                held = self.positions.get(f.security_id, 0)
+                if f.shares > held:
+                    raise SpecUndefinedError(
+                        f"sell of {f.shares} exceeds {held} held in {f.security_id}"
+                    )
+                old_mark = self.marks.get(f.security_id)
+                if old_mark is None:
+                    # Should not happen for a real holding -- every position
+                    # gets a mark the moment it is bought -- but never invent
+                    # a price silently (rule 3): fall back to the traded
+                    # price itself, which books zero realised gain/loss
+                    # rather than a fabricated one.
+                    old_mark = f.price
+                self._nav += f.shares * (f.price - old_mark) - f.cost
+                remaining = held - f.shares
+                self.positions[f.security_id] = remaining
+                if remaining == 0:
+                    self.cost_basis.pop(f.security_id, None)
+                    self.marks.pop(f.security_id, None)
+                    self.marks_asof.pop(f.security_id, None)
+                self.cash = (self.cash + notional - f.cost).quantize(CENT, ROUND_HALF_UP)
+            else:
+                held = self.positions.get(f.security_id, 0)
+                old_basis = self.cost_basis.get(f.security_id, Decimal(0))
+                old_mark = self.marks.get(f.security_id, f.price)
+                new_qty = held + f.shares
+                self.cost_basis[f.security_id] = (
+                    old_basis * held + notional + f.cost
+                ) / new_qty
+                # Blend the mark (cost-free valuation baseline) so that a
+                # same-day mark-to-market delta prices only the genuine
+                # move from acquisition to close, not the whole position
+                # from a stale prior mark (see docstring / finding 1 math).
+                self.marks[f.security_id] = (old_mark * held + f.price * f.shares) / new_qty
+                self.positions[f.security_id] = new_qty
+                self._nav -= f.cost
+                self.cash = (self.cash - notional - f.cost).quantize(CENT, ROUND_HALF_UP)
+            if self.cash < 0:
+                raise SpecUndefinedError(f"fill on {d} drove cash negative: {self.cash}")
+
+    def mark_to_market(self, closes: dict[str, Decimal], d: date) -> None:
+        # A missing close is not filled in (rule 3): the last known mark stands,
+        # which is what a delisted position with no liquidation price must do.
+        for sid, px in closes.items():
+            qty = self.positions.get(sid, 0)
+            if qty:
+                old_mark = self.marks.get(sid)
+                if old_mark is not None:
+                    self._nav += qty * (px - old_mark)
+                self.marks_asof[sid] = d
+            self.marks[sid] = px
+
+    # ---- one session --------------------------------------------------
+    def step_session(
+        self,
+        d: date,
+        asof: date,
+        actions: list[CorporateAction],
+        orders: list[TargetOrder],
+        opens: dict[str, Decimal | None],
+        adv: dict[str, float],
+        closes: dict[str, Decimal],
+    ) -> None:
+        """Typed entry point holding the fixed per-session pipeline.
+
+        This is the form Task 10 should call directly with real ``Decimal``s,
+        ``date``s and ``TargetOrder``s -- ``step(row)`` is a thin wrapper
+        around this for the fixture's string-encoded rows and must stay
+        public, but it was never required to be the only entry point.
+        """
+        self.apply_corporate_actions(actions, d)
+        fills = execute(
+            orders,
+            opens,
+            adv,
+            self.cash,
+            self.cfg,
+            session_date=d,
+            asof=asof,
+        )
+        self.apply_fills(fills, d)
+        self.mark_to_market(closes, d)
+
+    def step(self, row: dict[str, str]) -> None:
+        from momentum.ledger._fixture_rows import parse_row
+
+        d, asof, actions, orders, opens, adv, closes = parse_row(row)
+        self.step_session(d, asof, actions, orders, opens, adv, closes)

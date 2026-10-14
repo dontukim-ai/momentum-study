@@ -1,0 +1,38 @@
+[project]
+name = "momentum"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.12"
+dependencies = [
+    "duckdb>=1.5.5",
+    "jinja2>=3.1.6",
+    "numpy>=2.5.3",
+    "polars>=1.44.2",
+    "pyarrow>=25.0.1",
+    "pydantic>=2.13.5",
+    "pyyaml>=6.0.3",
+    "scipy>=1.18.1",
+]
+
+[project.scripts]
+momentum = "momentum:main"
+
+[build-system]
+requires = ["uv_build>=0.12.15,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: full end-to-end runs over the whole development window (H1's ~3,270 daily rebalances); deselected by default, run explicitly with `-m slow`.",
+]
+addopts = "-m 'not slow'"
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.168.0",
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.7",
+    "types-pyyaml>=6.0.12.20260906",
+]

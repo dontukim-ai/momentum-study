@@ -1,0 +1,11 @@
+base_cost_bps: 10.0
+stress_cost_bps: 25.0
+optimistic_cost_bps: 5.0
+participation_limit: 0.001
+participation_lookback_days: 20
+account_equity_usd: 30000
+max_positions: 50
+max_weight: 0.05
+min_positions_for_full_investment: 20
+cash_buffer: 0.005
+cash_interest_rate: 0.0
