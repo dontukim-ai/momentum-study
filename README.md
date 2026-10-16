@@ -4,6 +4,8 @@
 
 **현재 작업 범위:** 사용자 지시로 미국 H1~H4 개발·연구 실행을 보류한다. 기존 코드는 보존하며, 국내 주식·ETF 후보 선정과 자동 개선 연구에 집중한다.
 
+**현재 기준 설계:** [상세 블루프린트 v1.0](docs/blueprint/README.md)에서 의도·구조·구현 방법·자기학습·운영·개발 계획을 관리한다. [구현 진행 현황](docs/blueprint/status.md)은 완료·부분 구현·미착수·보류와 검증 증거를 따로 표시한다.
+
 | 경로 | 범위 | 실행 명령 |
 | --- | --- | --- |
 | 루트 `src/momentum` | 미국 보통주 H1~H4, 공통 체결·회계 엔진, 손계산 골든 테스트 | `uv run momentum --help` |
@@ -41,6 +43,9 @@ KIS 전체 예제는 `apps/kis-agent/artifacts/logic-v5`에 합성 입력·선�
 
 ## 문서
 
+- [기준 블루프린트·문서 지도](docs/blueprint/README.md)
+- [현재 진행 현황과 검증 증거](docs/blueprint/status.md)
+- [세부 개발 작업·선행 조건·완료 기준](docs/blueprint/implementation-plan.md)
 - [미국 모멘텀 검증 명세](docs/spec-v2.0.md)
 - [기존 개발 불변 규칙](CLAUDE.md)
 - [KIS 종목 선정·자동 개선](apps/kis-agent/docs/08-selection-and-improvement.md)

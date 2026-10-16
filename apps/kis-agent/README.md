@@ -1,5 +1,7 @@
 **한국투자증권 기반 Self-improving Trading Agent — 조사 및 설계**
 
+현재 제품의 [기준 블루프린트](../../docs/blueprint/README.md)와 [진행 현황](../../docs/blueprint/status.md)을 먼저 확인한다. 아래 버전별 설명은 당시 구현 범위와 검증 기록이다.
+
 **통합 연구 런타임 v1 / 앱 v0.5.2:** 저장소 루트의 `momentum-agent`가 미국 원장과 한투 선정을 연결해 네 단계 자동 연구·전진 관찰을 실행한다. 앱의 기존 연구기도 통합 런타임의 시장 단위 소비 구간을 존중한다. [실행·운영 문서](../../docs/automatic-research-agent.md)를 따른다.
 
 **저장소 통합 v0.5.1:** 현재 위치는 `momentum-study/apps/kis-agent`다. 이후 개발은 이 저장소에서 진행한다. 기존 미국 주식 검증 엔진을 보존하면서 전일 종가 기준 최초 수량 산정·평가 전 동결 manifest를 보완했다. 앱 테스트는 **122개**, 상세 통합 범위는 [저장소 문서](../../docs/kis-agent-integration.md)에 기록했다. 아래 v0.2~v0.5 항목의 테스트 수는 각 버전 당시 기록이다.
