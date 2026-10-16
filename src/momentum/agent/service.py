@@ -24,7 +24,12 @@ from .contracts import (
     policy_from_dict,
     require_observed,
 )
-from .evaluator import CommonEvaluator, MarketCosts
+from .evaluator import (
+    CommonEvaluator,
+    EvaluationResult,
+    MarketCosts,
+    require_same_contract,
+)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS agent_studies (
@@ -472,6 +477,7 @@ class ResearchAgent:
         candidates = {s.version: s for s in [champion, *proposer.propose(champion)]}
         trials = []
         fold_size = policy.development_sessions // 3
+        reference_folds: list[EvaluationResult] = []
         for spec in candidates.values():
             try:
                 folds = [
@@ -485,6 +491,13 @@ class ResearchAgent:
                     )
                     for i in range(3)
                 ]
+                if spec.version == champion.version:
+                    reference_folds = folds
+                else:
+                    for reference, candidate_fold in zip(
+                        reference_folds, folds, strict=True
+                    ):
+                        require_same_contract(reference, candidate_fold)
                 trials.append(
                     {
                         "spec": asdict(spec),
@@ -502,6 +515,7 @@ class ResearchAgent:
                                 "net_return": f.net_return,
                                 "drawdown": f.max_drawdown,
                                 "trades": f.trades,
+                                "evaluation_contract_id": f.evaluation_contract_id,
                             }
                             for f in folds
                         ],
@@ -545,6 +559,9 @@ class ResearchAgent:
                 "champion_score": baseline["score"],
                 "worst_drawdown": best["worst_drawdown"],
                 "fold_trades": best["fold_trades"],
+                "evaluation_contract_ids": [
+                    f.evaluation_contract_id for f in reference_folds
+                ],
             },
             "holdout": {"evaluated": False},
         }
@@ -560,6 +577,8 @@ class ResearchAgent:
             stressed_candidate = evaluator.evaluate(
                 data, selected, start, end, stress=True
             )
+            require_same_contract(base, candidate)
+            require_same_contract(stressed_base, stressed_candidate)
             if [r["session"] for r in base.equity_curve] != [
                 r["session"] for r in candidate.equity_curve
             ]:
@@ -584,6 +603,8 @@ class ResearchAgent:
                 "stress_improvement": stressed_candidate.net_return
                 - stressed_base.net_return,
                 "observations": len(candidate.daily_returns),
+                "evaluation_contract_id": base.evaluation_contract_id,
+                "stress_evaluation_contract_id": stressed_base.evaluation_contract_id,
                 "baseline": asdict(base),
                 "candidate": asdict(candidate),
                 "stressed_baseline": asdict(stressed_base),

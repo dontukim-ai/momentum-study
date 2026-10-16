@@ -6,11 +6,14 @@ money, positions, corporate actions and independently reconciled NAV.
 
 from __future__ import annotations
 
+import hashlib
 import math
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import date
 from decimal import ROUND_CEILING, ROUND_HALF_UP
 from decimal import Decimal as D
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Protocol
 
 from trading_agent.contracts import AgentError, Costs, Wallet, digest, session_time
@@ -61,6 +64,56 @@ class LedgerWallet(Wallet):
 
 
 @dataclass(frozen=True)
+class EvaluationContract:
+    schema_version: str
+    evaluation_window: tuple[str, str]
+    data_bundle_id: str
+    market: str
+    currency: str
+    money_quantum: str
+    execution_clock: tuple[str, str]
+    valuation_basis: str
+    capital: tuple[D, D, str]
+    risk_limits: tuple[D, D, D]
+    initial_portfolio: str
+    execution_model: tuple[D, str, str, str]
+    cost_scenario: tuple[str, D, D, D]
+    ledger_version: str
+    metrics_spec_version: str
+    selection_policy_id: str
+
+    def to_dict(self) -> dict[str, Any]:
+        result = asdict(self)
+        # Keep the frozen contract deeply immutable while giving reports named fields.
+        for name, keys in (
+            ("capital", ("initial", "limit", "rule")),
+            ("risk_limits", ("max_gross", "max_position", "max_order_notional")),
+            ("execution_clock", ("observation", "execution")),
+            (
+                "execution_model",
+                ("volume_cap_ratio", "order_priority", "fill", "slippage"),
+            ),
+            (
+                "cost_scenario",
+                ("name", "commission_bps", "sell_tax_bps", "slippage_bps"),
+            ),
+        ):
+            result[name] = dict(zip(keys, result[name], strict=True))
+        return result
+
+    @property
+    def contract_id(self) -> str:
+        return digest(self.to_dict())
+
+
+@lru_cache(maxsize=1)
+def ledger_version() -> str:
+    return hashlib.sha256(
+        (Path(__file__).parents[1] / "ledger" / "ledger.py").read_bytes()
+    ).hexdigest()
+
+
+@dataclass(frozen=True)
 class EvaluationResult:
     strategy_version: str
     start: str
@@ -78,6 +131,24 @@ class EvaluationResult:
     tradability: dict[str, Any]
     turnover_on_initial_capital: float
     turnover_on_average_nav: float
+    evaluation_contract_id: str
+    evaluation_contract: dict[str, Any]
+
+
+def require_same_contract(a: EvaluationResult, b: EvaluationResult) -> None:
+    for result in (a, b):
+        if digest(result.evaluation_contract) != result.evaluation_contract_id:
+            raise AgentError("Evaluation contract payload does not match its ID")
+    if a.evaluation_contract_id != b.evaluation_contract_id:
+        differing = sorted(
+            k
+            for k in a.evaluation_contract.keys() | b.evaluation_contract.keys()
+            if a.evaluation_contract.get(k) != b.evaluation_contract.get(k)
+        )
+        raise AgentError(
+            "Results are not under the same evaluation contract: "
+            + ", ".join(differing)
+        )
 
 
 def tradability_metrics(events: list[dict[str, Any]]) -> dict[str, Any]:
@@ -190,6 +261,42 @@ class CommonEvaluator:
                 "KRW raw prices must match the declared whole-won precision"
             )
         capital = p.logic.selection.capital_limit
+        selection = p.logic.selection
+        contract = EvaluationContract(
+            schema_version="krx-evaluation-v1",
+            evaluation_window=(start.isoformat(), end.isoformat()),
+            data_bundle_id=data.fingerprint(end),
+            market=p.market,
+            currency=p.currency,
+            money_quantum=p.money_quantum,
+            execution_clock=(
+                "prior_session 16:00 Asia/Seoul",
+                "next_session 09:00 Asia/Seoul",
+            ),
+            valuation_basis="mark_to_close_no_liquidation",
+            capital=(capital, selection.capital_limit, "min(nav, capital_limit)"),
+            risk_limits=(
+                selection.max_gross,
+                selection.max_position,
+                selection.max_order_notional,
+            ),
+            initial_portfolio="cash_only_reset_per_evaluation",
+            execution_model=(
+                D(".01"),
+                "sell_first",
+                "next_open",
+                "open_raw_with_fixed_slippage",
+            ),
+            cost_scenario=(
+                "stress_2x_commission_slippage" if stress else "base",
+                costs.commission_bps,
+                costs.sell_tax_bps,
+                costs.slippage_bps,
+            ),
+            ledger_version=ledger_version(),
+            metrics_spec_version="reference-notional-tradability-v1;turnover-dual-v1",
+            selection_policy_id=digest(selection),
+        )
         ledger = Ledger(capital, money_quantum=quantum)
         selector = SelectionEngine(data.securities, p.logic.selection, costs)
         curve: list[dict[str, Any]] = []
@@ -404,4 +511,6 @@ class CommonEvaluator:
             tradability_metrics(events),
             float(turnover / capital),
             float(turnover / (sum((D(r["equity"]) for r in curve), D(0)) / len(curve))),
+            contract.contract_id,
+            contract.to_dict(),
         )
