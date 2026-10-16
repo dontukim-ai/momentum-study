@@ -47,6 +47,8 @@
 | ObservationRelease | research_revision, selector_id, costs_id, risk_id, dataset_basis, evidence_refs, observation_state | 운용 후보가 원래 선정·비용·위험 계약을 잃지 않음 |
 | RuntimeHealth | worker_id, build/environment_id, last_bundle, last_success, pending_cycle, wait_reason, remaining_budget | 프로세스 생존과 데이터/연구 정상 상태를 구별 |
 
+4단계 루프에 필요한 나머지 계약(MarketProfile, StrategyFamily, EvaluationContract, CycleCommitment, ChampionRegistry, 추적 원장·열화 상태, FailureCase 실패 코드, Release)은 [루프 계약 설계안](loop-contracts.md)에 정의한다.
+
 필드가 부족하면 가정값을 넣어 통과시키기보다 지원 불가·품질 보류를 반환한다. 기존 파일 계약은 어댑터로 유지하며, 새로운 계약을 넣는 변경에도 이전 소비 이력은 보존한다.
 
 ## 3. 시점·결측·정정 규칙
