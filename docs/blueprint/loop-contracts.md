@@ -63,7 +63,7 @@ champion 갱신의 단위다. 예산은 §3의 예산 계정이 따로 관리한
 - 연구 이름·빌드·정책·family_version을 바꾸거나 실행을 ABANDONED로 폐기해도 이미 기록된 `reserve`·`consume`은 지워지지 않는다. 현재처럼 폐기한 사이클의 최종 구간 소비도 유지한다.
 - 새 정책 버전이나 새 family_version은 기존 계정의 `remaining`에서 `allocate`로 예산을 받는다. 새로운 독립 연구군으로 등록하려면 `parent_account_id` 없이 계정을 만들고 그 근거(다른 신호 계열, 다른 시장 등)를 남긴다. 독립 연구군끼리도 같은 시장의 최종 구간 소비(INV-4)는 공유한다.
 
-**현재 구현(LOOP-02a):** `agent_budget_accounts`와 `agent_budget_entries`가 `(market, family_lineage_id)` 계정을 관리한다. 현재 계보는 `ranked-momentum` 하나이며 첫 사이클 등록 연구의 고정 사이클 예산을 사용한다. 추가 전용 원장은 `reserve`(등록)와 `consume`(COMPLETE·ABANDONED·평가 실패)만 사용한다. `remaining = total_cycles − reserved`로 계산하며 소비는 예약을 다시 차감하지 않는다. 이름 변경·실패·폐기로 예약을 반환하지 않고, 다른 총예산 정책의 등록은 명시적 할당이 필요하다는 오류로 거부한다. 기존 사이클은 REGISTERED·EVALUATED에는 reserve만, 그 외 상태에는 reserve와 consume을 멱등 역채움한다. `release_unused`·`allocate`·독립 연구군·`family_version`은 미구현이며, 구현 완료 근거는 합성 회귀 범위다.
+**현재 구현(LOOP-02a):** `agent_budget_accounts`와 `agent_budget_entries`가 `(market, family_lineage_id)` 계정을 관리한다. 현재 계보는 `ranked-momentum` 하나이며 첫 사이클 등록 연구의 고정 사이클 예산을 사용한다. 추가 전용 원장은 `reserve`(RES-03a 이후 commitment 고정, 기존 사이클은 등록)와 `consume`(COMPLETE·ABANDONED·평가 실패)만 사용한다. `remaining = total_cycles − reserved`로 계산하며 소비는 예약을 다시 차감하지 않는다. 이름 변경·실패·폐기로 예약을 반환하지 않고, 다른 총예산 정책의 등록은 명시적 할당이 필요하다는 오류로 거부한다. 기존 사이클은 REGISTERED·EVALUATED에는 reserve만, 그 외 상태에는 reserve와 consume을 멱등 역채움한다. `release_unused`·`allocate`·독립 연구군·`family_version`은 미구현이며, 구현 완료 근거는 합성 회귀 범위다.
 
 ## 4. SearchPlan과 CandidateProposal — S1 (RES-04, RES-05)
 
@@ -175,7 +175,7 @@ fill_ratio = Σ(|filled_qty| × reference_price) / Σ(|desired_qty| × reference
 
 ## 7. EvaluationCommitment — S3 (RES-03)
 
-현재 사이클 manifest는 최종 구간 데이터가 도착한 뒤, 개발 선택과 함께 계산 직전에 저장된다. 후보 **공간**만 미리 고정하면 평가 기간이 지난 뒤 최종 후보를 골라도 E2라고 기록할 수 있으므로, 등록을 두 단계로 나눈다.
+사이클 manifest는 최종 구간 데이터가 도착한 뒤, 최종 계산 직전에 저장한다. 후보 **공간**만 미리 고정하면 평가 기간이 지난 뒤 최종 후보를 골라도 E2라고 기록할 수 있으므로, 후보 고정과 최종 평가를 두 단계로 나눈다.
 
 | 단계 | 저장 시점 | 고정하는 것 |
 | --- | --- | --- |
@@ -193,6 +193,10 @@ fill_ratio = Σ(|filled_qty| × reference_price) / Σ(|desired_qty| × reference
 - 개장 후 고정, 평가 기간 시작 후 후보·기준·합격 기준 변경, 과거 자료 재수집은 E2로 기록되지 않는 회귀가 있다.
 - commitment에 없는 후보는 그 구간에서 평가되지 않는다.
 - 저장 시각을 외부에서 확인하는 방법(별도 저장소, Git 태그 등)을 정한다.
+
+**현재 구현(RES-03a, 합성 회귀 범위):** 추가 전용 `agent_commitments(commitment_id, study, ordinal, payload_json, committed_at)`에 연구별 ordinal 하나를 저장한다. payload 해시가 ID이며 개발 계획의 인덱스·날짜, 빌드·정책, baseline·선택 후보 spec/version(동일하면 후보 없음), 개발 trials·scores·fold 계약 ID, 승격 기준·통계 정책, 최종 날짜·달력 목록 해시, 개발 prefix 지문을 고정한다. `ResearchInput.calendar`는 미래 거래일을 포함할 수 있고 관측 범위는 `sessions`와 정확히 일치해야 한다. 생략하면 기존 `sessions`를 따르며, `prefix`는 달력도 자른다. 미래 달력은 개발 지문에서 제외한다. CLI `run --calendar`는 날짜 문자열 JSON 배열을 읽는다. 달력에 최종 끝 날짜가 있고 개발 데이터가 도착하면 개발 선택을 수행하고, 같은 트랜잭션에서 예산 reserve·최종 구간 `_claim`·commitment 저장을 한다. 예산 원장의 `cycle_id`는 이 단계부터 commitment ID를 예약 식별자로 유지한다. 평가 등록 시 구간의 소유자만 cycle ID로 넘기며 소비 날짜는 보존한다.
+
+최종 데이터 도착 시 commitment ID를 manifest에 포함하고, 저장된 baseline·후보로만 평가한다. 개발 지문·최종 달력 변경은 오류이며 commitment만 있는 재시작은 다시 선택하지 않는다. `committed_at < session_time(holdout_start, 9)`이면 E2, 그 밖에는 E1이다. 등급·commitment ID·저장 시각·첫 실행 시각을 evidence에, 등급을 result·status에 기록한다. gate는 등급과 무관하게 기존 정책을 유지한다. commitment 없는 기존 COMPLETE/ABANDONED는 역채움 없이 status에서 E1로 표시한다. 달력 부족 시 고정 없이 대기하고, 고정 후에는 `committed_cycle`로 남은 세션 수를 보고한다. 외부에서 확인 가능한 고정 시각(별도 저장소·서명), 달력 공급자의 사실성 검증, commitment만 있는 ordinal의 폐기 경로는 미구현이다. 실데이터 전진 검증 완료를 주장하지 않는다.
 
 ## 8. ChampionRegistry — S4 (LOOP-04)
 

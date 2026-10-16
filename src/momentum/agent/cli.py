@@ -39,6 +39,7 @@ def read_input(
     actions: Path | None = None,
     sessions: Path | None = None,
     basis: str = "raw-unadjusted; supplied-actions-complete",
+    calendar: Path | None = None,
 ) -> ResearchInput:
     announced = []
     if actions:
@@ -73,6 +74,9 @@ def read_input(
         tuple(announced),
         clock,
         basis,
+        tuple(date.fromisoformat(s) for s in json.loads(calendar.read_text()))
+        if calendar
+        else (),
     )
 
 
@@ -105,6 +109,7 @@ def watch(
         shadow = result.get("shadow")
         if (
             result["validation_budget_exhausted"]
+            and not result.get("committed_cycle")
             and shadow
             and shadow["observations"] >= result["status"]["policy"]["shadow_sessions"]
         ):
@@ -138,6 +143,11 @@ def parser() -> argparse.ArgumentParser:
         "--sessions",
         type=Path,
         help="JSON list from an explicit exchange-session provider; preserves missing bars",
+    )
+    p.add_argument(
+        "--calendar",
+        type=Path,
+        help="JSON list of published exchange dates, including future sessions",
     )
     p.add_argument(
         "--corporate-action-basis", default="raw-unadjusted; supplied-actions-complete"
@@ -212,6 +222,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                     args.actions,
                     args.sessions,
                     args.corporate_action_basis,
+                    args.calendar,
                 )
 
             result = watch(

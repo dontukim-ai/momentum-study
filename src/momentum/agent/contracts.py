@@ -64,6 +64,10 @@ class AnnouncedAction:
             )
 
 
+class _ObservedCalendar(tuple[date, ...]):
+    """Keep an omitted calendar implicit across dataclasses.replace(sessions=...)."""
+
+
 @dataclass(frozen=True)
 class ResearchInput:
     snapshot: Snapshot
@@ -71,6 +75,7 @@ class ResearchInput:
     actions: tuple[AnnouncedAction, ...] = ()
     sessions: tuple[date, ...] = ()
     corporate_action_basis: str = "raw-unadjusted; supplied-actions-complete"
+    calendar: tuple[date, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.sessions:
@@ -79,6 +84,20 @@ class ResearchInput:
             self.snapshot.sessions
         ) <= set(self.sessions):
             raise AgentError("Explicit sorted unique session clock required")
+        if not self.calendar or (
+            isinstance(self.calendar, _ObservedCalendar)
+            and self.calendar[-1] <= self.sessions[-1]
+        ):
+            object.__setattr__(self, "calendar", _ObservedCalendar(self.sessions))
+        elif isinstance(self.calendar, _ObservedCalendar):
+            # A copied calendar extending past observations is now explicit.
+            object.__setattr__(self, "calendar", tuple(self.calendar))
+        if (
+            tuple(sorted(set(self.calendar))) != self.calendar
+            or tuple(d for d in self.calendar if d <= self.sessions[-1])
+            != self.sessions
+        ):
+            raise AgentError("Exchange calendar must match observed sessions exactly")
         if not self.corporate_action_basis.strip():
             raise AgentError("Corporate-action coverage declaration required")
         keys = [
@@ -108,6 +127,9 @@ class ResearchInput:
             tuple(a for a in self.actions if a.available_at <= clock),
             tuple(d for d in self.sessions if d <= end),
             self.corporate_action_basis,
+            ()
+            if isinstance(self.calendar, _ObservedCalendar)
+            else tuple(d for d in self.calendar if d <= end),
         )
 
     def fingerprint(self, end: date) -> str:

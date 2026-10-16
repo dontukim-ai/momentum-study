@@ -6,13 +6,14 @@ import json
 import re
 import sqlite3
 import statistics
+from collections.abc import Callable
 from dataclasses import asdict
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
 import numpy as np
-from trading_agent.contracts import AgentError, canonical, digest, session_time
+from trading_agent.contracts import AgentError, aware, canonical, digest, session_time
 from trading_agent.logic import LogicProposer, ranked_spec
 from trading_agent.selection import select_candidates
 from trading_agent.store import Store
@@ -76,6 +77,9 @@ CREATE TABLE IF NOT EXISTS agent_studies (
  name TEXT PRIMARY KEY, policy_json TEXT NOT NULL, build TEXT NOT NULL,
  revision INTEGER NOT NULL, champion_json TEXT NOT NULL,
  checkpoint_end TEXT, checkpoint_hash TEXT);
+CREATE TABLE IF NOT EXISTS agent_commitments (
+ commitment_id TEXT PRIMARY KEY, study TEXT NOT NULL, ordinal INTEGER NOT NULL,
+ payload_json TEXT NOT NULL, committed_at TEXT NOT NULL, UNIQUE(study, ordinal));
 CREATE TABLE IF NOT EXISTS agent_cycles (
  id TEXT PRIMARY KEY, study TEXT NOT NULL REFERENCES agent_studies(name), ordinal INTEGER NOT NULL,
  status TEXT NOT NULL, manifest_json TEXT NOT NULL, evidence_json TEXT, evidence_hash TEXT, result_json TEXT,
@@ -149,8 +153,18 @@ def promotion_gates(evidence: dict[str, Any], policy: AgentPolicy) -> dict[str, 
     }
 
 
+def _commitment_grade(committed_at: str, holdout_start: str) -> str:
+    return (
+        "E2"
+        if datetime.fromisoformat(committed_at)
+        < session_time(date.fromisoformat(holdout_start), 9)
+        else "E1"
+    )
+
+
 class ResearchAgent:
-    def __init__(self, store: Store):
+    def __init__(self, store: Store, *, clock: Callable[[], datetime] | None = None):
+        self.clock = clock or (lambda: datetime.now(UTC))
         self.store = store
         self.db = store.db
         self.db.executescript(SCHEMA)
@@ -303,11 +317,17 @@ class ResearchAgent:
             policy = policy_from_dict(manifest["policy"])
             account = self._budget_account(policy, cycle["study"])
             self._budget_entry(
-                account["account_id"], "reserve", cycle["id"], cycle["study"]
+                account["account_id"],
+                "reserve",
+                manifest.get("commitment_id", cycle["id"]),
+                cycle["study"],
             )
             if cycle["status"] not in {"REGISTERED", "EVALUATED"}:
                 self._budget_entry(
-                    account["account_id"], "consume", cycle["id"], cycle["study"]
+                    account["account_id"],
+                    "consume",
+                    manifest.get("commitment_id", cycle["id"]),
+                    cycle["study"],
                 )
 
     def _budget(self, policy: AgentPolicy) -> dict[str, Any]:
@@ -338,10 +358,29 @@ class ResearchAgent:
         cycle = self.db.execute(
             "SELECT * FROM agent_cycles WHERE id=?", (cycle_id,)
         ).fetchone()
-        policy = policy_from_dict(json.loads(cycle["manifest_json"])["policy"])
+        manifest = json.loads(cycle["manifest_json"])
+        policy = policy_from_dict(manifest["policy"])
         self._budget_entry(
-            self._budget_account_id(policy), "consume", cycle_id, cycle["study"]
+            self._budget_account_id(policy),
+            "consume",
+            manifest.get("commitment_id", cycle_id),
+            cycle["study"],
         )
+
+    def _cycle_grade(self, cycle: Any) -> str:
+        evidence = json.loads(cycle["evidence_json"] or "{}")
+        if "evidence_grade" in evidence:
+            return str(evidence["evidence_grade"])
+        commitment = self.db.execute(
+            "SELECT * FROM agent_commitments WHERE study=? AND ordinal=?",
+            (cycle["study"], cycle["ordinal"]),
+        ).fetchone()
+        if commitment:
+            payload = json.loads(commitment["payload_json"])
+            return _commitment_grade(
+                commitment["committed_at"], payload["holdout_start"]
+            )
+        return "E1"
 
     def status(self, name: str) -> dict[str, Any]:
         row = self._study(name)
@@ -358,9 +397,14 @@ class ResearchAgent:
             "policy": json.loads(row["policy_json"]),
             "checkpoint_end": row["checkpoint_end"],
             "cycles": [
-                dict(r)
+                {
+                    "id": r["id"],
+                    "ordinal": r["ordinal"],
+                    "status": r["status"],
+                    "evidence_grade": self._cycle_grade(r),
+                }
                 for r in self.db.execute(
-                    "SELECT id,ordinal,status FROM agent_cycles WHERE study=? ORDER BY ordinal",
+                    "SELECT id,study,ordinal,status,evidence_json FROM agent_cycles WHERE study=? ORDER BY ordinal",
                     (name,),
                 )
             ],
@@ -447,7 +491,7 @@ class ResearchAgent:
         else:
             old = json.loads(previous["manifest_json"])
             dev_end = (
-                data.sessions.index(date.fromisoformat(old["holdout_end"]))
+                data.calendar.index(date.fromisoformat(old["holdout_end"]))
                 + policy.shadow_sessions
             )
         return {
@@ -460,7 +504,7 @@ class ResearchAgent:
     def tick(
         self, name: str, data: ResearchInput, *, max_cycles: int = 1
     ) -> dict[str, Any]:
-        require_observed(data)
+        require_observed(data, now=self.clock())
         row = self._study(name)
         policy = policy_from_dict(json.loads(row["policy_json"]))
         if (
@@ -472,6 +516,7 @@ class ResearchAgent:
             self._checkpoint(name, data, data.sessions[0])
         completed: list[dict[str, Any]] = []
         previous = None
+        committed_cycle = None
         for ordinal in range(max_cycles):
             prior = self.db.execute(
                 "SELECT * FROM agent_cycles WHERE study=? AND ordinal=?",
@@ -489,14 +534,153 @@ class ResearchAgent:
                 previous = prior
                 continue
             plan = self._plan(data, policy, previous)
-            if plan["holdout_end"] >= len(data.sessions):
-                break
+            commitment = self.db.execute(
+                "SELECT * FROM agent_commitments WHERE study=? AND ordinal=?",
+                (name, ordinal),
+            ).fetchone()
             current = self._study(name)
-            champion = ranked_spec(json.loads(current["champion_json"]))
-            end = data.sessions[plan["holdout_end"]]
+            if commitment is None:
+                if plan["dev_end"] >= len(data.sessions) or plan["holdout_end"] >= len(
+                    data.calendar
+                ):
+                    break
+                champion = ranked_spec(json.loads(current["champion_json"]))
+                dev_end = data.calendar[plan["dev_end"]]
+                dev = data.prefix(dev_end)
+                development = self._develop(dev, policy, champion, plan)
+                payload = {
+                    "study": name,
+                    "ordinal": ordinal,
+                    "plan": plan,
+                    "plan_dates": {
+                        key: data.calendar[index] for key, index in plan.items()
+                    },
+                    "build": build_id(),
+                    "policy": policy,
+                    "revision": current["revision"],
+                    "champion": champion,
+                    "champion_version": champion.version,
+                    "selected_spec": development["selected_spec"]
+                    if development["selected_version"] != champion.version
+                    else None,
+                    "selected_version": development["selected_version"]
+                    if development["selected_version"] != champion.version
+                    else None,
+                    "development_evidence": development,
+                    "promotion_gate": policy.logic.evaluation,
+                    "statistical_policy_version": policy.statistical_policy_version,
+                    "holdout_start": data.calendar[plan["holdout_start"]],
+                    "holdout_end": data.calendar[plan["holdout_end"]],
+                    "holdout_calendar_hash": digest(
+                        data.calendar[plan["holdout_start"] : plan["holdout_end"] + 1]
+                    ),
+                    "development_fingerprint": dev.fingerprint(dev_end),
+                }
+                commitment_id = digest(payload)
+                with self.store.transaction():
+                    latest = self._study(name)
+                    if (
+                        latest["revision"] != current["revision"]
+                        or self.db.execute(
+                            "SELECT 1 FROM agent_commitments WHERE study=? AND ordinal=?",
+                            (name, ordinal),
+                        ).fetchone()
+                    ):
+                        raise AgentError("Another worker owns or changed this study")
+                    self._migrate_budget()
+                    account = self._budget_account(policy, name)
+                    if account["total_cycles"] != policy.max_validation_cycles:
+                        raise AgentError(
+                            "Validation budget belongs to the market strategy family; a different cycle budget needs an explicit allocation"
+                        )
+                    if self._budget(policy)["remaining"] <= 0:
+                        raise AgentError(
+                            "Validation budget exhausted for this market strategy family"
+                        )
+                    self._budget_entry(
+                        account["account_id"], "reserve", commitment_id, name
+                    )
+                    self._checkpoint(name, data, dev_end)
+                    self._claim(
+                        policy,
+                        payload["holdout_start"],
+                        payload["holdout_end"],
+                        commitment_id,
+                        "holdout",
+                        dev,
+                    )
+                    committed_at = aware(self.clock()).isoformat()
+                    self.db.execute(
+                        "INSERT INTO agent_commitments VALUES(?,?,?,?,?)",
+                        (
+                            commitment_id,
+                            name,
+                            ordinal,
+                            canonical(payload),
+                            committed_at,
+                        ),
+                    )
+                commitment = self.db.execute(
+                    "SELECT * FROM agent_commitments WHERE commitment_id=?",
+                    (commitment_id,),
+                ).fetchone()
+            payload = json.loads(commitment["payload_json"])
+            commitment_id = commitment["commitment_id"]
+            if digest(payload) != commitment_id:
+                raise AgentError("Stored commitment changed")
+            plan = payload["plan"]
+            # Check the published calendar before checkpoints or positional reads:
+            # removing a final session must not silently shift the reserved window.
+            final_dates = tuple(
+                d
+                for d in data.calendar
+                if payload["holdout_start"] <= d.isoformat() <= payload["holdout_end"]
+            )
+            if (
+                digest(final_dates) != payload["holdout_calendar_hash"]
+                or digest(
+                    data.calendar[plan["holdout_start"] : plan["holdout_end"] + 1]
+                )
+                != payload["holdout_calendar_hash"]
+            ):
+                raise AgentError("Exchange calendar changed after commitment")
+            dev_end = date.fromisoformat(payload["plan_dates"]["dev_end"])
+            if data.fingerprint(dev_end) != payload["development_fingerprint"]:
+                raise AgentError("Development data changed after commitment")
+            grade = _commitment_grade(
+                commitment["committed_at"], payload["holdout_start"]
+            )
+            if data.sessions[-1] < date.fromisoformat(payload["holdout_end"]):
+                committed_cycle = {
+                    "ordinal": ordinal,
+                    "commitment_id": commitment_id,
+                    "evidence_grade_if_on_time": grade,
+                    "holdout_start": payload["holdout_start"],
+                    "sessions_required": max(
+                        0, plan["holdout_end"] + 1 - len(data.sessions)
+                    ),
+                }
+                break
+            observed_dates = tuple(
+                d
+                for d in data.sessions
+                if payload["holdout_start"] <= d.isoformat() <= payload["holdout_end"]
+            )
+            if digest(observed_dates) != payload["holdout_calendar_hash"]:
+                raise AgentError("Exchange calendar changed after commitment")
+            if (
+                payload["build"] != build_id()
+                or canonical(payload["policy"]) != canonical(policy)
+                or payload["revision"] != current["revision"]
+                or canonical(payload["champion"]) != current["champion_json"]
+            ):
+                raise AgentError("Frozen commitment policy or champion changed")
+            champion = ranked_spec(payload["champion"])
+            end = date.fromisoformat(payload["holdout_end"])
             frozen = data.prefix(end)
             manifest = {
                 "contract": "unified-research-v1",
+                "commitment_id": commitment_id,
                 "study": name,
                 "ordinal": ordinal,
                 "build": build_id(),
@@ -505,9 +689,9 @@ class ResearchAgent:
                 "champion": champion,
                 "data_id": frozen.fingerprint(end),
                 "plan": plan,
-                "dev_start": data.sessions[plan["dev_start"]],
-                "dev_end": data.sessions[plan["dev_end"]],
-                "holdout_start": data.sessions[plan["holdout_start"]],
+                "dev_start": data.calendar[plan["dev_start"]],
+                "dev_end": data.calendar[plan["dev_end"]],
+                "holdout_start": data.calendar[plan["holdout_start"]],
                 "holdout_end": end,
                 "proposal_space": {
                     "lookbacks": policy.logic.lookbacks,
@@ -528,18 +712,27 @@ class ResearchAgent:
                     ).fetchone()
                 ):
                     raise AgentError("Another worker owns or changed this study")
-                self._migrate_budget()
-                account = self._budget_account(policy, name)
-                if account["total_cycles"] != policy.max_validation_cycles:
-                    raise AgentError(
-                        "Validation budget belongs to the market strategy family; a different cycle budget needs an explicit allocation"
-                    )
-                if self._budget(policy)["reserved"] >= account["total_cycles"]:
-                    raise AgentError(
-                        "Validation budget exhausted for this market strategy family"
-                    )
-                self._budget_entry(account["account_id"], "reserve", cycle_id, name)
                 self._checkpoint(name, data, end)
+                # Transfer ownership without releasing or changing reserved dates.
+                # Legacy readers identify registered final evidence by cycle ID.
+                claim = self.db.execute(
+                    "SELECT * FROM agent_intervals WHERE market=? AND owner=? AND kind='holdout'",
+                    (policy.market, commitment_id),
+                ).fetchone()
+                if (
+                    not claim
+                    or claim["start"] != payload["holdout_start"]
+                    or claim["end"] != payload["holdout_end"]
+                ):
+                    raise AgentError("Independent consumed interval evidence missing")
+                self.db.execute(
+                    "UPDATE agent_intervals SET owner=? WHERE market=? AND owner=? AND kind='holdout'",
+                    (cycle_id, policy.market, commitment_id),
+                )
+                self.db.execute(
+                    "UPDATE holdouts SET run_id=? WHERE run_id=?",
+                    (cycle_id, commitment_id),
+                )
                 self.db.execute(
                     "INSERT INTO agent_cycles VALUES(?,?,?,?,?,?,?,?)",
                     (
@@ -552,16 +745,6 @@ class ResearchAgent:
                         None,
                         None,
                     ),
-                )
-                # Claim the reserved interval before any evaluation. Even a
-                # crash or a no-challenger cycle cannot reopen this reservation.
-                self._claim(
-                    policy,
-                    data.sessions[plan["holdout_start"]],
-                    end,
-                    cycle_id,
-                    "holdout",
-                    frozen,
                 )
                 self.db.execute(
                     "INSERT INTO evaluation_manifests VALUES(?,?)",
@@ -596,6 +779,7 @@ class ResearchAgent:
         return {
             "study": name,
             "cycles": completed,
+            **({"committed_cycle": committed_cycle} if committed_cycle else {}),
             "shadow": shadow,
             "status": self.status(name),
             "waiting_for_data": next_plan["holdout_end"] >= len(data.sessions),
@@ -608,9 +792,8 @@ class ResearchAgent:
             "live_enabled": False,
         }
 
-    def _evaluate(
+    def _develop(
         self,
-        cycle_id: str,
         data: ResearchInput,
         policy: AgentPolicy,
         champion: Any,
@@ -693,7 +876,6 @@ class ResearchAgent:
         if best["score"] <= baseline["score"]:
             best = baseline
         evidence = {
-            "cycle_id": cycle_id,
             "statistical_policy_version": policy.statistical_policy_version,
             "nominal_one_sided_alpha_per_cycle": policy.family_alpha
             / policy.max_validation_cycles
@@ -718,12 +900,45 @@ class ResearchAgent:
             },
             "holdout": {"evaluated": False},
         }
-        start, end = (
-            data.sessions[plan["holdout_start"]],
-            data.sessions[plan["holdout_end"]],
+        return evidence
+
+    def _evaluate(
+        self,
+        cycle_id: str,
+        data: ResearchInput,
+        policy: AgentPolicy,
+        champion: Any,
+        plan: dict[str, int],
+    ) -> dict[str, Any]:
+        cycle = self.db.execute(
+            "SELECT manifest_json FROM agent_cycles WHERE id=?", (cycle_id,)
+        ).fetchone()
+        manifest = json.loads(cycle[0])
+        commitment = self.db.execute(
+            "SELECT * FROM agent_commitments WHERE commitment_id=?",
+            (manifest["commitment_id"],),
+        ).fetchone()
+        payload = json.loads(commitment["payload_json"])
+        evidence = payload["development_evidence"]
+        first_execution = session_time(date.fromisoformat(payload["holdout_start"]), 9)
+        evidence.update(
+            {
+                "cycle_id": cycle_id,
+                "commitment_id": commitment["commitment_id"],
+                "committed_at": commitment["committed_at"],
+                "first_execution_at": first_execution.isoformat(),
+                "evidence_grade": _commitment_grade(
+                    commitment["committed_at"], payload["holdout_start"]
+                ),
+            }
         )
-        if best["version"] != champion.version:
-            selected = candidates[best["version"]]
+        evaluator = CommonEvaluator(policy)
+        start, end = (
+            date.fromisoformat(payload["holdout_start"]),
+            date.fromisoformat(payload["holdout_end"]),
+        )
+        if evidence["selected_version"] != champion.version:
+            selected = ranked_spec(evidence["selected_spec"])
             base = evaluator.evaluate(data, champion, start, end)
             candidate = evaluator.evaluate(data, selected, start, end)
             stressed_base = evaluator.evaluate(data, champion, start, end, stress=True)
@@ -780,7 +995,9 @@ class ResearchAgent:
             start,
             end,
             comparison,
-            "candidate" if best["version"] != champion.version else "champion",
+            "candidate"
+            if evidence["selected_version"] != champion.version
+            else "champion",
         )
         evidence["gates"] = promotion_gates(evidence, policy)
         return evidence
@@ -816,6 +1033,40 @@ class ResearchAgent:
             ):
                 raise AgentError("Stored evidence or frozen manifest changed")
             policy = policy_from_dict(manifest["policy"])
+            if "commitment_id" in manifest:
+                commitment = self.db.execute(
+                    "SELECT * FROM agent_commitments WHERE commitment_id=?",
+                    (manifest["commitment_id"],),
+                ).fetchone()
+                if not commitment:
+                    raise AgentError("Frozen commitment missing")
+                payload = json.loads(commitment["payload_json"])
+                development = payload["development_evidence"]
+                first_execution = session_time(
+                    date.fromisoformat(payload["holdout_start"]), 9
+                )
+                grade = _commitment_grade(
+                    commitment["committed_at"], payload["holdout_start"]
+                )
+                if (
+                    digest(payload) != commitment["commitment_id"]
+                    or evidence["commitment_id"] != commitment["commitment_id"]
+                    or evidence["committed_at"] != commitment["committed_at"]
+                    or evidence["first_execution_at"] != first_execution.isoformat()
+                    or evidence["evidence_grade"] != grade
+                    or any(
+                        canonical(evidence[key]) != canonical(development[key])
+                        for key in development
+                        if key != "holdout"
+                    )
+                    or manifest["holdout_start"] != payload["holdout_start"]
+                    or manifest["holdout_end"] != payload["holdout_end"]
+                    or canonical(manifest["champion"]) != canonical(payload["champion"])
+                    or canonical(manifest["policy"]) != canonical(payload["policy"])
+                ):
+                    raise AgentError(
+                        "Stored evaluation diverges from frozen commitment"
+                    )
             gates = promotion_gates(evidence, policy)
             if gates != evidence["gates"]:
                 raise AgentError("Stored promotion gate evidence changed")
@@ -859,6 +1110,11 @@ class ResearchAgent:
                 "holdout_end": manifest["holdout_end"],
                 "gates": gates,
                 "evidence_hash": row["evidence_hash"],
+                **(
+                    {"evidence_grade": evidence["evidence_grade"]}
+                    if "evidence_grade" in evidence
+                    else {}
+                ),
                 "orders_submitted": 0,
             }
             if row["status"] == "COMPLETE":
