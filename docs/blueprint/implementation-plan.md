@@ -30,7 +30,7 @@ flowchart LR
 | M0 합성 연구 | 현재 코드 | 네 단계·승격/유지·복구·중복 차단 재현. **완료** |
 | M1 실제 입력 | DATA-01~06 | 출처·정정·상태·달력·행동이 묶인 실제 소규모 입력과 품질 보고 |
 | M2 경제 평가 | M1 + FIN-01~04 | 상품별 비용·신호/회계·결제·기말 정책의 손계산 및 실제 자료 대사 |
-| M3 독립 검증 | M2 + RES-01~03 + LOOP-03, LOOP-07 | 비교군·탐색 예산·구간을 사전 등록하고 새로운 자료에서 결과 보존. 증거 등급 E2 기록 |
+| M3 독립 검증 | M2 + RES-01~03 + LOOP-02, LOOP-03, LOOP-07 | 비교군·예산 계정·선택 후보·구간을 첫 실행 시각 전에 고정하고 새로운 자료에서 결과 보존. 증거 등급 E2 기록 |
 | M4 연구 운영 | OPS-01~06 | 서비스 복구·데이터 중단·백업 복원·selector-bound 전진 관찰 증거 |
 | M5 모의 운용 | M4 + ORD-01~02 | 실제 모의 서버에서 계좌·미체결·부분 체결·응답 유실 대사 |
 | M6 실전 운용 | 별도 후속 범위 + ORD-03~04 | 실제 계좌의 자본·위험·실행 계약을 검증한 운용 버전 |
@@ -93,13 +93,14 @@ RES-04~06의 세부 학습 계약은 [자기 개선 설계](self-improvement.md)
 
 | ID / 단계 | 현재 | 세부 구현 | 선행 조건 | 완료 조건 |
 | --- | --- | --- | --- | --- |
-| LOOP-01 / S1·S2 | 미착수 | `MarketProfile`: 통화·달력·장 시각·호가·비용·거래 제약·유니버스·신선도 규칙을 한 계약으로. KRX 동작을 그대로 옮김 | 없음(값은 DATA-03, FIN-01 결과로 교체) | 기존 회귀 20개 무변경 통과. 장 시각·KRX 필터가 코드 상수에서 사라짐. 미국 최종 평가 잠금 유지 |
-| LOOP-02 / S1 | 미착수 | `StrategyFamily` 레지스트리: 파라미터 공간·고정값·`rebalance_cadence`·`holding_horizon`·누적 예산 | LOOP-01 | 리밸런싱 주기가 명시 파라미터. 공간 변경이 새 버전이 되고 예산을 이어서 셈 |
-| LOOP-03 / S2 | 미착수 | `EvaluationContract` ID와 거래 가능성 지표(체결률·거래량 상한 비율·취소·회전율·capacity) | LOOP-01 | 계약 ID가 다른 결과의 비교를 거부하는 회귀. 지표가 거래/자산 곡선과 대사됨 |
-| LOOP-04 / S4 | 미착수 | `ChampionRegistry` 키 `(market, family)`, 증거 등급·이전 revision 기록, 기존 연구 이전 | LOOP-02, RES-03 | 연구 이름을 바꿔도 같은 키의 champion·예산을 공유. 기존 DB 이전 회귀 |
-| LOOP-05 / S4 | 미착수 | 연속 추적 원장, 유지 사이클의 기준 전략 비교, 사전 등록 열화 상태(OBSERVING/WARNING/DEMOTION_CANDIDATE) | LOOP-03, LOOP-04, RES-01 | 유지 사이클에서 동일 전략 비교가 사라짐. 1회성 열세로 상태가 바뀌지 않음. 강등은 이전 검증 revision으로만 |
-| LOOP-06 / S4→운용 | 미착수 | `Release` 계약(증거 등급 E2 이상, 승인자, rollback 대상, 총자본 범위) | LOOP-04, OPS-05 | Release 없이 모의 OMS가 전략을 받지 않음. 주문 생성 0 |
-| LOOP-07 / S2·S3 | 미착수 | 통계 정책 v2: 단측 예산, 꼬리 표본 하한, gate별 지표 정의 표, 블록 길이 규칙 | RES-02 | 기존 정책 연구는 무변경. 새 정책에서 꼬리 표본 하한 미달 설정 거부 |
+| LOOP-01 / S1·S2 | 미착수 | `MarketProfile`: 통화·달력·실행 시계·호가·비용·거래 제약·유니버스·신선도 규칙을 한 계약으로. KRX 동작을 그대로 옮김 | 없음(값은 DATA-03, FIN-01 결과로 교체) | 기존 회귀 20개 무변경 통과. 장 시각·KRX 필터가 코드 상수에서 사라짐. 미국 최종 평가 잠금 유지 |
+| LOOP-02 / S1 | 미착수 | `StrategyFamily`(계보 키·버전·`decision_cadence`·`holding_horizon`)와 예산 계정 원장(allocate/reserve/consume/release_unused) | LOOP-01 | 결정 주기가 후보 변수. 이름·정책·빌드·family 버전 변경이나 폐기 후에도 소비 기록 유지. 새 정책 예산은 명시적 할당 또는 근거 있는 독립 연구군 |
+| LOOP-03 / S2 | 미착수 | `EvaluationContract`(평가 구간·valuation basis·자본/위험 수치·초기 포트폴리오·실행 시계·비용·체결·원장·시나리오별 하위 ID), 거래 가능성 지표의 cap 이전 분모(`desired → volume_capped → cash_risk_capped → filled`), turnover 현행/v2 구분 | LOOP-01 | 같은 bundle이라도 기간·초기 자본·위험 한도가 다르면 우위 판정 거부. 일간/주간 결정 주기 후보가 같은 계약에서 비교됨. 목표 100 → cap 10 → 체결 10이 체결률 10%, 거래량 제약 90%로 대사. 계획 0은 N/A |
+| LOOP-04 / S4 | 미착수 | `ChampionRegistry` 키 `(market, family_lineage)`, 증거 등급·commitment·이전 revision 기록, 기존 연구 이전 | LOOP-02, RES-03 | 연구 이름을 바꿔도 같은 키의 champion·예산 계정을 공유. 기존 DB 이전 회귀 |
+| LOOP-05 / S4 | 미착수 | 실험 원장과 분리된 관찰 원장(현금·보유·배당채권 연속, 교체 거래·비용 기록), 유지 사이클의 기준 전략 비교, 사전 등록 열화 상태(OBSERVING/WARNING/DEMOTION_CANDIDATE) | LOOP-03, LOOP-04, RES-01 | revision 교체 전후 자산이 실제 거래·비용 외에 불연속 없음. 유지 사이클에서 동일 전략 비교가 사라짐. 1회성 열세로 상태가 바뀌지 않음. 강등은 이전 검증 revision으로만 |
+| LOOP-06 / S4→운용 | 미착수 | 두 단계 Release: `ObservationRelease`(E2 이상, 주문 권한 없음) → E3 관찰 → `ExecutionRelease`(paper/live, 승인자, rollback, 총자본 범위) | LOOP-04, LOOP-05, OPS-05 | 사전 E3 기록 없이 첫 관찰 버전 등록 가능. 관찰만으로 주문 권한 없음. ExecutionRelease 없이 모의 OMS가 전략을 받지 않음 |
+| LOOP-07 / S2·S3 | 미착수 | 통계 정책 v2: 단측 명목 예산 명시, 지표 역할 표(주 검정/경제적 최소 효과/보조), 개발 구간에서 고정하는 블록 민감도 | RES-02 | null 시뮬레이션의 실제 승격률 보고, 여러 seed·재표집 수에서 하한 안정성 확인. 기존 정책 연구는 무변경 |
+| LOOP-08 / S4→S1 | 미착수 | 실패 기억 개발 해제: `source_cycle_id`·`source_phase`·`released_to_development_at`·`eligible_for_proposer`·`consumed_windows` | RES-04 | 진행 중 사이클의 최종 gate·열화 결과가 제안 입력에 들어가지 않음. 해제된 실패로 만든 후보는 소비 구간과 겹치지 않는 새 평가 구간 사용 |
 
 ## 8. ORD — 현재 후순위인 계좌 운용
 
@@ -119,7 +120,7 @@ RES-04~06의 세부 학습 계약은 [자기 개선 설계](self-improvement.md)
 
 **묶음 C: 검증과 운영을 보강.** FIN-03/04, RES-01~03, OPS-01/02/04를 완료하고, 새로운 전진 구간을 등록한다. 수집·감시 프로세스의 건강 상태를 확인한 뒤 OPS-06 캠페인을 시작한다.
 
-**묶음 L: 루프 구조(합성 데이터로 병행 가능).** LOOP-01 → LOOP-02 → LOOP-03을 먼저 하고, RES-03 뒤에 LOOP-04, RES-01 뒤에 LOOP-05를 진행한다. LOOP-07은 RES-02와 함께 정책 v2로 묶는다. 이 묶음은 데이터 대기와 무관하게 시작할 수 있으나 기존 연구의 정책·소비 이력을 바꾸지 않는다.
+**묶음 L: 루프 구조(합성 데이터로 병행 가능).** 순서는 비교 계약·기준 전략·지표(LOOP-01, LOOP-03, RES-01, LOOP-07) → 후보 사전 고정과 예산(RES-03, LOOP-02) → 실패 기억 권한(LOOP-08) → 연속 관찰·Release(LOOP-04, LOOP-05, LOOP-06)다. LOOP-07은 RES-02와 함께 정책 v2로 묶는다. 이 묶음은 데이터 대기와 무관하게 시작할 수 있으나 기존 연구의 정책·소비 이력을 바꾸지 않는다.
 
 **묶음 D: 실패를 이용하는 개선을 확대.** RES-04/05를 연결하고(실패 코드는 [루프 계약](loop-contracts.md) §9), 실제 근거가 확보되면 RES-06을 작은 모델부터 추가한다. LOOP-06 Release 계약은 OPS-05와 함께 정한다. 주문 개발은 이 묶음에 자동으로 포함하지 않는다.
 
