@@ -75,6 +75,68 @@ class EvaluationResult:
     trade_log: tuple[dict[str, Any], ...]
     execution_events: tuple[dict[str, Any], ...]
     evaluation_id: str
+    tradability: dict[str, Any]
+    turnover_on_initial_capital: float
+    turnover_on_average_nav: float
+
+
+def tradability_metrics(events: list[dict[str, Any]]) -> dict[str, Any]:
+    """Use a common pre-execution mark, including orders that never filled."""
+    keys = (
+        "fill_ratio",
+        "volume_cap_reduction",
+        "cash_risk_reduction",
+        "cancel_reduction",
+    )
+    result: dict[str, Any] = dict.fromkeys(keys)
+    result["order_count_fill_ratio"] = (
+        sum(e["quantity"] == e["desired_quantity"] for e in events) / len(events)
+        if events
+        else None
+    )
+    result["missing_reference_price"] = [
+        {key: e[key] for key in ("session", "symbol", "side")}
+        for e in events
+        if e.get("reference_price") is None
+    ]
+    result["cancel_reasons"] = {}
+    if result["missing_reference_price"]:
+        return result
+    denominator = D(0)
+    numerators = [D(0)] * 4
+    reasons: dict[str, D] = {}
+    for e in events:
+        desired, capped, fitted, filled = (
+            D(str(e[k]))
+            for k in (
+                "desired_quantity",
+                "volume_capped_quantity",
+                "cash_risk_capped_quantity",
+                "quantity",
+            )
+        )
+        if not 0 <= filled <= fitted <= capped <= desired:
+            raise AgentError("Inconsistent tradability quantity stages")
+        ref = D(e["reference_price"])
+        if not ref.is_finite() or ref <= 0:
+            raise AgentError("Invalid tradability reference price")
+        denominator += desired * ref
+        for i, quantity in enumerate(
+            (filled, desired - capped, capped - fitted, fitted - filled)
+        ):
+            numerators[i] += quantity * ref
+        if fitted > filled:
+            reason = e["status"]
+            reasons[reason] = reasons.get(reason, D(0)) + (fitted - filled) * ref
+    if denominator:
+        ratios = [float(n / denominator) for n in numerators]
+        if not math.isclose(sum(ratios), 1.0, rel_tol=1e-12, abs_tol=1e-12):
+            raise AgentError("Tradability ratios do not reconcile")
+        result.update(zip(keys, ratios, strict=True))
+        result["cancel_reasons"] = {
+            k: float(v / denominator) for k, v in sorted(reasons.items())
+        }
+    return result
 
 
 class EvaluatorPort(Protocol):
@@ -168,6 +230,8 @@ class CommonEvaluator:
             }
             # No opening price is supplied to the original planning step.
             plan = rebalance_plan(wallet, decision, marks, costs, caps)
+            desired_plan = rebalance_plan(wallet, decision, marks, costs, None)
+            capped_plan = {(s, side): q for s, side, q, _ in plan}
             actions = [
                 a
                 for a in data.actions
@@ -181,34 +245,50 @@ class CommonEvaluator:
                 for a in actions
                 if a.action.action_type == "split" and a.action.ex_date == day
             }
-            for symbol, side, planned, _ in plan:
+            for symbol, side, desired, _ in desired_plan:
+                planned = capped_plan.get((symbol, side), 0)
+                uncertain_action = False
                 action = splits.get(symbol)
                 if action is not None:
                     ratio = action.action.split_ratio
                     assert ratio is not None
                     adjusted = D(planned) * ratio
+                    adjusted_desired = D(desired) * ratio
                     if (
                         action.available_at > at
                         or adjusted != adjusted.to_integral_value()
                     ):
-                        events.append(
-                            {
-                                "session": day.isoformat(),
-                                "symbol": symbol,
-                                "status": "cancelled_action_uncertainty",
-                            }
+                        uncertain_action = True
+                    else:
+                        planned = int(adjusted)
+                        # An uncapped demand may be fractional after a split;
+                        # reporting it must not cancel an otherwise integer fill.
+                        desired = (
+                            int(adjusted_desired)
+                            if adjusted_desired == adjusted_desired.to_integral_value()
+                            else str(adjusted_desired)
                         )
-                        continue
-                    planned = int(adjusted)
                 event = {
                     "session": day.isoformat(),
                     "signal_session": prior_day.isoformat(),
                     "symbol": symbol,
                     "side": side,
                     "planned_quantity": planned,
+                    "desired_quantity": desired,
+                    "volume_capped_quantity": planned,
+                    "cash_risk_capped_quantity": planned,
+                    "reference_price": str(marks[symbol]) if symbol in marks else None,
                     "quantity": 0,
                     "status": "cancelled_no_open",
                 }
+                if uncertain_action or not planned:
+                    event["status"] = (
+                        "cancelled_action_uncertainty"
+                        if uncertain_action
+                        else "cancelled_volume_cap"
+                    )
+                    events.append(event)
+                    continue
                 if symbol not in opens:
                     events.append(event)
                     continue
@@ -241,6 +321,7 @@ class CommonEvaluator:
                     )
                 else:
                     quantity = min(quantity, ledger.positions.get(symbol, 0))
+                event["cash_risk_capped_quantity"] = quantity
                 event["quantity"] = quantity
                 event["status"] = (
                     "filled" if quantity == planned else "reduced_cash_or_risk"
@@ -320,4 +401,7 @@ class CommonEvaluator:
                     "stress": stress,
                 }
             ),
+            tradability_metrics(events),
+            float(turnover / capital),
+            float(turnover / (sum((D(r["equity"]) for r in curve), D(0)) / len(curve))),
         )
