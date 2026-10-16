@@ -92,3 +92,36 @@ uv run python tools/stat_policy_check.py \
 - push/PR 금지에 따라 선행 작업의 원격 merge 대신 동일 작업 브랜치의 검증된 로컬 커밋을 다음 작업의 기준으로 삼았다.
 
 앱·미국 엔진/설정/골든·기존 테스트·의존성 파일을 수정하지 않았고 실제 증권사/모델 API 호출·주문도 하지 않았다.
+
+## 리뷰 보완
+
+리뷰 후 같은 작업 브랜치에서 보완했다. 변경은 `evaluator.py`, `service.py`, 새 [test_agent_review_followups.py](../../tests/unit/test_agent_review_followups.py) 및 현황/계획/이 문서에 한정한다.
+
+**NAV 대사:** 원시 독립 잔차 `ledger.nav − (cash + positions_value + dividend_receivable)`가 유한하고 절대값이 `Decimal("1e-9")`원 이하인지 먼저 검사한다. 원 단위 반올림 후 정확 일치 검사도 남긴다. 일별 `nav_residual`과 최대 절대 잔차를 보존하고 허용 한도는 평가 계약에 포함한다. 원 단위 반올림으로 실제 계산 오류를 숨기지 않기 위한 별도 조건이며 상대 오차를 쓰지 않는다.
+
+**기준 전략의 실제 투자 상태:** `EvaluationResult.portfolio_diagnostics`를 최종(후보 없음 포함)·shadow의 기준 전략 요약에도 넣는다.
+
+| 필드 | 정의 |
+| --- | --- |
+| average_invested_weight / average_cash_weight / average_receivable_weight | 각 평가 세션 종가의 실제 보유 평가액·현금·배당채권 / NAV를 세션별 동일 가중 평균 |
+| average_holding_count / last_holding_count / max_holding_count | 수량이 양수인 실제 보유 종목 수의 평균·마지막·최대 |
+| budget_candidate_observations | 예산 부족 외 시장/품질 필터를 통과한 종목-세션 수 |
+| unaffordable_observations / unaffordable_rate | 최대 허용 종목 예산 또는 동일 비중 슬롯 예산으로 비용 포함 1주도 못 사는 종목-세션 수 / 위 분모. 두 단계에서 중복 집계하지 않음 |
+| budget_screening_applies | 적격 동일 비중에서만 true. 현금·일반 후보의 예산 부족 비율은 N/A |
+| max_abs_nav_residual | 반올림 전 독립 NAV 절대 잔차의 구간 최댓값(Decimal 문자열) |
+
+분모가 0이면 `unaffordable_rate = null`이다. 체결 시점의 갭·현금/위험 축소는 기존 거래 가능성 지표로 따로 보고한다. 이 진단은 성과/배분/승격을 바꾸지 않는다. 예를 들어 100종목 모두 적격이어도 100만 원의 동일 비중 슬롯으로 각각 1주를 못 사면 실제 투자 비중 0, 현금 비중 1, 보유 수 0, 예산 부족 비율 1로 드러난다. 시장 ETF·사전 고정한 종목 수 상한은 후속 범위다.
+
+추가 회귀 12개(파라미터화 포함): `test_sub_won_nav_errors_cannot_hide_behind_rounding`(5개), `test_small_absolute_nav_residual_is_recorded_without_changing_economics`, `test_normal_repeated_buys_and_sells_pass_tight_raw_nav_check`, `test_many_eligible_stocks_report_effective_cash_and_budget_exclusions`, `test_budget_exclusion_ratio_counts_only_otherwise_eligible_candidates`, `test_stocks_unaffordable_at_maximum_budget_are_counted_once`, `test_no_budget_candidates_is_na_instead_of_zero_and_cash_is_explicit`, `test_portfolio_diagnostics_are_in_holdout_and_shadow_reports_only`.
+
+리뷰 보완 최종 검증:
+
+| 명령 | 마지막 요약 |
+| --- | --- |
+| `uv run pytest -q` | `257 passed, 1 deselected in 78.84s (0:01:18)` — 기존 245 + 신규 12 |
+| `uv run mypy src` | `Success: no issues found in 33 source files` |
+| `uv run ruff check` | `All checks passed!` |
+| `uv run --directory apps/kis-agent python -m unittest discover -s tests -q` | `Ran 122 tests in 7.868s` / `OK` |
+| `git diff --check` | 오류 없음 |
+
+문서 상대 링크 90개 존재 확인, 변경 범위 검사 통과. 위 uv 명령은 동일한 오프라인 cache 설정으로 실행했다. 공통 원장·미국 코드/골든·KIS 앱·기존 테스트·승격 gate·일정·소비 규칙·의존성은 수정하지 않았다.

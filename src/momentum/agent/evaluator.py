@@ -34,6 +34,7 @@ from momentum.ledger.ledger import Ledger
 from .contracts import AgentPolicy, ResearchInput
 
 BENCHMARKS = ("cash", "equal_weight_eligible")
+NAV_RESIDUAL_ABSOLUTE_TOLERANCE = D("1e-9")
 
 
 def benchmark_version(kind: str) -> str:
@@ -46,6 +47,7 @@ def benchmark_decision(
     view: MarketView,
     valid_until: datetime,
     wallet: Wallet,
+    diagnostics: dict[str, int] | None = None,
 ) -> Decision:
     version = benchmark_version(kind)
     empty = Decision(version, view.snapshot_id, view.as_of, valid_until, {})
@@ -76,9 +78,21 @@ def benchmark_decision(
         equity,
         audit=False,
     )
-    count = sum(
-        row["status"] in {"SELECTED", "NOT_SELECTED"} for row in screened["candidates"]
+    eligible_symbols = {
+        row["symbol"]
+        for row in screened["candidates"]
+        if row["status"] in {"SELECTED", "NOT_SELECTED"}
+    }
+    count = len(eligible_symbols)
+    budget_reason = ["UNAFFORDABLE_WITHIN_POSITION_BUDGET"]
+    initially_unaffordable = sum(
+        row["reasons"] == budget_reason for row in screened["candidates"]
     )
+    if diagnostics is not None:
+        # The denominator excludes quality/market failures, but includes stocks
+        # that cannot buy one share even at the maximum position budget.
+        diagnostics["budget_candidates"] = count + initially_unaffordable
+        diagnostics["unaffordable_candidates"] = initially_unaffordable
     if not count:
         return empty
     allocation = replace(
@@ -88,7 +102,7 @@ def benchmark_decision(
     )
     # Recheck affordability at the fixed equal-weight budget. Rejected slots
     # remain cash rather than increasing the other stocks' allocations.
-    decision = select_candidates(
+    allocated = select_candidates(
         allocation,
         view,
         selector.securities,
@@ -97,8 +111,13 @@ def benchmark_decision(
         valid_until,
         equity,
         audit=False,
-    )["decision"]
-    return replace(decision, strategy_version=version)
+    )
+    if diagnostics is not None:
+        diagnostics["unaffordable_candidates"] += sum(
+            row["symbol"] in eligible_symbols and row["reasons"] == budget_reason
+            for row in allocated["candidates"]
+        )
+    return replace(allocated["decision"], strategy_version=version)
 
 
 @dataclass(frozen=True)
@@ -156,6 +175,7 @@ class EvaluationContract:
     ledger_version: str
     metrics_spec_version: str
     selection_policy_id: str
+    nav_residual_absolute_tolerance: D
 
     def to_dict(self) -> dict[str, Any]:
         result = asdict(self)
@@ -208,6 +228,39 @@ class EvaluationResult:
     turnover_on_average_nav: float
     evaluation_contract_id: str
     evaluation_contract: dict[str, Any]
+    portfolio_diagnostics: dict[str, Any]
+
+
+def portfolio_diagnostics(
+    curve: list[dict[str, Any]], *, benchmark: str | None
+) -> dict[str, Any]:
+    """Session-close exposure and candidate-session affordability, never gate inputs."""
+    observations = len(curve)
+    candidates = sum(row["budget_candidates"] for row in curve)
+    unaffordable = sum(row["unaffordable_candidates"] for row in curve)
+    holdings = [sum(q > 0 for q in row["positions"].values()) for row in curve]
+    result = {
+        "sampling": "equal-weighted evaluation session closes",
+        "average_holding_count": sum(holdings) / observations,
+        "last_holding_count": holdings[-1],
+        "max_holding_count": max(holdings),
+        "budget_screening_applies": benchmark == "equal_weight_eligible",
+        "budget_candidate_observations": candidates,
+        "unaffordable_observations": unaffordable,
+        "unaffordable_rate": unaffordable / candidates if candidates else None,
+        "unaffordable_rate_basis": "candidate-session counts after other filters, before affordability",
+        "max_abs_nav_residual": str(max(abs(D(row["nav_residual"])) for row in curve)),
+    }
+    for name, field in (
+        ("invested", "positions_value"),
+        ("cash", "cash"),
+        ("receivable", "receivable"),
+    ):
+        result[f"average_{name}_weight"] = float(
+            sum((D(row[field]) / D(row["equity"]) for row in curve), D(0))
+            / observations
+        )
+    return result
 
 
 def require_same_contract(a: EvaluationResult, b: EvaluationResult) -> None:
@@ -396,8 +449,9 @@ class CommonEvaluator:
                 costs.slippage_bps,
             ),
             ledger_version=ledger_version(),
-            metrics_spec_version="reference-notional-tradability-v1;turnover-dual-v1",
+            metrics_spec_version="reference-notional-tradability-v1;turnover-dual-v1;portfolio-diagnostics-v1;nav-residual-v1",
             selection_policy_id=digest(selection),
+            nav_residual_absolute_tolerance=NAV_RESIDUAL_ABSOLUTE_TOLERANCE,
         )
         ledger = Ledger(capital, money_quantum=quantum)
         selector = SelectionEngine(data.securities, p.logic.selection, costs)
@@ -433,9 +487,10 @@ class CommonEvaluator:
                 if h and h[-1].session == prior_day
             }
             wallet = LedgerWallet(ledger)
+            screening: dict[str, int] = {}
             decision = (
                 benchmark_decision(
-                    benchmark, selector, view, session_time(day, 10), wallet
+                    benchmark, selector, view, session_time(day, 10), wallet, screening
                 )
                 if benchmark
                 else selector(spec, view, session_time(day, 10), wallet)
@@ -572,15 +627,23 @@ class CommonEvaluator:
                     "Missing held close; evaluation fails rather than inventing a mark"
                 )
             ledger.mark_to_market(closes, day)
+            independent_nav = (
+                ledger.cash + ledger.positions_value + ledger.dividend_receivable
+            )
+            residual = ledger.nav - independent_nav
+            if (
+                not residual.is_finite()
+                or abs(residual) > NAV_RESIDUAL_ABSOLUTE_TOLERANCE
+            ):
+                raise AgentError(
+                    f"Independent ledger NAV residual {residual} exceeds absolute "
+                    f"tolerance {NAV_RESIDUAL_ABSOLUTE_TOLERANCE} KRW"
+                )
             # Blended acquisition marks can be recurring Decimals. Reconcile
             # the independent ledger NAV at the declared currency precision;
             # cash, close-valued holdings and entitlements remain exact won.
             equity = ledger.nav.quantize(quantum, ROUND_HALF_UP)
-            if (
-                equity
-                != ledger.cash + ledger.positions_value + ledger.dividend_receivable
-                or ledger.cash < 0
-            ):
+            if equity != independent_nav or ledger.cash < 0:
                 raise AgentError("Independent ledger reconciliation failed")
             daily.append(float(equity / prior - 1))
             peak = max(peak, equity)
@@ -593,6 +656,11 @@ class CommonEvaluator:
                     "positions_value": str(ledger.positions_value),
                     "receivable": str(ledger.dividend_receivable),
                     "positions": dict(ledger.positions),
+                    "nav_residual": str(residual),
+                    "budget_candidates": screening.get("budget_candidates", 0),
+                    "unaffordable_candidates": screening.get(
+                        "unaffordable_candidates", 0
+                    ),
                 }
             )
             prior = equity
@@ -626,4 +694,5 @@ class CommonEvaluator:
             float(turnover / (sum((D(r["equity"]) for r in curve), D(0)) / len(curve))),
             contract.contract_id,
             contract.to_dict(),
+            portfolio_diagnostics(curve, benchmark=benchmark),
         )

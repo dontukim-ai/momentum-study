@@ -53,6 +53,7 @@ def benchmark_report(
             "net_advantage": reference.net_return - result.net_return,
             "comparison_strategy": compared_as,
             "comparison_strategy_version": reference.strategy_version,
+            "portfolio_diagnostics": result.portfolio_diagnostics,
         }
     return results
 
