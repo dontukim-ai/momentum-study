@@ -1084,6 +1084,7 @@ class ResearchAgent:
             "cycles": completed,
             **({"committed_cycle": committed_cycle} if committed_cycle else {}),
             "shadow": shadow,
+            "observation": self.observation_ledger(name, data),
             "status": self.status(name),
             "waiting_for_data": next_plan["holdout_end"] >= len(data.sessions),
             "next_window_sessions_required": max(
@@ -1522,6 +1523,125 @@ class ResearchAgent:
             "claims_preserved": True,
             "orders_submitted": 0,
         }
+
+    def observation_ledger(
+        self, name: str, data: ResearchInput
+    ) -> dict[str, Any] | None:
+        study = self._study(name)
+        policy = policy_from_dict(json.loads(study["policy_json"]))
+        first = self.db.execute(
+            "SELECT * FROM agent_cycles WHERE study=? AND status='COMPLETE' "
+            "ORDER BY ordinal LIMIT 1",
+            (name,),
+        ).fetchone()
+        if first is None:
+            return None
+
+        def following(value: str) -> date | None:
+            return next(
+                (d for d in data.calendar if d > date.fromisoformat(value)), None
+            )
+
+        start = following(json.loads(first["result_json"])["holdout_end"])
+        if start is None:
+            return None
+        rows = list(
+            self.db.execute(
+                "SELECT * FROM agent_champion_registry WHERE market=? "
+                "AND family_lineage_id=? ORDER BY revision",
+                (policy.market, FAMILY_LINEAGE_ID),
+            )
+        )
+        # Read legacy state without triggering the registry's writing migration.
+        if not rows:
+            rows = [
+                {
+                    "revision": study["revision"],
+                    "spec_json": study["champion_json"],
+                    "source_cycle_id": None,
+                }
+            ]
+        entries = []
+        schedule = []
+        for index, stored_row in enumerate(rows):
+            row = dict(stored_row)
+            effective: date | None = start
+            cycle = None
+            if row["source_cycle_id"]:
+                cycle = self.db.execute(
+                    "SELECT result_json FROM agent_cycles WHERE id=? AND status='COMPLETE'",
+                    (row["source_cycle_id"],),
+                ).fetchone()
+            if cycle:
+                effective = following(json.loads(cycle[0])["holdout_end"])
+                if effective is None:
+                    continue
+            elif (
+                index > 0
+                or row["revision"] != 0
+                or row.get("evidence_grade") == "legacy"
+            ):
+                # Unknown legacy ancestry cannot be reconstructed before this row.
+                legacy = self.db.execute(
+                    "SELECT result_json FROM agent_cycles WHERE study=? AND status='COMPLETE' "
+                    "ORDER BY ordinal DESC LIMIT 1",
+                    (row.get("study", name),),
+                ).fetchone()
+                if legacy is None:
+                    return None
+                effective = following(json.loads(legacy[0])["holdout_end"])
+                if effective is None:
+                    return None
+                start = max(start, effective)
+            if effective is None:
+                continue
+            spec = ranked_spec(json.loads(row["spec_json"]))
+            schedule.append((effective, spec))
+            entries.append(
+                {
+                    "revision": row["revision"],
+                    "spec_version": spec.version,
+                    "effective_from": effective.isoformat(),
+                }
+            )
+        end = data.sessions[-1]
+        if sum(start <= d <= end for d in data.sessions) < 2:
+            return None
+        # Revision zero is the baseline, including when another study already
+        # promoted a revision before this study's observation window began.
+        if entries[0]["revision"] == 0:
+            baseline = min(start, *(effective for effective, _ in schedule))
+            schedule[0] = (baseline, schedule[0][1])
+            entries[0]["effective_from"] = baseline.isoformat()
+        schedule.sort(key=lambda item: item[0])
+        entries.sort(key=lambda item: item["effective_from"])
+        frozen = data.prefix(end)
+        evaluator = CommonEvaluator(policy)
+        result = evaluator.evaluate_schedule(frozen, schedule, start, end)
+        report = {
+            "kind": "CONTINUOUS_OBSERVATION_LEDGER",
+            "start": start,
+            "end": end,
+            "observations": len(result.daily_returns),
+            "schedule": entries,
+            "ledger": {
+                "net_return": result.net_return,
+                "max_drawdown": result.max_drawdown,
+                "trades": result.trades,
+                "fees": result.fees,
+                "revision_boundaries": result.portfolio_diagnostics["schedule"][
+                    "revision_boundaries"
+                ],
+            },
+            "benchmarks": benchmark_report(
+                evaluator, frozen, start, end, result, "observation"
+            ),
+            "persisted": False,
+            "promotion_authority": False,
+            "orders_submitted": 0,
+            "proposer_visible": False,
+        }
+        return json.loads(canonical(report))
 
     def _shadow(
         self, name: str, data: ResearchInput, policy: AgentPolicy, cycle: Any
