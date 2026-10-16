@@ -1,6 +1,6 @@
 # 루프 계약 설계안
 
-상위 기준: [블루프린트](README.md) §3~§6. 목차: §1 MarketProfile, §2 StrategyFamily, §3 예산 계정, §4 SearchPlan·CandidateProposal, §5 EvaluationContract·거래 가능성 지표, §6 지표 정의, §7 EvaluationCommitment, §8 ChampionRegistry, §9 실패 기억 해제, §10 관찰 원장·열화, §11 Release, §12 구간 예약·동시 사용. 이 문서의 계약 이름·필드는 **모두 설계안이며 현재 코드에 없다.** 기존 [상세 구조](architecture.md) §2의 DataBundle·CandidateProposal·FailureCase·ObservationRelease·RuntimeHealth 설계안을 4단계 루프 기준으로 보완한다.
+상위 기준: [블루프린트](README.md) §3~§6. 목차: §1 MarketProfile, §2 StrategyFamily, §3 예산 계정, §4 SearchPlan·CandidateProposal, §5 EvaluationContract·거래 가능성 지표, §6 지표 정의, §7 EvaluationCommitment, §8 ChampionRegistry, §9 실패 기억 해제, §10 관찰 원장·열화, §11 Release, §12 구간 예약·동시 사용. 이 문서는 목표 계약 설계안이다. C1/C2에서 §5 평가 계약 ID·수량 단계·reference_price 지표와 두 turnover 분모를 현재 KRX 값으로 구현했다. C3의 기준 전략은 보고만, C4의 통계 v2는 opt-in이다. 나머지 계약·필드의 현재 상태는 [현황](status.md)과 [구현 보고](batch1-implementation.md)를 따른다. 기존 [상세 구조](architecture.md) §2의 DataBundle·CandidateProposal·FailureCase·ObservationRelease·RuntimeHealth 설계안을 4단계 루프 기준으로 보완한다.
 
 공통 규칙:
 

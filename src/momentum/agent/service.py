@@ -78,8 +78,8 @@ CREATE TABLE IF NOT EXISTS agent_shadow (
 
 
 def confidence_interval(
-    values: list[float], policy: AgentPolicy
-) -> tuple[float, float]:
+    values: list[float], policy: AgentPolicy, *, seed: int = 0
+) -> tuple[float, float | None]:
     """Paired circular blocks, Bonferroni budget across registered cycles.
 
     This is an indicative stationary-return test, not the original US H1-H4
@@ -88,7 +88,7 @@ def confidence_interval(
     if len(values) < policy.holdout_sessions or not np.all(np.isfinite(values)):
         raise AgentError("Incomplete/nonfinite independent observations")
     n, block = len(values), policy.bootstrap_block
-    rng = np.random.default_rng(0)
+    rng = np.random.default_rng(seed)
     starts = rng.integers(
         0, n, size=(policy.bootstrap_samples, (n + block - 1) // block)
     )
@@ -97,6 +97,10 @@ def confidence_interval(
     )[:, :n]
     means = np.sort(np.asarray(values)[indices].mean(axis=1))
     tail = policy.family_alpha / (2 * policy.max_validation_cycles)
+    if policy.statistical_policy_version == "v2":
+        tail = policy.family_alpha / policy.max_validation_cycles
+        # Null is an unbounded upper endpoint, not a second estimated quantile.
+        return float(means[int(tail * len(means))]), None
     return float(means[int(tail * len(means))]), float(
         means[min(len(means) - 1, int((1 - tail) * len(means)))]
     )
@@ -107,6 +111,11 @@ def promotion_gates(evidence: dict[str, Any], policy: AgentPolicy) -> dict[str, 
     if not h["evaluated"]:
         return {"independent_evaluation": False}
     interval = h["interval"]
+    confidence = (
+        len(interval) == 2 and 0 < interval[0] and interval[1] is None
+        if policy.statistical_policy_version == "v2"
+        else len(interval) == 2 and 0 < interval[0] <= interval[1]
+    )
     return {
         "new_candidate": evidence["selected_version"] != evidence["champion_version"],
         "development_advantage": dev["candidate_score"] > dev["champion_score"],
@@ -116,7 +125,7 @@ def promotion_gates(evidence: dict[str, Any], policy: AgentPolicy) -> dict[str, 
         >= policy.logic.evaluation.min_fold_trades,
         "net_improvement": h["candidate_return"] - h["champion_return"]
         >= policy.logic.evaluation.min_improvement,
-        "confidence": len(interval) == 2 and 0 < interval[0] <= interval[1],
+        "confidence": confidence,
         "drawdown": 0
         <= h["candidate_drawdown"]
         <= policy.logic.evaluation.max_drawdown,
@@ -222,7 +231,9 @@ class ResearchAgent:
                 "SELECT * FROM agent_studies WHERE name=?", (name,)
             ).fetchone()
             if row and (
-                row["policy_json"] != canonical(policy) or row["build"] != build_id()
+                canonical(policy_from_dict(json.loads(row["policy_json"])))
+                != canonical(policy)
+                or row["build"] != build_id()
             ):
                 raise AgentError(
                     "Preserve the existing study policy, build and consumed history"
@@ -575,6 +586,14 @@ class ResearchAgent:
             best = baseline
         evidence = {
             "cycle_id": cycle_id,
+            "statistical_policy_version": policy.statistical_policy_version,
+            "nominal_one_sided_alpha_per_cycle": policy.family_alpha
+            / policy.max_validation_cycles
+            / (2 if policy.statistical_policy_version == "v1" else 1),
+            "tail_draws": policy.bootstrap_samples
+            * policy.family_alpha
+            / policy.max_validation_cycles
+            / (2 if policy.statistical_policy_version == "v1" else 1),
             "champion_version": champion.version,
             "selected_version": best["version"],
             "selected_spec": best["spec"],
@@ -683,7 +702,8 @@ class ResearchAgent:
                 or digest(evidence) != row["evidence_hash"]
                 or evidence["cycle_id"] != cycle_id
                 or manifest["build"] != build_id()
-                or canonical(manifest["policy"]) != study["policy_json"]
+                or canonical(policy_from_dict(manifest["policy"]))
+                != canonical(policy_from_dict(json.loads(study["policy_json"])))
             ):
                 raise AgentError("Stored evidence or frozen manifest changed")
             policy = policy_from_dict(manifest["policy"])

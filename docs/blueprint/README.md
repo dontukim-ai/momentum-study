@@ -2,6 +2,8 @@
 
 작성일: 2026-10-16 KST. 코드 기준: `74e07e9`, 작업 범위 기준: `577fede`. v1.1은 v1.0을 **4단계 자기 개선 루프** 중심으로 재구성하고, 수치와 계약을 `79d9c01` 시점의 코드와 다시 대조한 문서 변경이다. 런타임 기능은 추가하지 않았다. 목표 기능과 실제 구현은 [진행 현황](status.md)에서 구분한다.
 
+**C1~C4 구현 갱신:** 평가 계약 ID·동일 조건 검사, 거래 가능성 수량 단계·reference_price 지표, 현금/적격 동일 비중 보고, opt-in 통계 v2·합성 진단 도구를 구현했다. 기본 v1 승격·일정·소비 규칙은 유지한다. [구현 보고](batch1-implementation.md)와 [현황](status.md)이 최신 구현 근거다.
+
 ## 1. 목표
 
 시장별 후보 선정과 전략으로 매매 후보를 만들고, 아래 네 단계를 반복해 검증된 전략만 갱신하는 에이전트를 만든다.
@@ -51,7 +53,7 @@ flowchart TD
     TR -. ExecutionRelease .-> RL[모의 운용 → 실전 운용]
 ```
 
-현재 실제 실행 경로는 `momentum.agent` → KIS `SelectionEngine`/계획 함수 → 공통 `Ledger` → 연구 저장소다. 위 그림에서 `DataBundle`, `MarketProfile`, `StrategyFamily`, `SearchPlan`, `EvaluationContract`, `EvaluationCommitment`, 실패 기억 해제, 연속 관찰 원장, 열화 정책, `ObservationRelease`/`ExecutionRelease`는 설계안이며 아직 구현되지 않았다.
+현재 실제 실행 경로는 `momentum.agent` → KIS `SelectionEngine`/계획 함수 → 공통 `Ledger` → 연구 저장소다. 위 그림에서 `DataBundle`, `MarketProfile`, `StrategyFamily`, `SearchPlan`, `EvaluationCommitment`, 실패 기억 해제, 연속 관찰 원장, 열화 정책, `ObservationRelease`/`ExecutionRelease`는 설계안이며 아직 구현되지 않았다.
 
 ## 3. 루프 불변식
 
@@ -60,7 +62,7 @@ flowchart TD
 | ID | 불변식 | 현재 근거 |
 | --- | --- | --- |
 | INV-1 | 제안기(S1)는 **진행 중인 사이클이거나 아직 개발로 해제되지 않은** 최종 검증·추적 결과를 입력으로 받지 않는다. 해제는 사이클이 끝난 뒤 명시적 기록으로만 일어난다(§5) | 개발 prefix만 전달(`service._evaluate`), 회귀 11. 해제 기록은 미구현 |
-| INV-2 | 모든 후보는 같은 `EvaluationContract`(평가 구간·자본·위험 한도·초기 포트폴리오·실행 시계·비용·체결·원장)로 평가한다. 전략의 의사결정 주기는 후보 쪽 변수다 | `CommonEvaluator` 단일 경로. 계약 ID는 미구현 |
+| INV-2 | 모든 후보는 같은 `EvaluationContract`(평가 구간·자본·위험 한도·초기 포트폴리오·실행 시계·비용·체결·원장)로 평가한다. 전략의 의사결정 주기는 후보 쪽 변수다 | `CommonEvaluator`, `EvaluationContract` ID, `require_same_contract`(C2 합성 회귀) |
 | INV-3 | 최종 후보 spec·기준 전략·합격 기준·구간은 평가 구간의 첫 실행 시각 전에 고정된다 | 평가 전 manifest 저장(회귀 09, 20). 첫 실행 시각 전 고정은 미구현 |
 | INV-4 | 한 번 쓴 최종 검증 구간은 같은 시장에서 다시 최종 검증에 쓰이지 않는다. 개발로 해제돼도 마찬가지다. 최종 검증 소비는 배타적이고, 관찰 노출과의 동시 사용은 구간 시작 전에 등록한 검증 cohort 안에서만 허용한다 | `agent_intervals`, legacy `holdouts`(회귀 05, 12, 13, 15, 16). 현재는 용도와 상관없이 모든 겹침을 거부. cohort는 미구현 |
 | INV-5 | 실패·동점·증거 부족은 champion을 바꾸지 않는다 | `promotion_gates`, 회귀 04, 08 |
@@ -91,7 +93,7 @@ flowchart TD
 | 입력 | 후보 spec(의사결정 주기 포함), `EvaluationContract`(평가 구간·데이터 묶음·자본·위험 한도·초기 포트폴리오·실행 시계·비용·체결·원장 버전) |
 | 출력 | `EvaluationResult`: 비용 차감 수익, 낙폭, 회전율, **거래 가능성 지표**, 거래/자산 곡선 |
 | 현재 | 공통 평가기, 전일 종가 기준 수량 계획, 다음 시가 체결, 전일 거래량 1% 상한, 비용 1.5/20/5bps, 수수료·slippage 2배 스트레스 |
-| 차이 | "같은 조건"을 묶는 계약 ID 없음. 거래 가능성은 선정 필터에만 있고 평가 지표에 없음. 현재 로그의 `planned_quantity`는 거래량 상한 적용 **후** 값이라 상한에 따른 감소가 드러나지 않음. 비교 대상이 기존 champion뿐(현금·단순 기준 전략 없음). 신뢰구간(일 수익률 차이 평균)과 순개선 gate(누적 순수익률 차이)의 역할(주 검정 / 경제적 최소 효과)이 정의되지 않음 |
+| 차이 | C1/C2의 계약 ID·수량 단계·reference_price 지표, C3의 현금/적격 동일 비중 보고 구현(합성 회귀). 기준 전략 gate·시장 ETF·capacity·실데이터 경제 검증은 후속 |
 | 작업 | LOOP-03, RES-01, FIN-01~04 |
 
 ### S3 독립 검증
@@ -101,7 +103,7 @@ flowchart TD
 | 입력 | 개발에서 선택된 후보 1개, `EvaluationCommitment`, 미사용 구간 데이터 |
 | 출력 | gate 결과, 신뢰구간, 증거 등급(§5), 소비 기록 |
 | 현재 | 고정 일정(개발 120 / 격리 5 / 최종 40), 시장 단위 소비, 승격 조건 10개, paired circular block bootstrap + 사이클 예산 Bonferroni |
-| 차이 | 후보 선택과 고정이 구간 **도착 후·계산 전**에 일어나므로 증거 등급은 E1까지만 가능. 예산이 연구 단위. 통계 gate의 명목 예산 표기, 실제 오류율 검증, 분위수 안정성, 블록 민감도 규칙이 정해지지 않음([자기 개선](self-improvement.md) §6) |
+| 차이 | 후보 선택과 고정이 구간 **도착 후·계산 전**에 일어나므로 증거 등급은 E1까지만 가능. 예산이 연구 단위. C4의 opt-in 통계 v2·합성 민감도 도구를 구현했으나 실제 오류율 검토와 개발 구간 블록 선정 근거는 미완료([자기 개선](self-improvement.md) §6) |
 | 작업 | RES-02, RES-03, LOOP-07 |
 
 ### S4 전략 갱신·추적

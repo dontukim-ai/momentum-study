@@ -140,6 +140,8 @@ class AgentPolicy:
     bootstrap_block: int = 5
     bootstrap_samples: int = 2000
     family_alpha: float = 0.05
+    statistical_policy_version: str = "v1"
+    min_tail_draws: int = 50
 
     def __post_init__(self) -> None:
         if (self.market, self.currency, self.money_quantum) != ("KRX", "KRW", "1"):
@@ -160,9 +162,15 @@ class AgentPolicy:
             "max_validation_cycles",
             "bootstrap_block",
             "bootstrap_samples",
+            "min_tail_draws",
         )
         if any(type(getattr(self, n)) is not int for n in integers):
             raise AgentError("Research session counts and budgets must be integers")
+        if (
+            self.statistical_policy_version not in {"v1", "v2"}
+            or self.min_tail_draws < 1
+        ):
+            raise AgentError("Invalid statistical policy version or tail budget")
         if (
             self.warmup_sessions < max(61, self.logic.selection.min_history)
             or self.development_sessions < 90
@@ -184,6 +192,11 @@ class AgentPolicy:
             raise AgentError(
                 "Too few bootstrap draws for the registered validation budget"
             )
+        if self.statistical_policy_version == "v2" and (
+            self.bootstrap_samples * self.family_alpha / self.max_validation_cycles
+            < self.min_tail_draws
+        ):
+            raise AgentError("Too few bootstrap tail draws for statistical policy v2")
 
 
 def policy_from_dict(raw: dict[str, Any]) -> AgentPolicy:
