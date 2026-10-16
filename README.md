@@ -9,6 +9,17 @@
 
 루트의 H1~H4 가설·원화/달러·비용·최종 평가 정책과 KIS 연구 프로토타입의 정책을 혼용하지 않는다. KIS 연구 결과를 H1~H4의 투자 판정으로 사용하지 않는다. 실제 데이터·실제 서비스·수익성은 합성 테스트와 별도 검증 대상이다. 현재 개발 우선순위는 종목 선정·판단·자동 개선이며 실전 자동 주문은 구현하지 않았다.
 
+## 자동 자기 개선 에이전트
+
+`momentum-agent`는 미국 엔진의 원장과 한투의 시점 기반 후보 선정을 연결한다. 후보 생성 → 공통 체결·회계 평가 → 예약한 독립 검증 → 연구 champion 갱신·전진 관찰을 실행하며, 새 입력 파일을 감시해 반복할 수 있다. 현재 전략 연결기는 KRX/KRW·100만 원 이하 연구 예산이다. 미국 H1~H4의 최종 평가 잠금은 보존한다.
+
+```bash
+uv sync --extra agent --frozen
+uv run --extra agent momentum-agent demo --output artifacts/agent-demo-v1
+```
+
+합성 예제는 승격·유지·재실행·전진 관찰을 검증하고 주문을 만들지 않는다. 실제 데이터 공급자는 별도 연결 대상이다. 실제 입력·감시 실행·과거 소비 이력 가져오기·중단 복구는 [자동 연구 에이전트 사용법](docs/automatic-research-agent.md)에 설명했다.
+
 ## 실행과 검증
 
 ```bash
@@ -33,5 +44,6 @@ KIS 전체 예제는 `apps/kis-agent/artifacts/logic-v5`에 합성 입력·선�
 - [KIS 종목 선정·자동 개선](apps/kis-agent/docs/08-selection-and-improvement.md)
 - [저장소 통합 범위와 검증](docs/kis-agent-integration.md)
 - [미국 검증·KIS 자동 연구의 차이와 통합 설계](docs/unified-research-agent-design.md)
+- [자동 자기 개선 연구 에이전트 실행·운영](docs/automatic-research-agent.md)
 
 개발 기준 저장소는 `dontukim-ai/momentum-study`다. 이후 작업은 이 checkout 안에서 진행하며 형제 폴더에 별도 프로젝트를 만들지 않는다.

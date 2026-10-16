@@ -109,6 +109,7 @@ def research(snapshot: Snapshot, champion: StrategySpec, costs: Costs, store: St
         report["cached_report"] = True
         return report
     holdout_start, holdout_end = sessions[boundary].isoformat(), sessions[-1].isoformat()
+    store.guard_unified_interval(holdout_start, holdout_end, run_id)
     # Reject overlap even after CSV edits or universe changes involving any consumed symbol.
     for symbol in snapshot.symbols:
         used = store.db.execute("SELECT run_id FROM holdouts WHERE symbol=? AND NOT(end<? OR start>?)",
@@ -151,6 +152,7 @@ def research(snapshot: Snapshot, champion: StrategySpec, costs: Costs, store: St
         report["selected_version"] = selected.version
         # Claim before evaluation; a crash leaves the interval consumed (fail closed).
         with store.transaction():
+            store.guard_unified_interval(holdout_start, holdout_end, run_id)
             for symbol in snapshot.symbols:
                 used = store.db.execute("SELECT 1 FROM holdouts WHERE symbol=? AND NOT(end<? OR start>?)",
                                         (symbol, holdout_start, holdout_end)).fetchone()

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kis-self-improving-agent"
-version = "0.5.1"
+version = "0.5.2"
 description = "Point-in-time security selection and bounded automatic strategy improvement without orders"
 requires-python = ">=3.11"
 dependencies = []

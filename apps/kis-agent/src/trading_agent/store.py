@@ -76,6 +76,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS logic_one_running_cycle ON logic_cycles(study)
 
 
 class Store:
+    def guard_unified_interval(self, start: str, end: str, owner: str) -> None:
+        """Respect market-wide reservations created by the unified runtime.
+
+        Kept optional for standalone databases created before that runtime.
+        Call again inside the claiming transaction to close the worker race.
+        """
+        exists = self.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='agent_intervals'").fetchone()
+        if exists and self.db.execute(
+                "SELECT 1 FROM agent_intervals WHERE market='KRX' AND owner<>? AND NOT(end<? OR start>?)",
+                (owner, start, end)).fetchone():
+            raise AgentError("Holdout overlaps consumed unified research or shadow evidence")
+
     def __init__(self, path: str | Path) -> None:
         self.path = str(path)
         if self.path != ":memory:":

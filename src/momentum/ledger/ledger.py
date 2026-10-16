@@ -62,8 +62,14 @@ class CorporateAction(NamedTuple):
 
 
 class Ledger:
-    def __init__(self, starting_cash: Decimal, cfg: ExecutionCfg | None = None) -> None:
-        self.cash: Decimal = Decimal(starting_cash).quantize(CENT, ROUND_HALF_UP)
+    def __init__(self, starting_cash: Decimal, cfg: ExecutionCfg | None = None,
+                 *, money_quantum: Decimal = CENT) -> None:
+        # Existing USD callers retain cent-exact behavior. Other research
+        # currencies must explicitly select a decimal power, never a tick size.
+        if not money_quantum.is_finite() or money_quantum <= 0 or money_quantum.normalize().as_tuple().digits != (1,):
+            raise ValueError("money_quantum must be a positive decimal power of ten")
+        self.money_quantum = money_quantum.normalize()
+        self.cash: Decimal = Decimal(starting_cash).quantize(self.money_quantum, ROUND_HALF_UP)
         self.positions: dict[str, int] = {}
         self.cost_basis: dict[str, Decimal] = {}  # per share, includes trading cost
         self.marks: dict[str, Decimal] = {}  # per share, excludes trading cost
@@ -87,11 +93,11 @@ class Ledger:
             if mark is None:
                 raise SpecUndefinedError(f"no mark price ever seen for held security {sid}")
             total += qty * mark
-        return total.quantize(CENT)
+        return total.quantize(self.money_quantum)
 
     @property
     def dividend_receivable(self) -> Decimal:
-        return sum(self.receivables.values(), Decimal("0.00")).quantize(CENT)
+        return sum(self.receivables.values(), Decimal("0.00")).quantize(self.money_quantum)
 
     @property
     def nav(self) -> Decimal:
@@ -113,7 +119,7 @@ class Ledger:
                 mark = self.marks.get(sid)
                 if mark is not None:
                     total += qty * mark
-        return total.quantize(CENT)
+        return total.quantize(self.money_quantum)
 
     # ---- the three phases --------------------------------------------
     def apply_corporate_actions(self, cas: list[CorporateAction], d: date) -> None:
@@ -126,14 +132,14 @@ class Ledger:
                         raise SpecUndefinedError(f"dividend without cash_amount: {ca}")
                     qty = self.positions.get(ca.security_id, 0)
                     if qty:
-                        accrual = (qty * ca.cash_amount).quantize(CENT, ROUND_HALF_UP)
+                        accrual = (qty * ca.cash_amount).quantize(self.money_quantum, ROUND_HALF_UP)
                         key = (ca.security_id, ca.pay_date)
                         self.receivables[key] = self.receivables.get(key, Decimal("0.00")) + accrual
                         self._nav += accrual
                 if ca.pay_date == d:
                     key = (ca.security_id, ca.pay_date)
                     due = self.receivables.pop(key, Decimal("0.00"))
-                    self.cash = (self.cash + due).quantize(CENT, ROUND_HALF_UP)
+                    self.cash = (self.cash + due).quantize(self.money_quantum, ROUND_HALF_UP)
             elif ca.action_type == "split":
                 if ca.ex_date != d:
                     continue
@@ -163,7 +169,7 @@ class Ledger:
             self.fills.append(f)
             if f.shares == 0:
                 continue
-            notional = (f.shares * f.price).quantize(CENT, ROUND_HALF_UP)
+            notional = (f.shares * f.price).quantize(self.money_quantum, ROUND_HALF_UP)
             if f.side == "sell":
                 held = self.positions.get(f.security_id, 0)
                 if f.shares > held:
@@ -185,7 +191,7 @@ class Ledger:
                     self.cost_basis.pop(f.security_id, None)
                     self.marks.pop(f.security_id, None)
                     self.marks_asof.pop(f.security_id, None)
-                self.cash = (self.cash + notional - f.cost).quantize(CENT, ROUND_HALF_UP)
+                self.cash = (self.cash + notional - f.cost).quantize(self.money_quantum, ROUND_HALF_UP)
             else:
                 held = self.positions.get(f.security_id, 0)
                 old_basis = self.cost_basis.get(f.security_id, Decimal(0))
@@ -201,7 +207,7 @@ class Ledger:
                 self.marks[f.security_id] = (old_mark * held + f.price * f.shares) / new_qty
                 self.positions[f.security_id] = new_qty
                 self._nav -= f.cost
-                self.cash = (self.cash - notional - f.cost).quantize(CENT, ROUND_HALF_UP)
+                self.cash = (self.cash - notional - f.cost).quantize(self.money_quantum, ROUND_HALF_UP)
             if self.cash < 0:
                 raise SpecUndefinedError(f"fill on {d} drove cash negative: {self.cash}")
 
