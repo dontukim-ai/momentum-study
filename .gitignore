@@ -4,3 +4,12 @@ __pycache__/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
+.cache/
+.env
+.env.*
+!.env.example
+.secrets/
+artifacts/
+*.sqlite3
+*.sqlite3-*
+*.egg-info/

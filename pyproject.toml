@@ -22,6 +22,7 @@ requires = ["uv_build>=0.12.15,<0.13.0"]
 build-backend = "uv_build"
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 markers = [
     "slow: full end-to-end runs over the whole development window (H1's ~3,270 daily rebalances); deselected by default, run explicitly with `-m slow`.",
 ]

@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kis-self-improving-agent"
+version = "0.5.1"
+description = "Point-in-time security selection and bounded automatic strategy improvement without orders"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+kis-agent = "trading_agent.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.uv]
+cache-dir = ".cache/uv"
+
+[tool.ruff]
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]

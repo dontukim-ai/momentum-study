@@ -1,0 +1,12 @@
+# Repository working instructions
+
+- This checkout is the canonical `dontukim-ai/momentum-study` workspace. Continue development here; do not create another sibling project outside the repository.
+- Read `CLAUDE.md` before changing the existing US H1-H4 validation engine. Its golden fixtures and economic invariants remain authoritative.
+- The root `src/momentum` project and `apps/kis-agent` are separate Python packages for different markets and research contracts. Preserve their package names, environments, data contracts, and evaluation policies. Do not route H1-H4 around `AsOfFrame` or substitute KIS results for H1-H4 evidence.
+- Preserve the common economic invariants across both packages: size desired shares from information available before execution, use the actual next open only for fills and reductions, never fill missing opens with prior closes, freeze evaluation inputs before opening the holdout, and retain all consumed evaluation intervals.
+- KIS uses its own timestamp-validated `Snapshot.view` and `SecurityHistory` contracts. Its prices and sizing arithmetic use Decimal. It is not an adapter for the US engine's data schema or corporate-action ledger.
+- Current user scope prioritizes candidate selection, strategy logic and automatic research improvement before automatic orders. User-stated capital is KRW 1,000,000. Do not turn research champion updates into broker orders.
+- Root checks: `uv run pytest -q`, `uv run mypy src`, `uv run ruff check`. Root pytest only collects `tests/`.
+- App checks: `uv run --directory apps/kis-agent python -m unittest discover -s tests -v`; integration: `uv run --directory apps/kis-agent python -m examples.offline_logic`.
+- Never commit actual keys, secrets, token caches, `.env` files, virtual environments, generated artifacts or research databases. Do not delete consumed holdouts to make tests or research pass.
+- Keep the original H1-H4 golden fixtures unchanged. New economic behavior needs a failing regression test before its implementation; do not relax thresholds to force a favorable result.

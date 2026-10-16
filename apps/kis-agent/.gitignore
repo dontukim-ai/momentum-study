@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.egg-info/
+*.pyc
+.env
+.env.*
+artifacts/
+*.sqlite3
+*.sqlite3-*
+.ruff_cache/
+.cache/
+.secrets/

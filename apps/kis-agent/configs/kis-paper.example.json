@@ -1,0 +1,11 @@
+{
+  "risk": {
+    "allowlist": ["069500"],
+    "max_gross": "0.8",
+    "max_position": "0.4",
+    "max_order_notional": "1000000",
+    "max_quote_age_seconds": 60,
+    "version": "paper-example-review-before-use"
+  },
+  "tick_sizes": {"069500": "5"}
+}
