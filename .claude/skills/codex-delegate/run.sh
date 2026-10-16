@@ -40,7 +40,8 @@ PY
 if [[ "${2:-}" == "--resume" ]]; then
   MSG="${3:?수정 지시}"
   [[ -d "$WT" && -s "$TASKS/$ID.thread" ]] || { echo "no previous run for $ID" >&2; exit 2; }
-  n=$(ls "$TASKS/$ID".retry*.jsonl 2>/dev/null | wc -l)
+  # No earlier retry is the normal first case; a failed glob must not abort under -e.
+  n=$(find "$TASKS" -maxdepth 1 -name "$ID.retry*.jsonl" | wc -l)
   run_codex "retry$((n + 1))" exec resume "$(cat "$TASKS/$ID.thread")" \
     -c sandbox_mode='"workspace-write"' "$MSG"$'\n\n'"끝나면 같은 완료 보고 형식으로 다시 보고한다."
 else
