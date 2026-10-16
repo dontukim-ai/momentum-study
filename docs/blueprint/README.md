@@ -62,7 +62,7 @@ flowchart TD
 | INV-1 | 제안기(S1)는 **진행 중인 사이클이거나 아직 개발로 해제되지 않은** 최종 검증·추적 결과를 입력으로 받지 않는다. 해제는 사이클이 끝난 뒤 명시적 기록으로만 일어난다(§5) | 개발 prefix만 전달(`service._evaluate`), 회귀 11. 해제 기록은 미구현 |
 | INV-2 | 모든 후보는 같은 `EvaluationContract`(평가 구간·자본·위험 한도·초기 포트폴리오·실행 시계·비용·체결·원장)로 평가한다. 전략의 의사결정 주기는 후보 쪽 변수다 | `CommonEvaluator` 단일 경로. 계약 ID는 미구현 |
 | INV-3 | 최종 후보 spec·기준 전략·합격 기준·구간은 평가 구간의 첫 실행 시각 전에 고정된다 | 평가 전 manifest 저장(회귀 09, 20). 첫 실행 시각 전 고정은 미구현 |
-| INV-4 | 한 번 쓴 최종 검증 구간은 같은 시장에서 다시 최종 검증에 쓰이지 않는다. 개발로 해제돼도 마찬가지다 | `agent_intervals`, legacy `holdouts`(회귀 05, 12, 13, 15, 16) |
+| INV-4 | 한 번 쓴 최종 검증 구간은 같은 시장에서 다시 최종 검증에 쓰이지 않는다. 개발로 해제돼도 마찬가지다. 최종 검증 소비는 배타적이고, 관찰 노출과의 동시 사용은 구간 시작 전에 등록한 검증 cohort 안에서만 허용한다 | `agent_intervals`, legacy `holdouts`(회귀 05, 12, 13, 15, 16). 현재는 용도와 상관없이 모든 겹침을 거부. cohort는 미구현 |
 | INV-5 | 실패·동점·증거 부족은 champion을 바꾸지 않는다 | `promotion_gates`, 회귀 04, 08 |
 | INV-6 | 정책(위험 한도·비용·합격 기준)은 연구 안에서 바뀌지 않는다. 바꾸면 새 정책 버전이고, 그 정책의 예산은 예산 계정에서 **명시적으로 할당**한다(새 예산을 그냥 만들지 않음) | `AgentPolicy` 동결, `build_id` |
 | INV-7 | 예산 소비 기록은 연구 이름·빌드·정책·family 버전을 바꾸거나 실행을 폐기해도 사라지거나 초기화되지 않는다 | 연구 단위 예산(최대 8 사이클)만 구현. `budget_account_id` 단위 누적은 미구현 |
@@ -112,7 +112,7 @@ flowchart TD
 | 출력 | champion revision 또는 유지 기록, `FailureCase`, `ObservationRelease`, 연속 관찰 원장, 열화 상태 |
 | 현재 | 연구(study) 단위 champion, 사이클마다 별도 초기 자본으로 새로 시작하는 20세션 shadow 블록, 열화 flag(낙폭 초과 또는 기존 전략보다 낮은 수익)만 기록 |
 | 차이 | champion 키가 `(market, strategy_family)`가 아님. 관찰이 사이클을 넘어 이어지지 않음(20세션 초기화 블록을 이어 붙여도 연속 NAV가 되지 않음). 유지 사이클에서는 `champion_before == champion_after`라 shadow가 같은 전략끼리 비교함(순우위 항상 0). 열화 판정에 따른 상태 전이 없음 |
-| 작업 | LOOP-04, LOOP-05, LOOP-06, LOOP-08, OPS-05, OPS-06 |
+| 작업 | LOOP-04, LOOP-05, LOOP-06, LOOP-08, LOOP-09, OPS-05, OPS-06 |
 
 **두 원장의 구분.** S2·S3의 **실험 원장**은 후보마다 같은 초기 조건(자본·빈 포트폴리오)으로 다시 시작해 비교 가능성을 지킨다. S4의 **관찰 원장**은 revision이 바뀌어도 현금·보유·배당채권을 이어 가며, 전략 교체에 드는 실제 거래와 비용을 기록한다. 관찰 원장의 자산은 실제 거래·비용·기업행동 외에는 불연속이 없어야 한다.
 
@@ -138,10 +138,12 @@ E2로 인정하지 않는 경우: 개장 후(장중 결과를 볼 수 있는 시
 
 **개발로의 해제와 구간 재사용.** 끝난 사이클의 최종 구간과 shadow 구간은 다음 사이클의 **개발** 데이터가 될 수 있다. 현재 기본 일정에서 사이클 1의 최종 187~226과 shadow 227~246은 사이클 2의 개발 127~246에 포함된다. 이 재사용은 다음 규칙을 따른다.
 
-- 최종·관찰 단계의 결과는 사이클이 COMPLETE 또는 ABANDONED가 된 뒤에만, `FailureCase`·결과 단위로 `released_to_development_at`을 기록해 개발로 해제한다([루프 계약](loop-contracts.md) §9). 개발 단계의 결과는 바로 해제할 수 있다. 메타데이터에 적는 것만으로 읽기 권한이 생기지 않는다. 제안기는 `eligible_for_proposer = true`인 기록만 읽는다.
-- 진행 중인 사이클의 최종 gate·열화 결과는 해제할 수 없다.
+- 해제 단위는 사이클 상태가 아니라 **확정된 결과 snapshot**(구간, 마지막 반영 세션, 결과 해시, 봉인 시각)이다. 최종 결과는 최종 결정이 확정된 뒤, 관찰 결과는 종료·봉인된 구간이나 checkpoint만 해제한다. 열린 관찰 구간은 사이클이 COMPLETE여도 해제하지 않는다([루프 계약](loop-contracts.md) §9).
+- 해제는 `released_to_development_at`을 기록해야 일어난다. 메타데이터에 적는 것만으로 읽기 권한이 생기지 않는다. 제안기는 `eligible_for_proposer = true`인 snapshot만 읽고, 해제된 snapshot은 이후 관찰 갱신으로 바뀌지 않는다.
 - 해제된 자료로 만든 후보는 **완전히 새로운** 평가 구간에서 검증한다. 해제된 구간은 다시 최종 검증에 쓰지 않는다(INV-4).
-- shadow 구간도 `agent_intervals`에 시장 단위 소비로 기록되므로, 같은 DB의 다른 연구는 그 구간을 최종 검증에 쓸 수 없다.
+- 현재 shadow 구간은 `agent_intervals`에 시장 단위 소비로 기록되므로, 같은 DB의 다른 연구는 그 구간을 최종 검증에 쓸 수 없다.
+
+**관찰과 다음 최종 검증의 동시 사용.** 관찰을 매일 이어 가면서 현재 소비 규칙을 그대로 쓰면, champion 관찰이 다음 challenger의 최종 구간까지 먼저 소비하거나, 반대로 최종 구간 예약이 관찰을 막는다. 그래서 날짜 사용을 배타적인 **최종 검증 소비**와 **관찰 노출**로 나눈다. 둘의 동시 사용은 구간 시작 전에 등록한 **검증 cohort**(단일 challenger + 이미 고정된 관찰 버전) 안에서만 허용한다. cohort 기간의 관찰 결과는 최종 결정이 확정될 때까지 봉인되어 후보 선택·기준 변경·제안기 입력에 들어가지 않는다([루프 계약](loop-contracts.md) §12).
 
 ## 6. 연구에서 운용으로: 두 단계 Release
 
@@ -163,7 +165,7 @@ E2 통과 champion → ObservationRelease(주문 권한 없음) → E3 관찰 �
 | 문서 | 확인할 내용 |
 | --- | --- |
 | **[진행 현황](status.md)** | 단계별 완료·부분·미착수·보류, 코드/테스트 근거 |
-| [루프 계약 설계안](loop-contracts.md) | MarketProfile·StrategyFamily·예산 계정·SearchPlan·EvaluationContract·EvaluationCommitment·ChampionRegistry·관찰 원장·열화·실패 기억 해제·Release 필드 |
+| [루프 계약 설계안](loop-contracts.md) | MarketProfile·StrategyFamily·예산 계정·SearchPlan·EvaluationContract·EvaluationCommitment·ChampionRegistry·관찰 원장·열화·실패 기억 해제·Release·구간 예약과 검증 cohort 필드 |
 | [상세 구조와 계약](architecture.md) | 현재 모듈, 데이터 경로, 원장, DB, 외부 경계 |
 | [자기학습·개선 로직](self-improvement.md) | 현재 알고리즘·수식·일정·승격 조건, 통계 정책, 학습 확장 |
 | [세부 개발 계획](implementation-plan.md) | 작업 ID·선행 조건·완료 조건 |
@@ -178,8 +180,8 @@ E2 통과 champion → ObservationRelease(주문 권한 없음) → E3 관찰 �
 | --- | --- | --- | --- | --- |
 | S1 후보 생성 | INV-1, INV-6 | `selection.py`, `logic.py`, `service._evaluate` | 11, 17 | LOOP-01, LOOP-02, LOOP-08, RES-04, RES-05 |
 | S2 동일 조건 평가 | INV-2 | `evaluator.py`, `ledger.py` | 01, 02, 10, 18, 19 | LOOP-03, RES-01, FIN-01~04 |
-| S3 독립 검증 | INV-3, INV-4, INV-7 | `service.tick`, `_claim`, `confidence_interval`, `promotion_gates` | 04, 05, 07, 08, 09, 12, 13, 15, 16, 20 | RES-02, RES-03, LOOP-07 |
-| S4 갱신·추적 | INV-5, INV-8 | `service._finish`, `_shadow` | 03, 06, 14 | LOOP-04, LOOP-05, LOOP-06, LOOP-08, OPS-05, OPS-06 |
+| S3 독립 검증 | INV-3, INV-4, INV-7 | `service.tick`, `_claim`, `confidence_interval`, `promotion_gates` | 04, 05, 07, 08, 09, 12, 13, 15, 16, 20 | RES-02, RES-03, LOOP-07, LOOP-09 |
+| S4 갱신·추적 | INV-4, INV-5, INV-8 | `service._finish`, `_shadow`, `_claim` | 03, 06, 14 | LOOP-04, LOOP-05, LOOP-06, LOOP-08, LOOP-09, OPS-05, OPS-06 |
 
 ## 9. 작업 순서
 
@@ -187,7 +189,7 @@ E2 통과 champion → ObservationRelease(주문 권한 없음) → E3 관찰 �
 2. **비교 계약·기준 전략·지표 `LOOP-01`, `LOOP-03`, `RES-01`, `LOOP-07`:** MarketProfile, EvaluationContract, 거래 가능성 지표, 기준 전략, 통계 정책 v2.
 3. **후보 사전 고정과 예산 `RES-03`, `LOOP-02`:** SearchPlan/EvaluationCommitment(E2), 전략군 레지스트리, 예산 계정.
 4. **실패 기억 권한 `LOOP-08`, `RES-04`:** 개발 해제 기록, 실패 코드, 제안기 입력 제한.
-5. **연속 관찰·Release `LOOP-04`, `LOOP-05`, `LOOP-06`, `OPS-05`:** champion 키, 관찰 원장, 열화 정책, 두 단계 Release.
+5. **연속 관찰·Release `LOOP-09`, `LOOP-04`, `LOOP-05`, `LOOP-06`, `OPS-05`:** 구간 예약·동시 사용 정책(검증 cohort)을 먼저 정한 뒤 champion 키, 관찰 원장, 열화 정책, 두 단계 Release.
 6. **운영과 학습 `OPS-01~04`, `OPS-06`, `RES-05`, `RES-06`:** 상시 운용, 전진 캠페인, LLM·학습 제안.
 
 **병행:** 실제 시점 데이터와 비용 확인(`DATA-01~06`, `FIN-01~04`)은 2~5와 함께 진행한다. 2~5는 합성 데이터로 먼저 구현·회귀할 수 있으나, 실데이터 검증 완료로 표시하려면 DATA·FIN이 끝나야 한다. 개발 작업과 데이터 도착 대기 시간을 구분한다. 40개 새 거래일이 필요한 E2 검증을 코드 작업 속도로 줄일 수는 없다.

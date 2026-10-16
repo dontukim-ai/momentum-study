@@ -1,6 +1,6 @@
 # 루프 계약 설계안
 
-상위 기준: [블루프린트](README.md) §3~§6. 이 문서의 계약 이름·필드는 **모두 설계안이며 현재 코드에 없다.** 기존 [상세 구조](architecture.md) §2의 DataBundle·CandidateProposal·FailureCase·ObservationRelease·RuntimeHealth 설계안을 4단계 루프 기준으로 보완한다.
+상위 기준: [블루프린트](README.md) §3~§6. 목차: §1 MarketProfile, §2 StrategyFamily, §3 예산 계정, §4 SearchPlan·CandidateProposal, §5 EvaluationContract·거래 가능성 지표, §6 지표 정의, §7 EvaluationCommitment, §8 ChampionRegistry, §9 실패 기억 해제, §10 관찰 원장·열화, §11 Release, §12 구간 예약·동시 사용. 이 문서의 계약 이름·필드는 **모두 설계안이며 현재 코드에 없다.** 기존 [상세 구조](architecture.md) §2의 DataBundle·CandidateProposal·FailureCase·ObservationRelease·RuntimeHealth 설계안을 4단계 루프 기준으로 보완한다.
 
 공통 규칙:
 
@@ -141,7 +141,20 @@ desired_qty        상한 적용 전 목표와 현재 보유의 차이
 | unaffordable_rate | 예산 안에서 1주도 살 수 없어 제외된 후보 비율 | — |
 | capacity_estimate | fill_ratio가 기준 아래로 떨어지기 시작하는 자본 규모(민감도) | — |
 
-집계 규칙: 종목·세션 단위 수량을 체결 가격 기준 **금액 가중**으로 합산한 값을 주 지표로, 주문 건수 가중 값을 보조로 둔다. `Σdesired = 0`이면 비율은 N/A로 기록하고 0이나 100%로 바꾸지 않는다.
+집계 규칙:
+
+- 주문마다 **계획 시점에 알 수 있었던 `reference_price`**(현재 계획에 쓰는 전일 종가 mark)를 보존한다. 체결 가격은 미체결 주문에 없으므로 가중에 쓰지 않는다.
+- 모든 수량 단계에 같은 `reference_price`를 곱해 금액으로 합산한다. 매수·매도는 주문별 **절대 수량**으로 더해 서로 상쇄되지 않게 한다.
+
+```text
+fill_ratio = Σ(|filled_qty| × reference_price) / Σ(|desired_qty| × reference_price)
+```
+
+- 위 식처럼 감소 지표도 같은 분모(`Σ|desired_qty| × reference_price`)를 쓴다. 주문 건수 가중 값은 보조로 둔다.
+- 분모가 0이면 N/A로 기록하고 0이나 100%로 바꾸지 않는다.
+- `reference_price`가 없는 주문이 있으면 금액 가중 지표를 품질 보류(N/A)로 두고, 누락된 주문 수·종목·세션을 따로 보고한다. 그 주문을 집계에서 빼지 않는다.
+
+완료 조건 회귀: 계획 금액이 같은 주문 2개 중 하나는 전량 체결, 하나는 시가 결측이면 fill_ratio 50%.
 
 **turnover:** 현행 코드는 `거래대금 합 / 초기 자본`이다. 정책 v2에서는 `거래대금 합 / 평균 NAV`로 정의한다. 두 값은 이름을 구별해(`turnover_on_initial_capital`, `turnover_on_average_nav`) 기록하고 섞어 비교하지 않는다.
 
@@ -202,16 +215,31 @@ desired_qty        상한 적용 전 목표와 현재 보유의 차이
 | --- | --- |
 | source_cycle_id | 실패가 나온 사이클 |
 | source_phase | `development` / `final` / `observation` |
+| source_window | 이 결과를 만든 구간의 시작·끝 세션 |
+| observed_through | 결과에 반영된 마지막 세션 |
+| result_hash | 확정된 결과 snapshot의 해시 |
+| sealed_at | 결과 snapshot을 확정(봉인)한 시각. 비어 있으면 미확정 |
 | released_to_development_at | 개발로 해제된 시각. 비어 있으면 미해제 |
 | eligible_for_proposer | 제안기가 읽어도 되는지. 해제 기록이 있어야 true |
 | consumed_windows | 이 실패가 나온 최종·관찰 구간. 해제 뒤에도 최종 검증 재사용 금지 |
 
+해제 단위는 사이클 상태가 아니라 **확정된 결과 snapshot**(`source_window`, `observed_through`, `result_hash`, `sealed_at`)이다. 현재 COMPLETE는 최종 평가와 champion 결정이 끝났다는 뜻일 뿐이다. `_finish`가 COMPLETE를 저장한 **뒤에** `_shadow`가 시작되고, shadow 보고는 같은 행(`agent_shadow`, `ON CONFLICT DO UPDATE`)에 계속 덮어써진다. 그래서 사이클 상태만으로는 관찰 결과가 확정됐는지 알 수 없다.
+
 해제 규칙:
 
-- `source_phase = development`인 실패는 바로 해제할 수 있다.
-- `final`·`observation` 실패는 그 사이클이 COMPLETE 또는 ABANDONED가 된 뒤에만 해제한다. 진행 중인 사이클의 최종 gate·열화 결과는 해제할 수 없다.
+- `development` 결과는 개발 평가가 끝나 snapshot이 확정되면 바로 해제할 수 있다.
+- `final` 결과는 그 사이클의 최종 결정(champion 갱신 또는 유지)이 확정된 뒤 해제한다. ABANDONED 사이클의 최종 결과는 남은 부분 결과를 봉인한 뒤 해제한다.
+- `observation` 결과는 **종료·봉인된 관찰 구간 또는 checkpoint**만 해제한다. 열려 있는 관찰 구간은 계속 비공개다. 연속 관찰에는 끝이 없으므로 관찰 정책에 checkpoint 주기(예: N세션마다)를 사전 등록한다.
+- 해제한 snapshot은 이후 관찰 갱신으로 바뀌지 않는다. 새 관찰 결과는 새 snapshot이 된다.
+- 검증 cohort(§12) 기간과 겹치는 관찰 결과는 그 cohort의 최종 결정이 확정될 때까지 봉인한다.
 - 해제된 실패를 근거로 만든 후보는 `consumed_windows`와 겹치지 않는 **새로운** 평가 구간에서만 검증한다.
 - 해제는 기록이지 삭제가 아니다. 해제 전후 모두 원래 결과는 감사용으로 보존한다.
+
+완료 조건 회귀:
+
+- 사이클은 COMPLETE지만 관찰 구간이 열려 있으면 해제를 거부한다.
+- 봉인된 과거 구간만 다음 개발 입력으로 허용한다.
+- 뒤에 추가된 관찰 결과가 이미 해제된 snapshot에 섞이지 않는다.
 
 ### 실패 코드
 
@@ -253,6 +281,7 @@ desired_qty        상한 적용 전 목표와 현재 보유의 차이
 - 현재 열화 flag는 1원만 뒤처져도 켜진다. 정책에서는 임계와 지속 기간을 **사전 등록**한다.
 - 강등은 이미 검증된 이전 revision으로만 한다. 강등을 이유로 과거 구간을 다시 합격시키지 않는다.
 - 열화 판정은 해제 규칙(§9)을 거쳐 S1의 실패 기억이 된다.
+- 관찰 원장이 쓰는 날짜와 다음 사이클의 최종 검증 구간이 겹치는 문제는 §12의 구간 예약 정책을 따른다.
 
 ## 11. Release — S4 → 운용 (LOOP-06)
 
@@ -290,3 +319,57 @@ desired_qty        상한 적용 전 목표와 현재 보유의 차이
 Release는 주문을 만들지 않는다. 주문 경로(ORD-02~04)가 `ExecutionRelease`를 읽어 실행한다.
 
 완료 조건: 사전 E3 기록이 없는 첫 관찰 버전을 등록할 수 있다. 관찰 등록만으로 주문 권한이 생기지 않는다.
+
+## 12. 구간 예약·동시 사용·공개 정책 — S3·S4 (LOOP-09)
+
+### 문제
+
+현재 `ResearchAgent._claim`은 시장과 날짜가 겹치고 owner가 다르면 **용도(kind)와 상관없이** 거부한다. 고정 20세션 shadow는 다음 사이클의 최종 구간과 날짜가 겹치지 않아서 이 규칙으로도 돌아간다.
+
+그런데 관찰을 매일 이어지는 원장(§10)으로 바꾸고 같은 규칙을 적용하면 두 경우 모두 막힌다.
+
+- 관찰이 먼저 날짜를 차지하면, champion 관찰이 다음 challenger의 미래 최종 구간까지 소비한다.
+- 최종 구간을 먼저 예약하면, 관찰이 그 날짜에서 막힌다.
+
+그러면 "계속 관찰하면서 새 후보를 독립 검증"하는 루프를 만들 수 없다. 해법은 날짜 사용을 두 종류로 나누고, 동시 사용은 사전 등록한 cohort 안에서만 허용하는 것이다.
+
+### 날짜 사용의 두 종류
+
+| 종류 | 뜻 | 배타성 |
+| --- | --- | --- |
+| `final_validation` | 고정된 후보의 최종 검증에 쓰는 소비 | 시장 단위로 **배타적**. 한 번 쓴 날짜는 다시 최종 검증에 쓰지 않는다(INV-4) |
+| `observation_exposure` | 이미 고정된 버전(`ObservationRelease`)이 그 날짜를 관찰함 | 소비가 아니라 **노출 기록**. 다른 날짜 사용을 막지 않지만, 겹치는 기간의 결과는 봉인 규칙을 따른다 |
+
+### ValidationCohort
+
+최종 검증 구간과 관찰이 같은 날짜를 함께 쓰려면, 구간 첫 실행 시각 전에 cohort를 등록한다.
+
+| 필드 | 뜻 |
+| --- | --- |
+| cohort_id | 식별자 |
+| market_id, window | 시장과 최종 검증 구간 |
+| commitment_id | 이 구간에서 평가할 **단일** challenger의 `EvaluationCommitment`(§7) |
+| baseline | 비교 대상(현재 champion의 고정 spec) |
+| observation_release_ids | 같은 기간에 관찰을 이어 갈 관찰 버전. 보통 현재 champion 하나 |
+| registered_at | 등록 시각. 구간 첫 실행 시각보다 앞서야 한다 |
+| seal_until | cohort 최종 결정이 확정되는 시점 |
+
+규칙:
+
+- cohort 구간의 `final_validation`은 등록된 `commitment_id` 하나만 쓴다. 구간이 시작된 뒤 추가하는 후보나 다른 연구의 같은 날짜 최종 검증은 거부한다.
+- 같은 구간의 `observation_exposure`는 `observation_release_ids`에 등록된 버전만 허용한다. 등록된 관찰 버전은 cohort 구간이 시작되기 **전에** 고정된 것이어야 한다.
+- cohort 기간에 나온 관찰 성과·열화 결과는 `seal_until`까지 봉인한다. 이 결과는 후보 선택, 기준 변경, 제안기 입력에 들어가지 않는다. 봉인이 풀린 뒤에는 §9의 snapshot 해제 규칙을 따른다.
+- 열화 상태 전이는 봉인 중에도 운영 안전을 위해 계산하고 사람에게 알릴 수 있다. 다만 그 결과로 같은 cohort의 후보·기준·합격 기준을 바꾸지 않는다. 바꾸면 cohort는 E1로 강등되고 그 구간은 소비된 것으로 남는다.
+- 여러 challenger를 같은 구간에서 비교하려면 [자기 개선](self-improvement.md) §6의 다중 비교 계약으로 cohort를 등록하고, 예산 계정에서 비교 수만큼 할당받는다. 그 밖의 중복 최종 검증은 허용하지 않는다.
+- cohort 없이 관찰만 한 날짜는 `observation_exposure`로 기록되고, 그 관찰 결과는 운영자에게 공개된 것으로 본다. cohort는 구간 시작 전에만 등록할 수 있으므로, 이런 날짜는 나중에 최종 검증 구간으로 쓸 수 없다.
+
+### 현재 코드에서 바뀌어야 할 것
+
+- `agent_intervals`의 `kind`를 배타성 판정에 반영한다(`final_validation`끼리만 배타, `observation_exposure`는 cohort 규칙으로 판정).
+- 현재 shadow 소비 기록(`kind = shadow`)은 이전 데이터 호환을 위해 `final_validation`과 같이 배타적으로 취급한다. 새 관찰부터 `observation_exposure`로 기록한다.
+
+완료 조건 회귀:
+
+- 관찰을 중단하지 않고 다음 E2 사이클을 끝까지 완료한다.
+- 구간 시작 후 추가한 후보와 다른 연구의 같은 날짜 최종 검증은 거부한다.
+- 봉인된 관찰 결과가 제안기에 전달되지 않는다.
