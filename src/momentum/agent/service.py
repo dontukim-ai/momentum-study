@@ -63,6 +63,12 @@ FAMILY_LINEAGE_ID = "ranked-momentum"
 
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS agent_champion_registry (
+ market TEXT NOT NULL, family_lineage_id TEXT NOT NULL, revision INTEGER NOT NULL,
+ spec_json TEXT NOT NULL, spec_version TEXT NOT NULL, evidence_grade TEXT,
+ source_cycle_id TEXT, commitment_id TEXT, previous_revision INTEGER,
+ study TEXT NOT NULL, recorded_at TEXT NOT NULL,
+ PRIMARY KEY(market, family_lineage_id, revision));
 CREATE TABLE IF NOT EXISTS agent_budget_accounts (
  account_id TEXT PRIMARY KEY, market TEXT NOT NULL, family_lineage_id TEXT NOT NULL,
  total_cycles INTEGER NOT NULL, created_by TEXT NOT NULL,
@@ -259,6 +265,83 @@ class ResearchAgent:
         finally:
             connection.close()
 
+    def _registry_current(self, market: str) -> Any:
+        return self.db.execute(
+            "SELECT * FROM agent_champion_registry WHERE market=? AND family_lineage_id=? "
+            "ORDER BY revision DESC LIMIT 1",
+            (market, FAMILY_LINEAGE_ID),
+        ).fetchone()
+
+    def _append_champion(
+        self,
+        market: str,
+        revision: int,
+        spec: Any,
+        study: str,
+        grade: str | None = None,
+        cycle_id: str | None = None,
+        commitment_id: str | None = None,
+        previous_revision: int | None = None,
+    ) -> None:
+        self.db.execute(
+            "INSERT INTO agent_champion_registry VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                market,
+                FAMILY_LINEAGE_ID,
+                revision,
+                canonical(spec),
+                spec.version,
+                grade,
+                cycle_id,
+                commitment_id,
+                previous_revision,
+                study,
+                aware(self.clock()).isoformat(),
+            ),
+        )
+
+    def _migrate_registry(self) -> None:
+        # Preserve only the chosen current legacy state; fabricated past revisions
+        # would imply evidence that the old study-local storage never retained.
+        for row in self.db.execute(
+            "SELECT s.* FROM agent_studies s WHERE EXISTS "
+            "(SELECT 1 FROM agent_cycles c WHERE c.study=s.name AND c.status='COMPLETE') "
+            "ORDER BY s.revision DESC,s.name ASC"
+        ):
+            market = json.loads(row["policy_json"])["market"]
+            if self._registry_current(market) is None:
+                self._append_champion(
+                    market,
+                    row["revision"],
+                    ranked_spec(json.loads(row["champion_json"])),
+                    row["name"],
+                    "legacy",
+                )
+
+    def champion_registry(self, market: str = "KRX") -> list[dict[str, Any]]:
+        with self.store.transaction():
+            self._migrate_registry()
+            history = []
+            for row in self.db.execute(
+                "SELECT * FROM agent_champion_registry WHERE market=? "
+                "AND family_lineage_id=? ORDER BY revision",
+                (market, FAMILY_LINEAGE_ID),
+            ):
+                entry = dict(row)
+                entry["spec"] = json.loads(entry.pop("spec_json"))
+                history.append(entry)
+        return (
+            [
+                {
+                    "key": {"market": market, "family_lineage_id": FAMILY_LINEAGE_ID},
+                    "history": history,
+                    "current": history[-1],
+                }
+            ]
+            if history
+            else []
+        )
+
     def init(self, name: str, policy: AgentPolicy) -> dict[str, Any]:
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", name):
             raise AgentError(
@@ -276,14 +359,47 @@ class ResearchAgent:
                 raise AgentError(
                     "Preserve the existing study policy, build and consumed history"
                 )
+            self._migrate_registry()
+            registry = self._registry_current(policy.market)
+            champion, revision = policy.logic.champion, 0
+            if not row and registry:
+                try:
+                    champion = ranked_spec(json.loads(registry["spec_json"]))
+                    if (
+                        champion.lookback not in policy.logic.lookbacks
+                        or champion.ranking not in policy.logic.rankings
+                        or champion.gross_weight > policy.logic.selection.max_gross
+                        or champion.gross_weight / champion.top_n
+                        > policy.logic.selection.max_position
+                        or canonical(
+                            {
+                                k: v
+                                for k, v in asdict(champion).items()
+                                if k not in {"lookback", "ranking"}
+                            }
+                        )
+                        != canonical(
+                            {
+                                k: v
+                                for k, v in asdict(policy.logic.champion).items()
+                                if k not in {"lookback", "ranking"}
+                            }
+                        )
+                    ):
+                        raise AgentError("Outside proposal space")
+                except (AgentError, TypeError, ValueError, KeyError):
+                    raise AgentError(
+                        "Registry champion is outside this study's registered proposal space"
+                    ) from None
+                revision = registry["revision"]
             self.db.execute(
                 "INSERT OR IGNORE INTO agent_studies VALUES(?,?,?,?,?,?,?)",
                 (
                     name,
                     canonical(policy),
                     build_id(),
-                    0,
-                    canonical(policy.logic.champion),
+                    revision,
+                    canonical(champion),
                     None,
                     None,
                 ),
@@ -527,10 +643,22 @@ class ResearchAgent:
         row = self._study(name)
         with self.store.transaction():
             self._migrate_budget()
-            budget = self._budget(policy_from_dict(json.loads(row["policy_json"])))
+            policy = policy_from_dict(json.loads(row["policy_json"]))
+            budget = self._budget(policy)
+            self._migrate_registry()
+            registry = self._registry_current(policy.market)
         return {
             "study": name,
             "budget": budget,
+            "registry": {
+                "key": {
+                    "market": policy.market,
+                    "family_lineage_id": FAMILY_LINEAGE_ID,
+                },
+                "current_revision": registry["revision"] if registry else None,
+                "current_spec_version": registry["spec_version"] if registry else None,
+                "evidence_grade": registry["evidence_grade"] if registry else None,
+            },
             "memory": {
                 "snapshots": self.db.execute(
                     "SELECT count(*) FROM agent_failure_snapshots WHERE study=?",
@@ -745,6 +873,18 @@ class ResearchAgent:
                         ).fetchone()
                     ):
                         raise AgentError("Another worker owns or changed this study")
+                    self._migrate_registry()
+                    registry = self._registry_current(policy.market)
+                    if registry is not None:
+                        if (
+                            latest["revision"] != registry["revision"]
+                            or latest["champion_json"] != registry["spec_json"]
+                        ):
+                            raise AgentError(
+                                "Market strategy family champion changed; synchronize the study from the registry"
+                            )
+                    else:
+                        self._append_champion(policy.market, 0, champion, name)
                     payload["proposer_inputs"] = [
                         m["snapshot_id"] for m in self.development_memory(policy.market)
                     ]
@@ -1284,11 +1424,25 @@ class ResearchAgent:
                 if canonical(result) != row["result_json"]:
                     raise AgentError("Completed result diverges from stored evidence")
                 return json.loads(canonical(result))
+            self._migrate_registry()
+            registry = self._registry_current(policy.market)
+            if registry is None or registry["revision"] != manifest["revision"]:
+                raise AgentError("Champion revision changed during research")
             if study["revision"] != manifest["revision"] or study[
                 "champion_json"
             ] != canonical(manifest["champion"]):
                 raise AgentError("Champion revision changed during research")
             if promoted:
+                self._append_champion(
+                    policy.market,
+                    registry["revision"] + 1,
+                    selected,
+                    row["study"],
+                    self._cycle_grade(row),
+                    cycle_id,
+                    manifest.get("commitment_id"),
+                    registry["revision"],
+                )
                 self.db.execute(
                     "UPDATE agent_studies SET revision=revision+1,champion_json=? WHERE name=?",
                     (canonical(selected), row["study"]),
