@@ -9,21 +9,96 @@ from __future__ import annotations
 import hashlib
 import math
 from dataclasses import asdict, dataclass, replace
-from datetime import date
+from datetime import date, datetime
 from decimal import ROUND_CEILING, ROUND_HALF_UP
 from decimal import Decimal as D
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Protocol
 
-from trading_agent.contracts import AgentError, Costs, Wallet, digest, session_time
-from trading_agent.selection import RankedStrategy, SelectionEngine
+from trading_agent.contracts import (
+    AgentError,
+    Costs,
+    Decision,
+    Wallet,
+    digest,
+    session_time,
+)
+from trading_agent.data import MarketView
+from trading_agent.selection import RankedStrategy, SelectionEngine, select_candidates
 from trading_agent.strategy import fit_buy_quantity, rebalance_plan
 
 from momentum.execution.engine import Fill
 from momentum.ledger.ledger import Ledger
 
 from .contracts import AgentPolicy, ResearchInput
+
+BENCHMARKS = ("cash", "equal_weight_eligible")
+
+
+def benchmark_version(kind: str) -> str:
+    return digest({"benchmark": kind, "definition": "eligible-all-equal-v1"})
+
+
+def benchmark_decision(
+    kind: str,
+    selector: SelectionEngine,
+    view: MarketView,
+    valid_until: datetime,
+    wallet: Wallet,
+) -> Decision:
+    version = benchmark_version(kind)
+    empty = Decision(version, view.snapshot_id, view.as_of, valid_until, {})
+    if kind == "cash":
+        return empty
+    policy = selector.policy
+    marks = {
+        s: h[-1].close
+        for s, h in view.histories.items()
+        if h and h[-1].session == view.expected_session
+    }
+    equity = wallet.equity(marks)
+    # Reuse every existing market/quality/affordability filter. Positive prices
+    # imply momentum > -1; neither ranking nor positive momentum selects slots.
+    probe = RankedStrategy(
+        lookback=2,
+        top_n=1,
+        gross_weight=min(policy.max_gross, policy.max_position),
+        min_momentum=D(-1),
+    )
+    screened = select_candidates(
+        probe,
+        view,
+        selector.securities,
+        policy,
+        selector.costs,
+        valid_until,
+        equity,
+        audit=False,
+    )
+    count = sum(
+        row["status"] in {"SELECTED", "NOT_SELECTED"} for row in screened["candidates"]
+    )
+    if not count:
+        return empty
+    allocation = replace(
+        probe,
+        top_n=count,
+        gross_weight=min(policy.max_gross, count * policy.max_position),
+    )
+    # Recheck affordability at the fixed equal-weight budget. Rejected slots
+    # remain cash rather than increasing the other stocks' allocations.
+    decision = select_candidates(
+        allocation,
+        view,
+        selector.securities,
+        policy,
+        selector.costs,
+        valid_until,
+        equity,
+        audit=False,
+    )["decision"]
+    return replace(decision, strategy_version=version)
 
 
 @dataclass(frozen=True)
@@ -235,6 +310,33 @@ class CommonEvaluator:
         *,
         stress: bool = False,
     ) -> EvaluationResult:
+        return self._evaluate(data, spec, start, end, stress=stress)
+
+    def evaluate_benchmark(
+        self,
+        data: ResearchInput,
+        kind: str,
+        start: date,
+        end: date,
+        *,
+        stress: bool = False,
+    ) -> EvaluationResult:
+        if kind not in BENCHMARKS:
+            raise AgentError("Unknown registered benchmark")
+        return self._evaluate(
+            data, self.policy.logic.champion, start, end, stress=stress, benchmark=kind
+        )
+
+    def _evaluate(
+        self,
+        data: ResearchInput,
+        spec: RankedStrategy,
+        start: date,
+        end: date,
+        *,
+        stress: bool,
+        benchmark: str | None = None,
+    ) -> EvaluationResult:
         p = self.policy
         quantum = D(p.money_quantum)
         c = p.logic.costs
@@ -309,7 +411,9 @@ class CommonEvaluator:
             day, prior_day = data.sessions[i], data.sessions[i - 1]
             at = session_time(prior_day, 16)
             view = data.snapshot.view(at, prior_day, allow_missing=True)
-            required = max(p.logic.selection.min_history, spec.lookback + 1)
+            required = max(
+                p.logic.selection.min_history, 3 if benchmark else spec.lookback + 1
+            )
             expected = set(data.sessions[max(0, i - required) : i])
             histories = {}
             for symbol, history in view.histories.items():
@@ -329,7 +433,13 @@ class CommonEvaluator:
                 if h and h[-1].session == prior_day
             }
             wallet = LedgerWallet(ledger)
-            decision = selector(spec, view, session_time(day, 10), wallet)
+            decision = (
+                benchmark_decision(
+                    benchmark, selector, view, session_time(day, 10), wallet
+                )
+                if benchmark
+                else selector(spec, view, session_time(day, 10), wallet)
+            )
             caps = {
                 s: int(h[-1].volume * D(".01"))
                 for s, h in view.histories.items()
@@ -462,13 +572,16 @@ class CommonEvaluator:
                     "Missing held close; evaluation fails rather than inventing a mark"
                 )
             ledger.mark_to_market(closes, day)
+            # Blended acquisition marks can be recurring Decimals. Reconcile
+            # the independent ledger NAV at the declared currency precision;
+            # cash, close-valued holdings and entitlements remain exact won.
+            equity = ledger.nav.quantize(quantum, ROUND_HALF_UP)
             if (
-                ledger.nav
+                equity
                 != ledger.cash + ledger.positions_value + ledger.dividend_receivable
                 or ledger.cash < 0
             ):
                 raise AgentError("Independent ledger reconciliation failed")
-            equity = ledger.nav
             daily.append(float(equity / prior - 1))
             peak = max(peak, equity)
             drawdown = max(drawdown, 1 - equity / peak)
@@ -486,7 +599,7 @@ class CommonEvaluator:
         if any(not math.isfinite(r) for r in daily):
             raise AgentError("Nonfinite evaluation result")
         return EvaluationResult(
-            spec.version,
+            benchmark_version(benchmark) if benchmark else spec.version,
             start.isoformat(),
             end.isoformat(),
             float(prior / capital - 1),
@@ -502,7 +615,7 @@ class CommonEvaluator:
                 {
                     "data": data.fingerprint(end),
                     "policy": p,
-                    "spec": spec,
+                    "spec": {"benchmark": benchmark} if benchmark else spec,
                     "start": start,
                     "end": end,
                     "stress": stress,

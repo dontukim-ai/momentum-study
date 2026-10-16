@@ -25,11 +25,37 @@ from .contracts import (
     require_observed,
 )
 from .evaluator import (
+    BENCHMARKS,
     CommonEvaluator,
     EvaluationResult,
     MarketCosts,
     require_same_contract,
 )
+
+
+def benchmark_report(
+    evaluator: CommonEvaluator,
+    data: ResearchInput,
+    start: date,
+    end: date,
+    reference: EvaluationResult,
+    compared_as: str,
+) -> dict[str, Any]:
+    results = {}
+    for kind in BENCHMARKS:
+        result = evaluator.evaluate_benchmark(data, kind, start, end)
+        require_same_contract(reference, result)
+        results[kind] = {
+            "net_return": result.net_return,
+            "max_drawdown": result.max_drawdown,
+            "trades": result.trades,
+            "contract_id": result.evaluation_contract_id,
+            "net_advantage": reference.net_return - result.net_return,
+            "comparison_strategy": compared_as,
+            "comparison_strategy_version": reference.strategy_version,
+        }
+    return results
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS agent_studies (
@@ -565,12 +591,12 @@ class ResearchAgent:
             },
             "holdout": {"evaluated": False},
         }
+        start, end = (
+            data.sessions[plan["holdout_start"]],
+            data.sessions[plan["holdout_end"]],
+        )
         if best["version"] != champion.version:
             selected = candidates[best["version"]]
-            start, end = (
-                data.sessions[plan["holdout_start"]],
-                data.sessions[plan["holdout_end"]],
-            )
             base = evaluator.evaluate(data, champion, start, end)
             candidate = evaluator.evaluate(data, selected, start, end)
             stressed_base = evaluator.evaluate(data, champion, start, end, stress=True)
@@ -610,6 +636,25 @@ class ResearchAgent:
                 "stressed_baseline": asdict(stressed_base),
                 "stressed_candidate": asdict(stressed_candidate),
             }
+            comparison = candidate
+        else:
+            comparison = evaluator.evaluate(data, champion, start, end)
+            evidence["holdout"].update(
+                {
+                    "start": start.isoformat(),
+                    "end": end.isoformat(),
+                    "baseline": asdict(comparison),
+                    "evaluation_contract_id": comparison.evaluation_contract_id,
+                }
+            )
+        evidence["holdout"]["benchmarks"] = benchmark_report(
+            evaluator,
+            data,
+            start,
+            end,
+            comparison,
+            "candidate" if best["version"] != champion.version else "champion",
+        )
         evidence["gates"] = promotion_gates(evidence, policy)
         return evidence
 
@@ -782,6 +827,7 @@ class ResearchAgent:
         evaluator = CommonEvaluator(policy)
         forward = evaluator.evaluate(data.prefix(end), champion, start, end)
         reference = evaluator.evaluate(data.prefix(end), baseline, start, end)
+        require_same_contract(forward, reference)
         report = {
             "kind": "FRESH_FORWARD_SHADOW",
             "research_revision": result["revision_after"],
@@ -799,6 +845,9 @@ class ResearchAgent:
             "promotion_authority": False,
             "orders_submitted": 0,
         }
+        report["benchmarks"] = benchmark_report(
+            evaluator, data.prefix(end), start, end, forward, "champion"
+        )
         # Screening only uses the observed shadow prefix, never reserved final
         # data at the end of an input file that happened to arrive early.
         frozen = data.prefix(end)
