@@ -89,6 +89,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS agent_one_pending ON agent_cycles(study)
 CREATE TABLE IF NOT EXISTS agent_intervals (
  market TEXT NOT NULL, start TEXT NOT NULL, end TEXT NOT NULL, owner TEXT NOT NULL, kind TEXT NOT NULL,
  PRIMARY KEY(market,owner,kind));
+CREATE TABLE IF NOT EXISTS agent_failure_snapshots (
+ snapshot_id TEXT PRIMARY KEY, study TEXT NOT NULL, source_cycle_id TEXT NOT NULL,
+ source_phase TEXT NOT NULL CHECK(source_phase IN ('development','final','observation')),
+ failure_code TEXT NOT NULL, source_window_start TEXT NOT NULL, source_window_end TEXT NOT NULL,
+ observed_through TEXT NOT NULL, payload_json TEXT NOT NULL, result_hash TEXT NOT NULL,
+ sealed_at TEXT NOT NULL,
+ UNIQUE(source_cycle_id, source_phase, failure_code, observed_through));
+CREATE TABLE IF NOT EXISTS agent_memory_releases (
+ snapshot_id TEXT PRIMARY KEY REFERENCES agent_failure_snapshots,
+ released_at TEXT NOT NULL, rule TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS agent_shadow (
  cycle_id TEXT PRIMARY KEY REFERENCES agent_cycles(id), end TEXT NOT NULL,
  input_hash TEXT NOT NULL, report_json TEXT NOT NULL, report_hash TEXT NOT NULL);
@@ -382,6 +392,137 @@ class ResearchAgent:
             )
         return "E1"
 
+    def development_memory(self, market: str = "KRX") -> list[dict[str, Any]]:
+        memories = []
+        # SQLite rowid is the append sequence of this TEXT-primary-key table.
+        # An inner join is the read permission: sealed alone never grants access.
+        for row in self.db.execute(
+            "SELECT s.*,r.released_at,t.policy_json FROM agent_failure_snapshots s "
+            "JOIN agent_memory_releases r USING(snapshot_id) "
+            "JOIN agent_studies t ON t.name=s.study ORDER BY s.rowid"
+        ):
+            if json.loads(row["policy_json"])["market"] != market:
+                continue
+            memory = dict(row)
+            memory.pop("policy_json")
+            memory["payload"] = json.loads(memory.pop("payload_json"))
+            memory["eligible_for_proposer"] = True
+            memory["consumed_windows"] = (
+                []
+                if row["source_phase"] == "development"
+                else [
+                    {
+                        "market": market,
+                        "start": row["source_window_start"],
+                        "end": row["source_window_end"],
+                    }
+                ]
+            )
+            memories.append(memory)
+        return memories
+
+    def _seal_memory(
+        self,
+        name: str,
+        source_cycle_id: str,
+        phase: str,
+        code: str,
+        start: str,
+        end: str,
+        payload: dict[str, Any],
+    ) -> None:
+        # Callers own the decision transaction, so permission and the result
+        # become visible atomically. Existing snapshots are never overwritten.
+        result_hash = digest(payload)
+        snapshot_id = digest(
+            {
+                "source_cycle_id": source_cycle_id,
+                "source_phase": phase,
+                "failure_code": code,
+                "observed_through": end,
+                "result_hash": result_hash,
+            }
+        )
+        if self.db.execute(
+            "SELECT 1 FROM agent_failure_snapshots WHERE source_cycle_id=? "
+            "AND source_phase=? AND failure_code=? AND observed_through=?",
+            (source_cycle_id, phase, code, end),
+        ).fetchone():
+            return
+        now = aware(self.clock()).isoformat()
+        self.db.execute(
+            "INSERT INTO agent_failure_snapshots VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                snapshot_id,
+                name,
+                source_cycle_id,
+                phase,
+                code,
+                start,
+                end,
+                end,
+                canonical(payload),
+                result_hash,
+                now,
+            ),
+        )
+        rule = {
+            "development": "development_sealed",
+            "final": "final_decision_confirmed",
+            "observation": "observation_window_closed",
+        }[phase]
+        self.db.execute(
+            "INSERT INTO agent_memory_releases VALUES(?,?,?)", (snapshot_id, now, rule)
+        )
+
+    def _seal_development(
+        self,
+        name: str,
+        commitment_id: str,
+        payload: dict[str, Any],
+        policy: AgentPolicy,
+    ) -> None:
+        evidence = payload["development_evidence"]
+        start = payload["plan_dates"]["dev_start"].isoformat()
+        end = payload["plan_dates"]["dev_end"].isoformat()
+        failed = [
+            {"version": t["version"], "reason": t["reason"]}
+            for t in evidence["trials"]
+            if t["status"] == "FAILED"
+        ]
+        risky = [
+            {
+                "version": t["version"],
+                "worst_drawdown": t["worst_drawdown"],
+                "fold_trades": t["fold_trades"],
+            }
+            for t in evidence["trials"]
+            if t["status"] == "COMPLETE"
+            and (
+                t["worst_drawdown"] > policy.logic.evaluation.max_drawdown
+                or min(t["fold_trades"]) < policy.logic.evaluation.min_fold_trades
+            )
+        ]
+        reasons: dict[str, dict[str, Any]] = {}
+        if failed:
+            reasons["DATA_DEFECT"] = {"trials": failed}
+        if risky:
+            reasons["DEV_RISK"] = {
+                "trials": risky,
+                "max_drawdown": policy.logic.evaluation.max_drawdown,
+                "min_fold_trades": policy.logic.evaluation.min_fold_trades,
+            }
+        if evidence["selected_version"] == evidence["champion_version"]:
+            reasons["DEV_NO_IMPROVEMENT"] = {
+                "selected_version": evidence["selected_version"],
+                "champion_version": evidence["champion_version"],
+                **evidence["development"],
+            }
+        for code, reason in reasons.items():
+            self._seal_memory(
+                name, commitment_id, "development", code, start, end, reason
+            )
+
     def status(self, name: str) -> dict[str, Any]:
         row = self._study(name)
         with self.store.transaction():
@@ -390,6 +531,24 @@ class ResearchAgent:
         return {
             "study": name,
             "budget": budget,
+            "memory": {
+                "snapshots": self.db.execute(
+                    "SELECT count(*) FROM agent_failure_snapshots WHERE study=?",
+                    (name,),
+                ).fetchone()[0],
+                "released": self.db.execute(
+                    "SELECT count(*) FROM agent_failure_snapshots JOIN agent_memory_releases "
+                    "USING(snapshot_id) WHERE study=?",
+                    (name,),
+                ).fetchone()[0],
+                "by_code": dict(
+                    self.db.execute(
+                        "SELECT failure_code,count(*) FROM agent_failure_snapshots "
+                        "WHERE study=? GROUP BY failure_code",
+                        (name,),
+                    )
+                ),
+            },
             "mode": "AUTOMATED_RESEARCH_ONLY",
             "revision": row["revision"],
             "champion": json.loads(row["champion_json"]),
@@ -576,7 +735,6 @@ class ResearchAgent:
                     ),
                     "development_fingerprint": dev.fingerprint(dev_end),
                 }
-                commitment_id = digest(payload)
                 with self.store.transaction():
                     latest = self._study(name)
                     if (
@@ -587,6 +745,10 @@ class ResearchAgent:
                         ).fetchone()
                     ):
                         raise AgentError("Another worker owns or changed this study")
+                    payload["proposer_inputs"] = [
+                        m["snapshot_id"] for m in self.development_memory(policy.market)
+                    ]
+                    commitment_id = digest(payload)
                     self._migrate_budget()
                     account = self._budget_account(policy, name)
                     if account["total_cycles"] != policy.max_validation_cycles:
@@ -620,6 +782,7 @@ class ResearchAgent:
                             committed_at,
                         ),
                     )
+                    self._seal_development(name, commitment_id, payload, policy)
                 commitment = self.db.execute(
                     "SELECT * FROM agent_commitments WHERE commitment_id=?",
                     (commitment_id,),
@@ -1134,6 +1297,34 @@ class ResearchAgent:
                 "UPDATE agent_cycles SET status='COMPLETE',result_json=? WHERE id=?",
                 (canonical(result), cycle_id),
             )
+            for code, keys in {
+                "FINAL_UNDERPERFORM": ("net_improvement", "cost_stress"),
+                "INSUFFICIENT_EVIDENCE": ("confidence", "independent_observations"),
+            }.items():
+                if any(gates.get(key) is False for key in keys):
+                    h = evidence["holdout"]
+                    self._seal_memory(
+                        row["study"],
+                        cycle_id,
+                        "final",
+                        code,
+                        manifest["holdout_start"],
+                        manifest["holdout_end"],
+                        {
+                            "selected_version": evidence["selected_version"],
+                            "gates": {key: gates[key] for key in keys},
+                            "metrics": {
+                                key: h[key]
+                                for key in (
+                                    "champion_return",
+                                    "candidate_return",
+                                    "stress_improvement",
+                                    "interval",
+                                    "observations",
+                                )
+                            },
+                        },
+                    )
             self._consume_budget(cycle_id)
             self.store.event(
                 "agent:" + row["study"], None, "AGENT_RESEARCH_COMPLETED", result
@@ -1261,4 +1452,25 @@ class ResearchAgent:
                     digest(report),
                 ),
             )
+            if (
+                report["deterioration_detected"]
+                and report["observations"] == policy.shadow_sessions
+            ):
+                self._seal_memory(
+                    name,
+                    cycle["id"],
+                    "observation",
+                    "TRACKING_DEGRADED",
+                    report["start"],
+                    report["end"],
+                    {
+                        "research_revision": report["research_revision"],
+                        "observations": report["observations"],
+                        "net_advantage": report["net_advantage"],
+                        "deterioration_detected": True,
+                        "candidate_drawdown": report["candidate"]["max_drawdown"],
+                        "candidate_return": report["candidate"]["net_return"],
+                        "reference_return": report["reference"]["net_return"],
+                    },
+                )
         return report
