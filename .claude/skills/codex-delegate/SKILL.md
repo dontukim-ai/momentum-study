@@ -17,6 +17,7 @@ curl -s -o /dev/null -w "%{http_code}\n" https://api.openai.com/v1/models   # 20
 - 인증은 클라우드 환경의 네트워크 시크릿(`api.openai.com`)이 요청마다 키를 붙인다. Codex에는 가짜 키로 로그인만 해 둔다: `echo placeholder | codex login --with-api-key`.
 - 401이면 시크릿 값이 틀린 것이다(예: 앞의 `s`가 빠진 `k-proj-…`). 사람에게 시크릿 수정을 요청하고 멈춘다. 키를 채팅으로 받지 않는다.
 - 403/연결 실패면 네트워크 허용 도메인에 `api.openai.com`이 없는 것이다.
+- 로그의 `failed to connect to websocket: Attack attempt detected`와 `Reconnecting... n/5`는 **정상**이다. 클라우드 프록시가 WebSocket을 지원하지 않아 Codex가 다섯 번 시도한 뒤 HTTP 스트리밍으로 넘어간다. 이 단계에서 실행을 중단하지 않는다. `turn.completed` 없이 프로세스가 끝났을 때만 실패로 본다.
 
 ## 1. 작업 파일 작성
 
