@@ -58,7 +58,20 @@ def benchmark_report(
     return results
 
 
+FAMILY_LINEAGE_ID = "ranked-momentum"
+
+
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS agent_budget_accounts (
+ account_id TEXT PRIMARY KEY, market TEXT NOT NULL, family_lineage_id TEXT NOT NULL,
+ total_cycles INTEGER NOT NULL, created_by TEXT NOT NULL,
+ UNIQUE(market, family_lineage_id));
+CREATE TABLE IF NOT EXISTS agent_budget_entries (
+ seq INTEGER PRIMARY KEY AUTOINCREMENT,
+ account_id TEXT NOT NULL REFERENCES agent_budget_accounts,
+ kind TEXT NOT NULL CHECK(kind IN ('reserve','consume')),
+ cycle_id TEXT NOT NULL, study TEXT NOT NULL,
+ UNIQUE(account_id, kind, cycle_id));
 CREATE TABLE IF NOT EXISTS agent_studies (
  name TEXT PRIMARY KEY, policy_json TEXT NOT NULL, build TEXT NOT NULL,
  revision INTEGER NOT NULL, champion_json TEXT NOT NULL,
@@ -253,10 +266,91 @@ class ResearchAgent:
             )
         return self.status(name)
 
+    def _budget_account_id(self, policy: AgentPolicy) -> str:
+        return digest({"market": policy.market, "family_lineage_id": FAMILY_LINEAGE_ID})
+
+    def _budget_account(self, policy: AgentPolicy, name: str) -> Any:
+        account_id = self._budget_account_id(policy)
+        self.db.execute(
+            "INSERT OR IGNORE INTO agent_budget_accounts VALUES(?,?,?,?,?)",
+            (
+                account_id,
+                policy.market,
+                FAMILY_LINEAGE_ID,
+                policy.max_validation_cycles,
+                name,
+            ),
+        )
+        return self.db.execute(
+            "SELECT * FROM agent_budget_accounts WHERE account_id=?", (account_id,)
+        ).fetchone()
+
+    def _budget_entry(
+        self, account_id: str, kind: str, cycle_id: str, name: str
+    ) -> None:
+        self.db.execute(
+            "INSERT OR IGNORE INTO agent_budget_entries(account_id,kind,cycle_id,study) VALUES(?,?,?,?)",
+            (account_id, kind, cycle_id, name),
+        )
+
+    def _migrate_budget(self) -> None:
+        # The first persisted registration owns the original allocation. Historical
+        # overuse is retained in full rather than granting a fresh budget.
+        if self.db.execute("SELECT 1 FROM agent_budget_accounts").fetchone():
+            return
+        for cycle in self.db.execute("SELECT * FROM agent_cycles ORDER BY rowid"):
+            manifest = json.loads(cycle["manifest_json"])
+            policy = policy_from_dict(manifest["policy"])
+            account = self._budget_account(policy, cycle["study"])
+            self._budget_entry(
+                account["account_id"], "reserve", cycle["id"], cycle["study"]
+            )
+            if cycle["status"] not in {"REGISTERED", "EVALUATED"}:
+                self._budget_entry(
+                    account["account_id"], "consume", cycle["id"], cycle["study"]
+                )
+
+    def _budget(self, policy: AgentPolicy) -> dict[str, Any]:
+        account_id = self._budget_account_id(policy)
+        account = self.db.execute(
+            "SELECT * FROM agent_budget_accounts WHERE account_id=?", (account_id,)
+        ).fetchone()
+        counts = dict(
+            self.db.execute(
+                "SELECT kind,count(*) FROM agent_budget_entries WHERE account_id=? GROUP BY kind",
+                (account_id,),
+            )
+        )
+        reserved, consumed = counts.get("reserve", 0), counts.get("consume", 0)
+        total = account["total_cycles"] if account else policy.max_validation_cycles
+        return {
+            "account_id": account_id,
+            "market": policy.market,
+            "family_lineage_id": FAMILY_LINEAGE_ID,
+            "total_cycles": total,
+            "reserved": reserved,
+            "consumed": consumed,
+            "remaining": total - reserved,
+        }
+
+    def _consume_budget(self, cycle_id: str) -> None:
+        self._migrate_budget()
+        cycle = self.db.execute(
+            "SELECT * FROM agent_cycles WHERE id=?", (cycle_id,)
+        ).fetchone()
+        policy = policy_from_dict(json.loads(cycle["manifest_json"])["policy"])
+        self._budget_entry(
+            self._budget_account_id(policy), "consume", cycle_id, cycle["study"]
+        )
+
     def status(self, name: str) -> dict[str, Any]:
         row = self._study(name)
+        with self.store.transaction():
+            self._migrate_budget()
+            budget = self._budget(policy_from_dict(json.loads(row["policy_json"])))
         return {
             "study": name,
+            "budget": budget,
             "mode": "AUTOMATED_RESEARCH_ONLY",
             "revision": row["revision"],
             "champion": json.loads(row["champion_json"]),
@@ -434,6 +528,17 @@ class ResearchAgent:
                     ).fetchone()
                 ):
                     raise AgentError("Another worker owns or changed this study")
+                self._migrate_budget()
+                account = self._budget_account(policy, name)
+                if account["total_cycles"] != policy.max_validation_cycles:
+                    raise AgentError(
+                        "Validation budget belongs to the market strategy family; a different cycle budget needs an explicit allocation"
+                    )
+                if self._budget(policy)["reserved"] >= account["total_cycles"]:
+                    raise AgentError(
+                        "Validation budget exhausted for this market strategy family"
+                    )
+                self._budget_entry(account["account_id"], "reserve", cycle_id, name)
                 self._checkpoint(name, data, end)
                 self.db.execute(
                     "INSERT INTO agent_cycles VALUES(?,?,?,?,?,?,?,?)",
@@ -475,6 +580,7 @@ class ResearchAgent:
                         "UPDATE agent_cycles SET status='FAILED' WHERE id=? AND status='REGISTERED'",
                         (cycle_id,),
                     )
+                    self._consume_budget(cycle_id)
                 raise
             completed.append(self._finish(cycle_id))
             previous = self.db.execute(
@@ -496,7 +602,8 @@ class ResearchAgent:
             "next_window_sessions_required": max(
                 0, next_plan["holdout_end"] + 1 - len(data.sessions)
             ),
-            "validation_budget_exhausted": count >= policy.max_validation_cycles,
+            "validation_budget_exhausted": count >= policy.max_validation_cycles
+            or self._budget(policy)["remaining"] == 0,
             "orders_submitted": 0,
             "live_enabled": False,
         }
@@ -680,6 +787,7 @@ class ResearchAgent:
 
     def _finish(self, cycle_id: str) -> dict[str, Any]:
         with self.store.transaction():
+            self._migrate_budget()
             row = self.db.execute(
                 "SELECT * FROM agent_cycles WHERE id=?", (cycle_id,)
             ).fetchone()
@@ -770,6 +878,7 @@ class ResearchAgent:
                 "UPDATE agent_cycles SET status='COMPLETE',result_json=? WHERE id=?",
                 (canonical(result), cycle_id),
             )
+            self._consume_budget(cycle_id)
             self.store.event(
                 "agent:" + row["study"], None, "AGENT_RESEARCH_COMPLETED", result
             )
@@ -799,6 +908,7 @@ class ResearchAgent:
                 "UPDATE agent_cycles SET status='ABANDONED',result_json=? WHERE id=?",
                 (canonical({"reason": reason}), cycle_id),
             )
+            self._consume_budget(cycle_id)
             self.store.event(
                 "agent:" + row["study"],
                 None,

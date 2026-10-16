@@ -23,7 +23,7 @@
 | --- | --- | --- | --- | --- |
 | S1 후보 생성 | 부분 | KRX 필터·3가지 ranking·고정 grid 제안 | 시장 추상화·전략군 레지스트리·결정 주기 파라미터·가설형 제안·실패 기억 해제 기록 없음 | LOOP-01, LOOP-02, LOOP-08, RES-04, RES-05 |
 | S2 동일 조건 평가 | 부분 | 공통 평가기·원장·비용 스트레스 | 평가 계약 ID·동일 조건 검사·거래 가능성 지표 구현(합성 회귀). 현금/적격 동일 비중 보고 구현. 기준 전략 gate·capacity는 후속 | LOOP-03, RES-01, FIN-01~04 |
-| S3 독립 검증 | 부분 | 예약 구간·시장 단위 소비·승격 조건 10개 | 증거 등급 E1만 가능(선택 후보를 첫 실행 시각 전에 고정하지 않음), 예산이 연구 단위. opt-in 통계 v2와 합성 진단 도구 구현; 실제 오류율·개발 블록 선정 근거는 후속 | RES-02, RES-03, LOOP-07 |
+| S3 독립 검증 | 부분 | 예약 구간·시장 단위 소비·승격 조건 10개 | 증거 등급 E1만 가능(선택 후보를 첫 실행 시각 전에 고정하지 않음), 시장·전략군 예산 원장 구현(LOOP-02a 합성 회귀), 명시적 할당은 미구현. opt-in 통계 v2와 합성 진단 도구 구현; 실제 오류율·개발 블록 선정 근거는 후속 | RES-02, RES-03, LOOP-07 |
 | S4 갱신·추적 | 부분 | 연구 단위 champion revision·유지·20세션 shadow | `(market, family)` 키·연속 관찰 원장·열화 상태 전이·두 단계 Release·관찰과 최종 검증의 동시 사용 정책 없음 | LOOP-04~06, LOOP-09, OPS-05, OPS-06 |
 
 상태는 **완료 / 부분 / 미착수 / 보류**다. '완료'는 해당 코드·시험 범위에 한정하며 실거래 준비 완료를 뜻하지 않는다. 전체 완성률 숫자는 데이터·코드·운영을 혼합하므로 사용하지 않는다.
@@ -79,7 +79,7 @@ cycle manifest는 현재 **최종 데이터가 충분히 도착한 뒤, 계산 �
 | 실제 모의 서버 운용 검증 | 미실시·후순위 | ORD-02, 현재 fixture와 분리 |
 | 실전 주문 어댑터·계좌 위험 집행 | 미착수·후순위 | ORD-03,04, 읽기 키 설정과 별개 |
 | 코드 자동 수정·자동 배포 | 현재 범위 밖 | 별도 격리·회귀·연구 버전 통제가 필요 |
-| MarketProfile·전략군 레지스트리·예산 계정 | 미착수 | LOOP-01, LOOP-02. 현재 KRX 규칙과 결정 주기가 코드에 고정 |
+| MarketProfile·전략군 레지스트리·예산 계정 | 부분 | LOOP-02a: `(market, family_lineage_id)` 예산 계정과 reserve/consume 추가 전용 원장, 이름 변경·실패·폐기 후 소비 유지, 기존 DB 역채움을 합성 회귀 범위에서 구현. 명시적 할당·독립 연구군·family_version·MarketProfile·전략군 레지스트리는 미구현. 실데이터 검증 미완료 |
 | 평가 계약 ID·거래 가능성 지표 | 부분 | C1/C2: 수량 단계·reference_price 지표·turnover·평가 계약 ID와 개발/최종 동일 조건 검사 구현(합성 회귀). decision_cadence 후보 변수·capacity는 후속. LOOP-03 |
 | `(market, family)` champion·관찰 원장·열화 상태 | 미착수 | LOOP-04, LOOP-05 |
 | ObservationRelease·ExecutionRelease | 미착수 | LOOP-06, 주문 구현과 별개 |
@@ -157,3 +157,9 @@ cycle manifest는 현재 **최종 데이터가 충분히 도착한 뒤, 계산 �
 - 새 `test_agent_review_followups.py`에 원 미만 오류 주입, 정상 반복 매수/매도, 100종목 현금화, 시장 탈락/예산 제외 구별, 중복 집계 방지, 요약 전달 회귀를 추가했다. 검증 결과는 [구현 보고의 리뷰 보완](batch1-implementation.md#리뷰-보완)을 따른다.
 
 리뷰 보완 검증: pytest **257 passed, 1 deselected**(신규 12), KIS unittest **122 OK**, mypy src **33개 통과**, ruff 통과. 합성/오프라인 회귀 범위이며 실데이터 검증은 후속이다.
+
+## 10. LOOP-02a 예산 계정 원장
+
+`agent_budget_accounts`·`agent_budget_entries`로 시장·전략군 예산을 공유한다. [신규 회귀](../../tests/unit/test_agent_budget.py) 12개는 이름 변경·완료/cache/recover·예산 소진 시 등록 롤백·정책 예산 불일치 거부·실패/폐기 소비 유지·claim 실패 시 예약 롤백·5개 상태의 기존 DB 멱등 역채움·첫 등록의 할당 확정·EVALUATED 복구를 고정한다. 기존 회귀·통계·미국 코드·KIS 앱은 변경하지 않았다. 명시적 할당·독립 연구군·family_version과 실데이터 검증은 후속이다.
+
+LOOP-02a 최종 검증(합성·오프라인): `uv run pytest -q` **269 passed, 1 deselected**(신규 12); `uv run mypy src` **33개 소스 통과**; `uv run ruff check` **All checks passed**; KIS unittest **122개 OK**. `UV_CACHE_DIR=/tmp/momentum-uv-cache`, `UV_OFFLINE=1`로 실행했다. 실데이터 검증이나 미국 가설 연구 재개를 뜻하지 않는다.
