@@ -32,5 +32,6 @@ KIS 전체 예제는 `apps/kis-agent/artifacts/logic-v5`에 합성 입력·선�
 - [기존 개발 불변 규칙](CLAUDE.md)
 - [KIS 종목 선정·자동 개선](apps/kis-agent/docs/08-selection-and-improvement.md)
 - [저장소 통합 범위와 검증](docs/kis-agent-integration.md)
+- [미국 검증·KIS 자동 연구의 차이와 통합 설계](docs/unified-research-agent-design.md)
 
 개발 기준 저장소는 `dontukim-ai/momentum-study`다. 이후 작업은 이 checkout 안에서 진행하며 형제 폴더에 별도 프로젝트를 만들지 않는다.
