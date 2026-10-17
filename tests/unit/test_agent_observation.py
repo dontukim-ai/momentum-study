@@ -15,6 +15,7 @@ from trading_agent.store import Store
 from momentum.agent.contracts import AgentPolicy, ResearchInput
 from momentum.agent.evaluator import CommonEvaluator
 from momentum.agent.service import ResearchAgent
+from momentum.config import SpecUndefinedError
 
 
 def market(count=360, *, cycle=True, start=date(2024, 1, 2)):
@@ -226,4 +227,55 @@ def test_observation_uses_registry_revision_effective_before_study_start(tmp_pat
     start, end = date.fromisoformat(report["start"]), date.fromisoformat(report["end"])
     expected = CommonEvaluator(policy()).evaluate(later.prefix(end), spec, start, end)
     assert report["ledger"]["net_return"] == expected.net_return
+    store.close()
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        AgentError("Missing held close; evaluation fails rather than inventing a mark"),
+        SpecUndefinedError("no mark price ever seen for held security FIXTURE"),
+    ],
+)
+def test_observation_data_failure_does_not_stop_research(tmp_path, monkeypatch, error):
+    store = Store(tmp_path / "isolated.sqlite3")
+    agent = ResearchAgent(store)
+    agent.init("a", policy())
+
+    def broken(name, data):
+        raise error
+
+    monkeypatch.setattr(agent, "observation_ledger", broken)
+    report = agent.tick("a", market())
+    # The research cycle still registers, evaluates and promotes.
+    assert report["cycles"][0]["research_champion_updated"]
+    assert agent.status("a")["revision"] == 1
+    observation = report["observation"]
+    assert observation["status"] == "unavailable"
+    assert observation["error_type"] == type(error).__name__
+    assert observation["error"] == str(error)
+    for key in ("persisted", "promotion_authority", "proposer_visible"):
+        assert observation[key] is False
+    store.close()
+
+
+def test_observation_programming_error_still_propagates(tmp_path, monkeypatch):
+    store = Store(tmp_path / "bug.sqlite3")
+    agent = ResearchAgent(store)
+    agent.init("a", policy())
+
+    def broken(name, data):
+        raise RuntimeError("bug")
+
+    monkeypatch.setattr(agent, "observation_ledger", broken)
+    with pytest.raises(RuntimeError, match="bug"):
+        agent.tick("a", market())
+    store.close()
+
+
+def test_successful_observation_reports_ok_status(tmp_path):
+    store = Store(tmp_path / "ok.sqlite3")
+    agent = ResearchAgent(store)
+    agent.init("a", policy())
+    assert agent.tick("a", market())["observation"]["status"] == "ok"
     store.close()

@@ -303,7 +303,7 @@ fill_ratio = Σ(|filled_qty| × reference_price) / Σ(|desired_qty| × reference
 - 열화 판정은 해제 규칙(§9)을 거쳐 S1의 실패 기억이 된다.
 - 관찰 원장이 쓰는 날짜와 다음 사이클의 최종 검증 구간이 겹치는 문제는 §12의 구간 예약 정책을 따른다.
 
-**현재 구현 (LOOP-05a).** `CommonEvaluator.evaluate_schedule`은 하나의 기존 Ledger와 체결 경로로 날짜별 spec을 선택하며 현금·보유·배당채권을 유지한다. `portfolio_diagnostics.schedule.revision_boundaries`는 변경 세션의 전일 종가 NAV·당일 종가 NAV·당일 수수료를 기록한다. `ResearchAgent.observation_ledger`와 `tick.observation`은 첫 COMPLETE 최종 검증 다음 calendar 세션부터 registry revision을 이어 계산하고 동일 계약의 현금·적격 동일 비중 기준과 비교한다. 시작 시 현금 초기화는 한 번뿐이다. 보고는 미저장이며 `_claim`·실패 기억·제안기·예산·주문 권한에 연결하지 않는다. legacy 근거가 없으면 해당 legacy 연구의 마지막 COMPLETE 이후로 시작하며 과거 revision을 복원하지 않는다. 합성 회귀 범위에서 구현됐으며 저장·봉인·열화 상태·§12 동시 사용 규칙과 실데이터 검증은 미구현이다.
+**현재 구현 (LOOP-05a).** `CommonEvaluator.evaluate_schedule`은 하나의 기존 Ledger와 체결 경로로 날짜별 spec을 선택하며 현금·보유·배당채권을 유지한다. `portfolio_diagnostics.schedule.revision_boundaries`는 변경 세션의 전일 종가 NAV·당일 종가 NAV·당일 수수료를 기록한다. `ResearchAgent.observation_ledger`와 `tick.observation`은 첫 COMPLETE 최종 검증 다음 calendar 세션부터 registry revision을 이어 계산하고 동일 계약의 현금·적격 동일 비중 기준과 비교한다. 시작 시 현금 초기화는 한 번뿐이다. 보고는 미저장이며 `_claim`·실패 기억·제안기·예산·주문 권한에 연결하지 않는다. legacy 근거가 없으면 해당 legacy 연구의 마지막 COMPLETE 이후로 시작하며 과거 revision을 복원하지 않는다. 관찰 계산이 데이터 문제(`AgentError`, `SpecUndefinedError`)로 실패하면 `tick`은 멈추지 않고 `observation.status = "unavailable"`과 오류 종류·메시지를 보고한다. 연구 사이클의 등록·평가·champion 갱신은 그대로 진행된다. 그 밖의 예외(코드 결함)는 숨기지 않고 그대로 올린다. 기존 `_shadow`는 이 격리를 적용하지 않았다. 합성 회귀 범위에서 구현됐으며 저장·봉인·열화 상태·§12 동시 사용 규칙과 실데이터 검증은 미구현이다.
 
 ## 11. Release — S4 → 운용 (LOOP-06)
 

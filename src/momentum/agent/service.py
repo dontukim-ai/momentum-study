@@ -18,6 +18,8 @@ from trading_agent.logic import LogicProposer, ranked_spec
 from trading_agent.selection import select_candidates
 from trading_agent.store import Store
 
+from momentum.config import SpecUndefinedError
+
 from .contracts import (
     AgentPolicy,
     ResearchInput,
@@ -1084,7 +1086,7 @@ class ResearchAgent:
             "cycles": completed,
             **({"committed_cycle": committed_cycle} if committed_cycle else {}),
             "shadow": shadow,
-            "observation": self.observation_ledger(name, data),
+            "observation": self._isolated_observation(name, data),
             "status": self.status(name),
             "waiting_for_data": next_plan["holdout_end"] >= len(data.sessions),
             "next_window_sessions_required": max(
@@ -1524,6 +1526,26 @@ class ResearchAgent:
             "orders_submitted": 0,
         }
 
+    def _isolated_observation(
+        self, name: str, data: ResearchInput
+    ) -> dict[str, Any] | None:
+        # Observation is report-only. A data defect inside its window must not
+        # stop registration, evaluation or champion updates of the research loop;
+        # it is reported instead. Programming errors still propagate.
+        try:
+            return self.observation_ledger(name, data)
+        except (AgentError, SpecUndefinedError) as exc:
+            return {
+                "kind": "CONTINUOUS_OBSERVATION_LEDGER",
+                "status": "unavailable",
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+                "persisted": False,
+                "promotion_authority": False,
+                "orders_submitted": 0,
+                "proposer_visible": False,
+            }
+
     def observation_ledger(
         self, name: str, data: ResearchInput
     ) -> dict[str, Any] | None:
@@ -1620,6 +1642,7 @@ class ResearchAgent:
         result = evaluator.evaluate_schedule(frozen, schedule, start, end)
         report = {
             "kind": "CONTINUOUS_OBSERVATION_LEDGER",
+            "status": "ok",
             "start": start,
             "end": end,
             "observations": len(result.daily_returns),
