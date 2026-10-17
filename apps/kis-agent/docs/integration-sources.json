@@ -1,0 +1,99 @@
+{
+  "reviewed_at": "2026-10-16",
+  "repository": "koreainvestment/open-trading-api",
+  "commit": "2077773a69a428daf63e148182511f068cc45de3",
+  "method": "Static official sample review; actual account responses not verified",
+  "sources": [
+    {
+      "path": "examples_llm/domestic_stock/order_cash/order_cash.py",
+      "url": "https://github.com/koreainvestment/open-trading-api/blob/2077773a69a428daf63e148182511f068cc45de3/examples_llm/domestic_stock/order_cash/order_cash.py",
+      "reviewed": true
+    },
+    {
+      "path": "examples_llm/domestic_stock/order_rvsecncl/order_rvsecncl.py",
+      "url": "https://github.com/koreainvestment/open-trading-api/blob/2077773a69a428daf63e148182511f068cc45de3/examples_llm/domestic_stock/order_rvsecncl/order_rvsecncl.py",
+      "reviewed": true
+    },
+    {
+      "path": "examples_llm/domestic_stock/inquire_daily_ccld/inquire_daily_ccld.py",
+      "url": "https://github.com/koreainvestment/open-trading-api/blob/2077773a69a428daf63e148182511f068cc45de3/examples_llm/domestic_stock/inquire_daily_ccld/inquire_daily_ccld.py",
+      "reviewed": true
+    },
+    {
+      "path": "examples_llm/domestic_stock/inquire_balance/inquire_balance.py",
+      "url": "https://github.com/koreainvestment/open-trading-api/blob/2077773a69a428daf63e148182511f068cc45de3/examples_llm/domestic_stock/inquire_balance/inquire_balance.py",
+      "reviewed": true
+    },
+    {
+      "path": "examples_llm/domestic_stock/inquire_psbl_order/inquire_psbl_order.py",
+      "url": "https://github.com/koreainvestment/open-trading-api/blob/2077773a69a428daf63e148182511f068cc45de3/examples_llm/domestic_stock/inquire_psbl_order/inquire_psbl_order.py",
+      "reviewed": true
+    },
+    {
+      "path": "examples_llm/domestic_stock/inquire_price/inquire_price.py",
+      "url": "https://github.com/koreainvestment/open-trading-api/blob/2077773a69a428daf63e148182511f068cc45de3/examples_llm/domestic_stock/inquire_price/inquire_price.py",
+      "reviewed": true
+    },
+    {
+      "path": "examples_llm/domestic_stock/inquire_psbl_rvsecncl/inquire_psbl_rvsecncl.py",
+      "url": "https://github.com/koreainvestment/open-trading-api/blob/2077773a69a428daf63e148182511f068cc45de3/examples_llm/domestic_stock/inquire_psbl_rvsecncl/inquire_psbl_rvsecncl.py",
+      "reviewed": true
+    }
+  ],
+  "confirmed_input_examples": {
+    "cash_buy_paper": "VTTC0012U",
+    "cash_sell_paper": "VTTC0011U",
+    "cancel_paper": "VTTC0013U",
+    "orders_recent_paper": "VTTC0081R",
+    "balance_paper": "VTTC8434R",
+    "buyable_paper": "VTTC8908R",
+    "quote": "FHKST01010100",
+    "cancelability_sample": "TTTC0084R real-only example; no paper ID verified"
+  },
+  "output_expectations_not_verified_with_account": {
+    "cash_basis": "prvs_rcdl_excc_amt",
+    "buying_power": [
+      "ord_psbl_cash",
+      "nrcvb_buy_qty"
+    ],
+    "holdings": [
+      "pdno",
+      "hldg_qty",
+      "ord_psbl_qty"
+    ],
+    "order_identity": [
+      "ord_dt",
+      "ord_gno_brno",
+      "odno"
+    ],
+    "order_cumulative": [
+      "ord_qty",
+      "ord_unpr",
+      "tot_ccld_qty",
+      "tot_ccld_amt",
+      "rmn_qty",
+      "cncl_cfrm_qty",
+      "rjct_qty"
+    ],
+    "optional_fixture_fee_field": "tot_fee (not observed on the actual service)",
+    "cancelability": "Actual paper cancelability not verified; CLI cancel POST disabled"
+  },
+  "service_verification": {
+    "KIS": false,
+    "OpenAI": false
+  },
+  "network_and_credentials_at_review": {
+    "secrets_configured": false,
+    "OpenAI_host_configured": false,
+    "KIS_paper_host_configured": false
+  },
+  "handwritten_fixtures": [
+    "fixtures/paper_exchange.py",
+    "fixtures/llm-response.json"
+  ],
+  "openai_implementation": {
+    "endpoint": "https://api.openai.com/v1/responses",
+    "model": "Explicit user-supplied model, no default model assumed",
+    "review_status": "Structured request/response fixtures tested; no actual provider request made"
+  }
+}

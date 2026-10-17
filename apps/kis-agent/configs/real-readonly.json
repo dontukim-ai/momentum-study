@@ -1,0 +1,7 @@
+{
+  "mode": "REAL_READ_ONLY",
+  "capital_limit_krw": "1000000",
+  "orders_enabled": false,
+  "credentials": ["KIS_APP_KEY", "KIS_APP_SECRET", "KIS_ACCOUNT"],
+  "note": "Documents the requested capital ceiling. Current real adapter supports reads only; no executable trading policy is implied."
+}

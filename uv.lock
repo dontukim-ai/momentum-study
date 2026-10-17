@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -310,6 +310,11 @@ wheels = [
 ]
 
 [[package]]
+name = "kis-self-improving-agent"
+version = "0.5.2"
+source = { editable = "apps/kis-agent" }
+
+[[package]]
 name = "librt"
 version = "0.15.0"
 source = { registry = "https://pypi.org/simple" }
@@ -488,9 +493,15 @@ dependencies = [
     { name = "scipy" },
 ]
 
+[package.optional-dependencies]
+agent = [
+    { name = "kis-self-improving-agent" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "hypothesis" },
+    { name = "kis-self-improving-agent" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -502,6 +513,7 @@ dev = [
 requires-dist = [
     { name = "duckdb", specifier = ">=1.5.5" },
     { name = "jinja2", specifier = ">=3.1.6" },
+    { name = "kis-self-improving-agent", marker = "extra == 'agent'", editable = "apps/kis-agent" },
     { name = "numpy", specifier = ">=2.5.3" },
     { name = "polars", specifier = ">=1.44.2" },
     { name = "pyarrow", specifier = ">=25.0.1" },
@@ -509,10 +521,12 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "scipy", specifier = ">=1.18.1" },
 ]
+provides-extras = ["agent"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "hypothesis", specifier = ">=6.168.0" },
+    { name = "kis-self-improving-agent", editable = "apps/kis-agent" },
     { name = "mypy", specifier = ">=2.3.1" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-cov", specifier = ">=7.1.0" },

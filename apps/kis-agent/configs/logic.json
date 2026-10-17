@@ -1,0 +1,36 @@
+{
+  "champion": {
+    "lookback": 10,
+    "top_n": 2,
+    "gross_weight": "0.8",
+    "min_momentum": "0",
+    "ranking": "momentum"
+  },
+  "selection": {
+    "capital_limit": "1000000",
+    "min_price": "1000",
+    "min_average_turnover": "100000000",
+    "min_average_volume": "10000",
+    "max_daily_volatility": "0.08",
+    "max_spread_bps": "30",
+    "max_state_age_seconds": 86400,
+    "min_history": 60,
+    "feature_window": 20,
+    "allowed_types": ["STOCK", "ETF"],
+    "allowed_markets": ["KOSPI", "KOSDAQ"],
+    "max_gross": "0.8",
+    "max_position": "0.4",
+    "max_order_notional": "400000"
+  },
+  "costs": {"commission_bps": "1.5", "sell_tax_bps": "20", "slippage_bps": "5"},
+  "evaluation": {
+    "holdout_fraction": 0.2,
+    "min_improvement": 0.001,
+    "max_drawdown": 0.2,
+    "min_fold_trades": 2,
+    "min_holdout_trades": 4
+  },
+  "lookbacks": [5, 10, 20],
+  "rankings": ["momentum", "risk_adjusted", "trend_stability"],
+  "candidate_budget": 8
+}

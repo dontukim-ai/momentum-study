@@ -1,0 +1,344 @@
+{
+  "reviewed_at": "2026-10-16",
+  "review_type": "Public documentation and selected static source excerpts; not a full implementation audit. No installations, external script execution, authenticated KIS calls, performance tests or orders.",
+  "assumptions": {
+    "market": "KR listed equities/ETFs",
+    "frequency": "daily/swing",
+    "mvp": "predeclared non-leveraged ETF universe",
+    "autonomy": "research proposals automatic; live promotion requires human approval",
+    "user_confirmed": false
+  },
+  "repositories": [
+    {
+      "repo": "koreainvestment/open-trading-api",
+      "branch": "main",
+      "sha": "2077773a69a428daf63e148182511f068cc45de3",
+      "date": "2026-10-14T05:02:51Z",
+      "tree": "c759e50439e3c8131bb5ab1fa4ebbd6bcc50983a",
+      "url": "https://github.com/koreainvestment/open-trading-api/commit/2077773a69a428daf63e148182511f068cc45de3"
+    },
+    {
+      "repo": "microsoft/RD-Agent",
+      "branch": "main",
+      "sha": "484776c211e4fbbeef03e0ec00d6bbee7362a4f4",
+      "date": "2026-09-23T11:05:10Z",
+      "tree": "d4444284fb4554f75f352ecb1f072cedbf4c6421",
+      "url": "https://github.com/microsoft/RD-Agent/commit/484776c211e4fbbeef03e0ec00d6bbee7362a4f4"
+    },
+    {
+      "repo": "microsoft/qlib",
+      "branch": "main",
+      "sha": "54355232463878d2eebb91fe0ee5fa7fa1f5976c",
+      "date": "2026-10-08T10:15:27Z",
+      "tree": "10b09ec09f15c1163b1b9ebd715e64dcbfc06c61",
+      "url": "https://github.com/microsoft/qlib/commit/54355232463878d2eebb91fe0ee5fa7fa1f5976c"
+    },
+    {
+      "repo": "TauricResearch/TradingAgents",
+      "branch": "main",
+      "sha": "1394a3f72aa4393e1a98f51b382434c4b4c2d972",
+      "date": "2026-10-03T21:30:07Z",
+      "tree": "8bd10e10ee9ba1dca4441596e123d3809e433480",
+      "url": "https://github.com/TauricResearch/TradingAgents/commit/1394a3f72aa4393e1a98f51b382434c4b4c2d972"
+    },
+    {
+      "repo": "nautechsystems/nautilus_trader",
+      "branch": "develop",
+      "sha": "b6d6f1da5610a429f8a08e418cf149c1d6cd327d",
+      "date": "2026-10-16T00:24:35Z",
+      "tree": "464ad43865e75687a8e52bca134d01e4305847c5",
+      "url": "https://github.com/nautechsystems/nautilus_trader/commit/b6d6f1da5610a429f8a08e418cf149c1d6cd327d"
+    },
+    {
+      "repo": "agiprolabs/claude-trading-skills",
+      "branch": "main",
+      "sha": "981e1d736cdc02bdc1c55c74ec9224e956414706",
+      "date": "2026-09-03T02:19:34Z",
+      "tree": "9298fa4b4594e110964a79dc61f8b4bb10893e42",
+      "url": "https://github.com/agiprolabs/claude-trading-skills/commit/981e1d736cdc02bdc1c55c74ec9224e956414706"
+    }
+  ],
+  "sources": [
+    {
+      "repository": "koreainvestment/open-trading-api",
+      "commit": "2077773a69a428daf63e148182511f068cc45de3",
+      "path": "README.md",
+      "url": "https://github.com/koreainvestment/open-trading-api/blob/2077773a69a428daf63e148182511f068cc45de3/README.md",
+      "reviewed": true,
+      "retrieved_characters": 11036
+    },
+    {
+      "repository": "koreainvestment/open-trading-api",
+      "commit": "2077773a69a428daf63e148182511f068cc45de3",
+      "path": "llms.txt",
+      "url": "https://github.com/koreainvestment/open-trading-api/blob/2077773a69a428daf63e148182511f068cc45de3/llms.txt",
+      "reviewed": true,
+      "retrieved_characters": 2312
+    },
+    {
+      "repository": "koreainvestment/open-trading-api",
+      "commit": "2077773a69a428daf63e148182511f068cc45de3",
+      "path": "MCP/README.MD",
+      "url": "https://github.com/koreainvestment/open-trading-api/blob/2077773a69a428daf63e148182511f068cc45de3/MCP/README.MD",
+      "reviewed": true,
+      "retrieved_characters": 1717
+    },
+    {
+      "repository": "koreainvestment/open-trading-api",
+      "commit": "2077773a69a428daf63e148182511f068cc45de3",
+      "path": "MCP/KIS Code Assistant MCP/README.md",
+      "url": "https://github.com/koreainvestment/open-trading-api/blob/2077773a69a428daf63e148182511f068cc45de3/MCP/KIS%20Code%20Assistant%20MCP/README.md",
+      "reviewed": true,
+      "retrieved_characters": 6413
+    },
+    {
+      "repository": "koreainvestment/open-trading-api",
+      "commit": "2077773a69a428daf63e148182511f068cc45de3",
+      "path": "MCP/Kis Trading MCP/Readme.md",
+      "url": "https://github.com/koreainvestment/open-trading-api/blob/2077773a69a428daf63e148182511f068cc45de3/MCP/Kis%20Trading%20MCP/Readme.md",
+      "reviewed": true,
+      "retrieved_characters": 13724
+    },
+    {
+      "repository": "koreainvestment/open-trading-api",
+      "commit": "2077773a69a428daf63e148182511f068cc45de3",
+      "path": "MCP/Kis Trading MCP/tools/base.py",
+      "url": "https://github.com/koreainvestment/open-trading-api/blob/2077773a69a428daf63e148182511f068cc45de3/MCP/Kis%20Trading%20MCP/tools/base.py",
+      "reviewed": true,
+      "retrieved_characters": 34315
+    },
+    {
+      "repository": "koreainvestment/open-trading-api",
+      "commit": "2077773a69a428daf63e148182511f068cc45de3",
+      "path": "MCP/Kis Trading MCP/module/plugin/kis.py",
+      "url": "https://github.com/koreainvestment/open-trading-api/blob/2077773a69a428daf63e148182511f068cc45de3/MCP/Kis%20Trading%20MCP/module/plugin/kis.py",
+      "reviewed": true,
+      "retrieved_characters": 5779
+    },
+    {
+      "repository": "koreainvestment/open-trading-api",
+      "commit": "2077773a69a428daf63e148182511f068cc45de3",
+      "path": "strategy_builder/README.md",
+      "url": "https://github.com/koreainvestment/open-trading-api/blob/2077773a69a428daf63e148182511f068cc45de3/strategy_builder/README.md",
+      "reviewed": true,
+      "retrieved_characters": 11513
+    },
+    {
+      "repository": "koreainvestment/open-trading-api",
+      "commit": "2077773a69a428daf63e148182511f068cc45de3",
+      "path": "backtester/README.md",
+      "url": "https://github.com/koreainvestment/open-trading-api/blob/2077773a69a428daf63e148182511f068cc45de3/backtester/README.md",
+      "reviewed": true,
+      "retrieved_characters": 16577
+    },
+    {
+      "repository": "koreainvestment/open-trading-api",
+      "commit": "2077773a69a428daf63e148182511f068cc45de3",
+      "path": "backtester/kis_backtest/codegen/generator.py",
+      "url": "https://github.com/koreainvestment/open-trading-api/blob/2077773a69a428daf63e148182511f068cc45de3/backtester/kis_backtest/codegen/generator.py",
+      "reviewed": true,
+      "retrieved_characters": 47161
+    },
+    {
+      "repository": "koreainvestment/open-trading-api",
+      "commit": "2077773a69a428daf63e148182511f068cc45de3",
+      "path": "backtester/kis_backtest/providers/kis/constants.py",
+      "url": "https://github.com/koreainvestment/open-trading-api/blob/2077773a69a428daf63e148182511f068cc45de3/backtester/kis_backtest/providers/kis/constants.py",
+      "reviewed": true,
+      "retrieved_characters": 2672
+    },
+    {
+      "repository": "koreainvestment/open-trading-api",
+      "commit": "2077773a69a428daf63e148182511f068cc45de3",
+      "path": "backtester/kis_backtest/providers/kis/data.py",
+      "url": "https://github.com/koreainvestment/open-trading-api/blob/2077773a69a428daf63e148182511f068cc45de3/backtester/kis_backtest/providers/kis/data.py",
+      "reviewed": true,
+      "retrieved_characters": 17975
+    },
+    {
+      "repository": "koreainvestment/open-trading-api",
+      "commit": "2077773a69a428daf63e148182511f068cc45de3",
+      "path": "examples_llm/domestic_stock/order_cash/order_cash.py",
+      "url": "https://github.com/koreainvestment/open-trading-api/blob/2077773a69a428daf63e148182511f068cc45de3/examples_llm/domestic_stock/order_cash/order_cash.py",
+      "reviewed": true,
+      "retrieved_characters": 4484
+    },
+    {
+      "repository": "koreainvestment/open-trading-api",
+      "commit": "2077773a69a428daf63e148182511f068cc45de3",
+      "path": "examples_llm/domestic_stock/order_rvsecncl/order_rvsecncl.py",
+      "url": "https://github.com/koreainvestment/open-trading-api/blob/2077773a69a428daf63e148182511f068cc45de3/examples_llm/domestic_stock/order_rvsecncl/order_rvsecncl.py",
+      "reviewed": true,
+      "retrieved_characters": 4531
+    },
+    {
+      "repository": "koreainvestment/open-trading-api",
+      "commit": "2077773a69a428daf63e148182511f068cc45de3",
+      "path": "examples_llm/domestic_stock/ccnl_notice/ccnl_notice.py",
+      "url": "https://github.com/koreainvestment/open-trading-api/blob/2077773a69a428daf63e148182511f068cc45de3/examples_llm/domestic_stock/ccnl_notice/ccnl_notice.py",
+      "reviewed": true,
+      "retrieved_characters": 2171
+    },
+    {
+      "repository": "koreainvestment/open-trading-api",
+      "commit": "2077773a69a428daf63e148182511f068cc45de3",
+      "path": "examples_llm/domestic_stock/inquire_daily_itemchartprice/inquire_daily_itemchartprice.py",
+      "url": "https://github.com/koreainvestment/open-trading-api/blob/2077773a69a428daf63e148182511f068cc45de3/examples_llm/domestic_stock/inquire_daily_itemchartprice/inquire_daily_itemchartprice.py",
+      "reviewed": true,
+      "retrieved_characters": 3540
+    },
+    {
+      "repository": "koreainvestment/open-trading-api",
+      "commit": "2077773a69a428daf63e148182511f068cc45de3",
+      "path": "examples_llm/kis_auth.py",
+      "url": "https://github.com/koreainvestment/open-trading-api/blob/2077773a69a428daf63e148182511f068cc45de3/examples_llm/kis_auth.py",
+      "reviewed": true,
+      "retrieved_characters": 22431
+    },
+    {
+      "repository": "microsoft/RD-Agent",
+      "commit": "484776c211e4fbbeef03e0ec00d6bbee7362a4f4",
+      "path": "README.md",
+      "url": "https://github.com/microsoft/RD-Agent/blob/484776c211e4fbbeef03e0ec00d6bbee7362a4f4/README.md",
+      "reviewed": true,
+      "retrieved_characters": 41675
+    },
+    {
+      "repository": "microsoft/RD-Agent",
+      "commit": "484776c211e4fbbeef03e0ec00d6bbee7362a4f4",
+      "path": "docs/scens/quant_agent_fin.rst",
+      "url": "https://github.com/microsoft/RD-Agent/blob/484776c211e4fbbeef03e0ec00d6bbee7362a4f4/docs/scens/quant_agent_fin.rst",
+      "reviewed": true,
+      "retrieved_characters": 5202
+    },
+    {
+      "repository": "microsoft/RD-Agent",
+      "commit": "484776c211e4fbbeef03e0ec00d6bbee7362a4f4",
+      "path": "rdagent/components/workflow/rd_loop.py",
+      "url": "https://github.com/microsoft/RD-Agent/blob/484776c211e4fbbeef03e0ec00d6bbee7362a4f4/rdagent/components/workflow/rd_loop.py",
+      "reviewed": true,
+      "retrieved_characters": 10398
+    },
+    {
+      "repository": "microsoft/RD-Agent",
+      "commit": "484776c211e4fbbeef03e0ec00d6bbee7362a4f4",
+      "path": "LICENSE",
+      "url": "https://github.com/microsoft/RD-Agent/blob/484776c211e4fbbeef03e0ec00d6bbee7362a4f4/LICENSE",
+      "reviewed": true,
+      "retrieved_characters": 1141
+    },
+    {
+      "repository": "microsoft/qlib",
+      "commit": "54355232463878d2eebb91fe0ee5fa7fa1f5976c",
+      "path": "README.md",
+      "url": "https://github.com/microsoft/qlib/blob/54355232463878d2eebb91fe0ee5fa7fa1f5976c/README.md",
+      "reviewed": true,
+      "retrieved_characters": 44170
+    },
+    {
+      "repository": "microsoft/qlib",
+      "commit": "54355232463878d2eebb91fe0ee5fa7fa1f5976c",
+      "path": "docs/advanced/PIT.rst",
+      "url": "https://github.com/microsoft/qlib/blob/54355232463878d2eebb91fe0ee5fa7fa1f5976c/docs/advanced/PIT.rst",
+      "reviewed": true,
+      "retrieved_characters": 7294
+    },
+    {
+      "repository": "microsoft/qlib",
+      "commit": "54355232463878d2eebb91fe0ee5fa7fa1f5976c",
+      "path": "LICENSE",
+      "url": "https://github.com/microsoft/qlib/blob/54355232463878d2eebb91fe0ee5fa7fa1f5976c/LICENSE",
+      "reviewed": true,
+      "retrieved_characters": 1141
+    },
+    {
+      "repository": "TauricResearch/TradingAgents",
+      "commit": "1394a3f72aa4393e1a98f51b382434c4b4c2d972",
+      "path": "README.md",
+      "url": "https://github.com/TauricResearch/TradingAgents/blob/1394a3f72aa4393e1a98f51b382434c4b4c2d972/README.md",
+      "reviewed": true,
+      "retrieved_characters": 25888
+    },
+    {
+      "repository": "TauricResearch/TradingAgents",
+      "commit": "1394a3f72aa4393e1a98f51b382434c4b4c2d972",
+      "path": "LICENSE",
+      "url": "https://github.com/TauricResearch/TradingAgents/blob/1394a3f72aa4393e1a98f51b382434c4b4c2d972/LICENSE",
+      "reviewed": true,
+      "retrieved_characters": 11357
+    },
+    {
+      "repository": "nautechsystems/nautilus_trader",
+      "commit": "b6d6f1da5610a429f8a08e418cf149c1d6cd327d",
+      "path": "README.md",
+      "url": "https://github.com/nautechsystems/nautilus_trader/blob/b6d6f1da5610a429f8a08e418cf149c1d6cd327d/README.md",
+      "reviewed": true,
+      "retrieved_characters": 39762
+    },
+    {
+      "repository": "agiprolabs/claude-trading-skills",
+      "commit": "981e1d736cdc02bdc1c55c74ec9224e956414706",
+      "path": "README.md",
+      "url": "https://github.com/agiprolabs/claude-trading-skills/blob/981e1d736cdc02bdc1c55c74ec9224e956414706/README.md",
+      "reviewed": true,
+      "retrieved_characters": 26037
+    },
+    {
+      "repository": "agiprolabs/claude-trading-skills",
+      "commit": "981e1d736cdc02bdc1c55c74ec9224e956414706",
+      "path": "skills/walk-forward-validation/SKILL.md",
+      "url": "https://github.com/agiprolabs/claude-trading-skills/blob/981e1d736cdc02bdc1c55c74ec9224e956414706/skills/walk-forward-validation/SKILL.md",
+      "reviewed": true,
+      "retrieved_characters": 8734
+    },
+    {
+      "repository": "agiprolabs/claude-trading-skills",
+      "commit": "981e1d736cdc02bdc1c55c74ec9224e956414706",
+      "path": "skills/risk-management/SKILL.md",
+      "url": "https://github.com/agiprolabs/claude-trading-skills/blob/981e1d736cdc02bdc1c55c74ec9224e956414706/skills/risk-management/SKILL.md",
+      "reviewed": true,
+      "retrieved_characters": 9100
+    },
+    {
+      "repository": "agiprolabs/claude-trading-skills",
+      "commit": "981e1d736cdc02bdc1c55c74ec9224e956414706",
+      "path": "skills/trade-journal/SKILL.md",
+      "url": "https://github.com/agiprolabs/claude-trading-skills/blob/981e1d736cdc02bdc1c55c74ec9224e956414706/skills/trade-journal/SKILL.md",
+      "reviewed": true,
+      "retrieved_characters": 10414
+    },
+    {
+      "repository": "agiprolabs/claude-trading-skills",
+      "commit": "981e1d736cdc02bdc1c55c74ec9224e956414706",
+      "path": "skills/strategy-framework/SKILL.md",
+      "url": "https://github.com/agiprolabs/claude-trading-skills/blob/981e1d736cdc02bdc1c55c74ec9224e956414706/skills/strategy-framework/SKILL.md",
+      "reviewed": true,
+      "retrieved_characters": 10441
+    }
+  ],
+  "not_directly_reviewed": [
+    {
+      "url": "https://apiportal.koreainvestment.com/",
+      "scope": "Latest portal FAQ, API entitlements, limits and terms require implementation-time verification"
+    }
+  ],
+  "plugin_discovery": {
+    "query": "한국투자 Korea Investment KIS trading",
+    "returned_plugins": 0,
+    "scope": "Only this query; not an assertion about all external integrations"
+  },
+  "installed_skills_reviewed": [
+    {
+      "name": "public-equity-investing",
+      "scope": "Router fit only; investor workflow not applied"
+    },
+    {
+      "name": "plugin-management",
+      "scope": "Plugin discovery"
+    },
+    {
+      "name": "cloud-environment-runtime",
+      "scope": "Environment status and network policy"
+    }
+  ]
+}

@@ -16,19 +16,32 @@ dependencies = [
 
 [project.scripts]
 momentum = "momentum:main"
+momentum-agent = "momentum.agent.cli:main"
+
+[project.optional-dependencies]
+agent = ["kis-self-improving-agent>=0.5.2"]
+
+[tool.uv.sources]
+kis-self-improving-agent = { path = "apps/kis-agent", editable = true }
 
 [build-system]
 requires = ["uv_build>=0.12.15,<0.13.0"]
 build-backend = "uv_build"
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 markers = [
     "slow: full end-to-end runs over the whole development window (H1's ~3,270 daily rebalances); deselected by default, run explicitly with `-m slow`.",
 ]
 addopts = "-m 'not slow'"
 
+[[tool.mypy.overrides]]
+module = ["trading_agent", "trading_agent.*"]
+ignore_missing_imports = true
+
 [dependency-groups]
 dev = [
+    "kis-self-improving-agent>=0.5.2",
     "hypothesis>=6.168.0",
     "mypy>=2.3.1",
     "pytest>=9.1.1",

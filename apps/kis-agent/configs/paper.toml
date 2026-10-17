@@ -1,0 +1,19 @@
+# LOCAL DEMO VALUES: these are not an approved real-account risk/cost policy.
+[runtime]
+mode = "simulated"
+live_enabled = false
+initial_cash = "10000000"
+
+[strategy]
+lookback = 10
+top_n = 2
+gross_weight = "0.8"
+min_momentum = "0"
+
+[costs]
+commission_bps = "1.5"
+sell_tax_bps = "0" # Example ETF assumption, must be verified for each instrument/date.
+slippage_bps = "5"
+
+[research]
+lookbacks = [5, 10, 20]

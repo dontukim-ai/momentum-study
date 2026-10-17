@@ -1,0 +1,11 @@
+{
+  "status": "completed",
+  "output": [{
+    "type": "message",
+    "content": [{
+      "type": "output_text",
+      "text": "{\"hypothesis\":\"짧고 긴 모멘텀 기간의 반응 속도 차이가 개발 구간의 회전율과 비용 차감 성과에 영향을 준다.\",\"falsification\":\"시간순 개발 검증과 미사용 구간의 비용 스트레스에서 기존 전략 대비 개선이 유지되지 않으면 기각한다.\",\"lookbacks\":[5,15,30]}"
+    }]
+  }],
+  "usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+}
