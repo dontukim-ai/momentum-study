@@ -24,7 +24,59 @@ from .contracts import (
     policy_from_dict,
     require_observed,
 )
-from .evaluator import CommonEvaluator, MarketCosts
+from .evaluator import (
+    BenchmarkUnavailable,
+    CommonEvaluator,
+    EvaluationResult,
+    MarketCosts,
+    enabled_benchmarks,
+    require_same_contract,
+)
+
+
+def benchmark_report(
+    evaluator: CommonEvaluator,
+    data: ResearchInput,
+    start: date,
+    end: date,
+    reference: EvaluationResult,
+    compared_as: str,
+) -> dict[str, Any]:
+    results: dict[str, Any] = {}
+    for kind in enabled_benchmarks(evaluator.policy):
+        try:
+            result = evaluator.evaluate_benchmark(data, kind, start, end)
+        except BenchmarkUnavailable as exc:
+            if kind != "market_etf":
+                raise
+            results[kind] = {
+                "status": "UNAVAILABLE",
+                "symbol": evaluator.policy.market_etf_symbol,
+                "reason": str(exc),
+                "reference_evaluation_contract_id": reference.evaluation_contract_id,
+            }
+            continue
+        require_same_contract(reference, result)
+        results[kind] = {
+            "net_return": result.net_return,
+            "max_drawdown": result.max_drawdown,
+            "trades": result.trades,
+            "contract_id": result.evaluation_contract_id,
+            "net_advantage": reference.net_return - result.net_return,
+            "comparison_strategy": compared_as,
+            "comparison_strategy_version": reference.strategy_version,
+            "portfolio_diagnostics": result.portfolio_diagnostics,
+        }
+        if kind == "market_etf":
+            results[kind].update(
+                {
+                    "status": "EVALUATED",
+                    "symbol": evaluator.policy.market_etf_symbol,
+                    "allocation_rule": "daily_rebalance_under_existing_position_order_and_gross_limits",
+                }
+            )
+    return results
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS agent_studies (
@@ -47,8 +99,8 @@ CREATE TABLE IF NOT EXISTS agent_shadow (
 
 
 def confidence_interval(
-    values: list[float], policy: AgentPolicy
-) -> tuple[float, float]:
+    values: list[float], policy: AgentPolicy, *, seed: int = 0
+) -> tuple[float, float | None]:
     """Paired circular blocks, Bonferroni budget across registered cycles.
 
     This is an indicative stationary-return test, not the original US H1-H4
@@ -57,7 +109,7 @@ def confidence_interval(
     if len(values) < policy.holdout_sessions or not np.all(np.isfinite(values)):
         raise AgentError("Incomplete/nonfinite independent observations")
     n, block = len(values), policy.bootstrap_block
-    rng = np.random.default_rng(0)
+    rng = np.random.default_rng(seed)
     starts = rng.integers(
         0, n, size=(policy.bootstrap_samples, (n + block - 1) // block)
     )
@@ -66,6 +118,10 @@ def confidence_interval(
     )[:, :n]
     means = np.sort(np.asarray(values)[indices].mean(axis=1))
     tail = policy.family_alpha / (2 * policy.max_validation_cycles)
+    if policy.statistical_policy_version == "v2":
+        tail = policy.family_alpha / policy.max_validation_cycles
+        # Null is an unbounded upper endpoint, not a second estimated quantile.
+        return float(means[int(tail * len(means))]), None
     return float(means[int(tail * len(means))]), float(
         means[min(len(means) - 1, int((1 - tail) * len(means)))]
     )
@@ -76,6 +132,11 @@ def promotion_gates(evidence: dict[str, Any], policy: AgentPolicy) -> dict[str, 
     if not h["evaluated"]:
         return {"independent_evaluation": False}
     interval = h["interval"]
+    confidence = (
+        len(interval) == 2 and 0 < interval[0] and interval[1] is None
+        if policy.statistical_policy_version == "v2"
+        else len(interval) == 2 and 0 < interval[0] <= interval[1]
+    )
     return {
         "new_candidate": evidence["selected_version"] != evidence["champion_version"],
         "development_advantage": dev["candidate_score"] > dev["champion_score"],
@@ -85,7 +146,7 @@ def promotion_gates(evidence: dict[str, Any], policy: AgentPolicy) -> dict[str, 
         >= policy.logic.evaluation.min_fold_trades,
         "net_improvement": h["candidate_return"] - h["champion_return"]
         >= policy.logic.evaluation.min_improvement,
-        "confidence": len(interval) == 2 and 0 < interval[0] <= interval[1],
+        "confidence": confidence,
         "drawdown": 0
         <= h["candidate_drawdown"]
         <= policy.logic.evaluation.max_drawdown,
@@ -191,7 +252,9 @@ class ResearchAgent:
                 "SELECT * FROM agent_studies WHERE name=?", (name,)
             ).fetchone()
             if row and (
-                row["policy_json"] != canonical(policy) or row["build"] != build_id()
+                canonical(policy_from_dict(json.loads(row["policy_json"])))
+                != canonical(policy)
+                or row["build"] != build_id()
             ):
                 raise AgentError(
                     "Preserve the existing study policy, build and consumed history"
@@ -472,6 +535,7 @@ class ResearchAgent:
         candidates = {s.version: s for s in [champion, *proposer.propose(champion)]}
         trials = []
         fold_size = policy.development_sessions // 3
+        reference_folds: list[EvaluationResult] = []
         for spec in candidates.values():
             try:
                 folds = [
@@ -485,6 +549,13 @@ class ResearchAgent:
                     )
                     for i in range(3)
                 ]
+                if spec.version == champion.version:
+                    reference_folds = folds
+                else:
+                    for reference, candidate_fold in zip(
+                        reference_folds, folds, strict=True
+                    ):
+                        require_same_contract(reference, candidate_fold)
                 trials.append(
                     {
                         "spec": asdict(spec),
@@ -502,6 +573,7 @@ class ResearchAgent:
                                 "net_return": f.net_return,
                                 "drawdown": f.max_drawdown,
                                 "trades": f.trades,
+                                "evaluation_contract_id": f.evaluation_contract_id,
                             }
                             for f in folds
                         ],
@@ -535,6 +607,14 @@ class ResearchAgent:
             best = baseline
         evidence = {
             "cycle_id": cycle_id,
+            "statistical_policy_version": policy.statistical_policy_version,
+            "nominal_one_sided_alpha_per_cycle": policy.family_alpha
+            / policy.max_validation_cycles
+            / (2 if policy.statistical_policy_version == "v1" else 1),
+            "tail_draws": policy.bootstrap_samples
+            * policy.family_alpha
+            / policy.max_validation_cycles
+            / (2 if policy.statistical_policy_version == "v1" else 1),
             "champion_version": champion.version,
             "selected_version": best["version"],
             "selected_spec": best["spec"],
@@ -545,21 +625,26 @@ class ResearchAgent:
                 "champion_score": baseline["score"],
                 "worst_drawdown": best["worst_drawdown"],
                 "fold_trades": best["fold_trades"],
+                "evaluation_contract_ids": [
+                    f.evaluation_contract_id for f in reference_folds
+                ],
             },
             "holdout": {"evaluated": False},
         }
+        start, end = (
+            data.sessions[plan["holdout_start"]],
+            data.sessions[plan["holdout_end"]],
+        )
         if best["version"] != champion.version:
             selected = candidates[best["version"]]
-            start, end = (
-                data.sessions[plan["holdout_start"]],
-                data.sessions[plan["holdout_end"]],
-            )
             base = evaluator.evaluate(data, champion, start, end)
             candidate = evaluator.evaluate(data, selected, start, end)
             stressed_base = evaluator.evaluate(data, champion, start, end, stress=True)
             stressed_candidate = evaluator.evaluate(
                 data, selected, start, end, stress=True
             )
+            require_same_contract(base, candidate)
+            require_same_contract(stressed_base, stressed_candidate)
             if [r["session"] for r in base.equity_curve] != [
                 r["session"] for r in candidate.equity_curve
             ]:
@@ -584,11 +669,32 @@ class ResearchAgent:
                 "stress_improvement": stressed_candidate.net_return
                 - stressed_base.net_return,
                 "observations": len(candidate.daily_returns),
+                "evaluation_contract_id": base.evaluation_contract_id,
+                "stress_evaluation_contract_id": stressed_base.evaluation_contract_id,
                 "baseline": asdict(base),
                 "candidate": asdict(candidate),
                 "stressed_baseline": asdict(stressed_base),
                 "stressed_candidate": asdict(stressed_candidate),
             }
+            comparison = candidate
+        else:
+            comparison = evaluator.evaluate(data, champion, start, end)
+            evidence["holdout"].update(
+                {
+                    "start": start.isoformat(),
+                    "end": end.isoformat(),
+                    "baseline": asdict(comparison),
+                    "evaluation_contract_id": comparison.evaluation_contract_id,
+                }
+            )
+        evidence["holdout"]["benchmarks"] = benchmark_report(
+            evaluator,
+            data,
+            start,
+            end,
+            comparison,
+            "candidate" if best["version"] != champion.version else "champion",
+        )
         evidence["gates"] = promotion_gates(evidence, policy)
         return evidence
 
@@ -617,7 +723,8 @@ class ResearchAgent:
                 or digest(evidence) != row["evidence_hash"]
                 or evidence["cycle_id"] != cycle_id
                 or manifest["build"] != build_id()
-                or canonical(manifest["policy"]) != study["policy_json"]
+                or canonical(policy_from_dict(manifest["policy"]))
+                != canonical(policy_from_dict(json.loads(study["policy_json"])))
             ):
                 raise AgentError("Stored evidence or frozen manifest changed")
             policy = policy_from_dict(manifest["policy"])
@@ -761,6 +868,7 @@ class ResearchAgent:
         evaluator = CommonEvaluator(policy)
         forward = evaluator.evaluate(data.prefix(end), champion, start, end)
         reference = evaluator.evaluate(data.prefix(end), baseline, start, end)
+        require_same_contract(forward, reference)
         report = {
             "kind": "FRESH_FORWARD_SHADOW",
             "research_revision": result["revision_after"],
@@ -778,6 +886,9 @@ class ResearchAgent:
             "promotion_authority": False,
             "orders_submitted": 0,
         }
+        report["benchmarks"] = benchmark_report(
+            evaluator, data.prefix(end), start, end, forward, "champion"
+        )
         # Screening only uses the observed shadow prefix, never reserved final
         # data at the end of an input file that happened to arrive early.
         frozen = data.prefix(end)
