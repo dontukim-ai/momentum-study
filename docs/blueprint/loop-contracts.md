@@ -63,6 +63,8 @@ champion 갱신의 단위다. 예산은 §3의 예산 계정이 따로 관리한
 - 연구 이름·빌드·정책·family_version을 바꾸거나 실행을 ABANDONED로 폐기해도 이미 기록된 `reserve`·`consume`은 지워지지 않는다. 현재처럼 폐기한 사이클의 최종 구간 소비도 유지한다.
 - 새 정책 버전이나 새 family_version은 기존 계정의 `remaining`에서 `allocate`로 예산을 받는다. 새로운 독립 연구군으로 등록하려면 `parent_account_id` 없이 계정을 만들고 그 근거(다른 신호 계열, 다른 시장 등)를 남긴다. 독립 연구군끼리도 같은 시장의 최종 구간 소비(INV-4)는 공유한다.
 
+**현재 구현(LOOP-02a):** `agent_budget_accounts`와 `agent_budget_entries`가 `(market, family_lineage_id)` 계정을 관리한다. 현재 계보는 `ranked-momentum` 하나이며 첫 사이클 등록 연구의 고정 사이클 예산을 사용한다. 추가 전용 원장은 `reserve`(등록)와 `consume`(COMPLETE·ABANDONED·평가 실패)만 사용한다. `remaining = total_cycles − reserved`로 계산하며 소비는 예약을 다시 차감하지 않는다. 이름 변경·실패·폐기로 예약을 반환하지 않고, 다른 총예산 정책의 등록은 명시적 할당이 필요하다는 오류로 거부한다. 기존 사이클은 REGISTERED·EVALUATED에는 reserve만, 그 외 상태에는 reserve와 consume을 멱등 역채움한다. `release_unused`·`allocate`·독립 연구군·`family_version`은 미구현이며, 구현 완료 근거는 합성 회귀 범위다.
+
 ## 4. SearchPlan과 CandidateProposal — S1 (RES-04, RES-05)
 
 ### SearchPlan — 사이클 시작 시 등록
