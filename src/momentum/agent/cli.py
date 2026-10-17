@@ -124,6 +124,8 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument(
         "action",
         choices=(
+            "release-observation",
+            "release-stop",
             "init",
             "run",
             "status",
@@ -153,6 +155,10 @@ def parser() -> argparse.ArgumentParser:
         "--corporate-action-basis", default="raw-unadjusted; supplied-actions-complete"
     )
     p.add_argument("--source-db", type=Path)
+    p.add_argument("--approved-by")
+    p.add_argument("--revision", type=int)
+    p.add_argument("--release-id")
+    p.add_argument("--stopped-by")
     p.add_argument("--cycle-id")
     p.add_argument("--reason", default="")
     p.add_argument("--output", type=Path, default=Path("artifacts/agent"))
@@ -190,6 +196,16 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 else AgentPolicy()
             )
             result = agent.init(args.study, policy)
+        elif args.action == "release-observation":
+            result = agent.register_observation_release(
+                approved_by=args.approved_by, revision=args.revision
+            )
+        elif args.action == "release-stop":
+            result = agent.stop_observation_release(
+                args.release_id,
+                stopped_by=args.stopped_by,
+                reason=args.reason or "HUMAN",
+            )
         elif args.action == "status":
             result = agent.status(args.study)
         elif args.action == "import-history":

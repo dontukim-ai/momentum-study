@@ -350,6 +350,8 @@ Release는 주문을 만들지 않는다. 주문 경로(ORD-02~04)가 `Execution
 
 완료 조건: 사전 E3 기록이 없는 첫 관찰 버전을 등록할 수 있다. 관찰 등록만으로 주문 권한이 생기지 않는다.
 
+**현재 구현 (LOOP-06a).** 추가 전용 `agent_observation_releases`와 `agent_release_events`에 현재 레지스트리 E2/E3 revision의 사람 승인·관찰 payload 및 STOPPED 기록을 저장한다. 근거 사이클의 연구 정책·최종 후보 평가 계약과 시장의 최대 노출 날짜를 고정한다. 같은 revision의 active 등록은 멱등이고 다른 revision은 기존 등록 중단 뒤 승인한다. 사람 중단, 같은 revision의 최근 DEMOTION_CANDIDATE, 관찰 unavailable/checkpoint 오류에 따른 자동 중단을 구현했다. 자동 중단은 관찰·checkpoint 처리 뒤 연구 진행과 분리하며 champion·예산·소비 구간을 바꾸지 않는다. 봉인 중 안전 중단도 허용하고 이벤트 detail에는 순번·창만 기록한다. `status`는 active 등록·레지스트리 지연 여부·마지막 중단을, `tick.release_events`는 이번 tick의 중단을 보고한다. CLI는 `release-observation`·`release-stop`이다. `order_authority`는 항상 0이며 주문 경로와 연결하지 않는다. 합성 회귀 범위 구현으로 한정하며 ExecutionRelease·알림·실시간 E3와 실데이터 검증은 미구현이다.
+
 ## 12. 구간 예약·동시 사용·공개 정책 — S3·S4 (LOOP-09)
 
 ### 문제
