@@ -28,10 +28,11 @@ from .contracts import (
     require_observed,
 )
 from .evaluator import (
-    BENCHMARKS,
+    BenchmarkUnavailable,
     CommonEvaluator,
     EvaluationResult,
     MarketCosts,
+    enabled_benchmarks,
     require_same_contract,
 )
 
@@ -44,9 +45,20 @@ def benchmark_report(
     reference: EvaluationResult,
     compared_as: str,
 ) -> dict[str, Any]:
-    results = {}
-    for kind in BENCHMARKS:
-        result = evaluator.evaluate_benchmark(data, kind, start, end)
+    results: dict[str, Any] = {}
+    for kind in enabled_benchmarks(evaluator.policy):
+        try:
+            result = evaluator.evaluate_benchmark(data, kind, start, end)
+        except BenchmarkUnavailable as exc:
+            if kind != "market_etf":
+                raise
+            results[kind] = {
+                "status": "UNAVAILABLE",
+                "symbol": evaluator.policy.market_etf_symbol,
+                "reason": str(exc),
+                "reference_evaluation_contract_id": reference.evaluation_contract_id,
+            }
+            continue
         require_same_contract(reference, result)
         results[kind] = {
             "net_return": result.net_return,
@@ -58,6 +70,14 @@ def benchmark_report(
             "comparison_strategy_version": reference.strategy_version,
             "portfolio_diagnostics": result.portfolio_diagnostics,
         }
+        if kind == "market_etf":
+            results[kind].update(
+                {
+                    "status": "EVALUATED",
+                    "symbol": evaluator.policy.market_etf_symbol,
+                    "allocation_rule": "daily_rebalance_under_existing_position_order_and_gross_limits",
+                }
+            )
     return results
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -164,8 +165,14 @@ class AgentPolicy:
     family_alpha: float = 0.05
     statistical_policy_version: str = "v1"
     min_tail_draws: int = 50
+    market_etf_symbol: str | None = None
 
     def __post_init__(self) -> None:
+        if self.market_etf_symbol is not None and (
+            not isinstance(self.market_etf_symbol, str)
+            or not re.fullmatch(r"[A-Za-z0-9_]{1,30}", self.market_etf_symbol)
+        ):
+            raise AgentError("Invalid preregistered market ETF symbol")
         if (self.market, self.currency, self.money_quantum) != ("KRX", "KRW", "1"):
             raise AgentError(
                 "This adapter supports KRX/KRW only; US H1-H4 final evaluation remains locked"

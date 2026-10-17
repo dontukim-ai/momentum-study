@@ -38,7 +38,25 @@ BENCHMARKS = ("cash", "equal_weight_eligible")
 NAV_RESIDUAL_ABSOLUTE_TOLERANCE = D("1e-9")
 
 
-def benchmark_version(kind: str) -> str:
+class BenchmarkUnavailable(AgentError):
+    """A configured reference lacks PIT coverage; no performance can be claimed."""
+
+
+def enabled_benchmarks(policy: AgentPolicy) -> tuple[str, ...]:
+    return BENCHMARKS + (
+        ("market_etf",) if policy.market_etf_symbol is not None else ()
+    )
+
+
+def benchmark_version(kind: str, symbol: str | None = None) -> str:
+    if kind == "market_etf":
+        return digest(
+            {
+                "benchmark": kind,
+                "definition": "fixed-etf-daily-risk-capped-v1",
+                "symbol": symbol,
+            }
+        )
     return digest({"benchmark": kind, "definition": "eligible-all-equal-v1"})
 
 
@@ -49,8 +67,10 @@ def benchmark_decision(
     valid_until: datetime,
     wallet: Wallet,
     diagnostics: dict[str, int] | None = None,
+    *,
+    etf_symbol: str | None = None,
 ) -> Decision:
-    version = benchmark_version(kind)
+    version = benchmark_version(kind, etf_symbol)
     empty = Decision(version, view.snapshot_id, view.as_of, valid_until, {})
     if kind == "cash":
         return empty
@@ -61,6 +81,19 @@ def benchmark_decision(
         if h and h[-1].session == view.expected_session
     }
     equity = wallet.equity(marks)
+    if kind == "market_etf":
+        state = selector.securities.states(view.as_of).get(etf_symbol)
+        if state is None:
+            raise BenchmarkUnavailable(
+                "Market ETF metadata unavailable at observation time"
+            )
+        if state.asset_type != "ETF":
+            raise BenchmarkUnavailable("Configured market benchmark must be an ETF")
+        if (
+            etf_symbol not in marks
+            or len(view.histories[etf_symbol]) < policy.min_history
+        ):
+            raise BenchmarkUnavailable("Market ETF price/history coverage unavailable")
     # Reuse every existing market/quality/affordability filter. Positive prices
     # imply momentum > -1; neither ranking nor positive momentum selects slots.
     probe = RankedStrategy(
@@ -79,6 +112,18 @@ def benchmark_decision(
         equity,
         audit=False,
     )
+    if kind == "market_etf":
+        row = next(r for r in screened["candidates"] if r["symbol"] == etf_symbol)
+        if row["status"] not in {"SELECTED", "NOT_SELECTED"}:
+            if diagnostics is not None:
+                diagnostics["screening_rejection_sessions"] = 1
+            return empty
+        # A single fixed instrument still obeys position/order limits. This is
+        # a daily risk-capped reference, not a fully invested index proxy.
+        assert etf_symbol is not None
+        return replace(
+            empty, target_weights={etf_symbol: screened["position_budget"] / equity}
+        )
     eligible_symbols = {
         row["symbol"]
         for row in screened["candidates"]
@@ -177,6 +222,7 @@ class EvaluationContract:
     metrics_spec_version: str
     selection_policy_id: str
     nav_residual_absolute_tolerance: D
+    benchmark_definitions: tuple[tuple[str, str], ...]
 
     def to_dict(self) -> dict[str, Any]:
         result = asdict(self)
@@ -251,6 +297,9 @@ def portfolio_diagnostics(
         "unaffordable_rate": unaffordable / candidates if candidates else None,
         "unaffordable_rate_basis": "candidate-session counts after other filters, before affordability",
         "max_abs_nav_residual": str(max(abs(D(row["nav_residual"])) for row in curve)),
+        "screening_rejection_sessions": sum(
+            row["screening_rejection_sessions"] for row in curve
+        ),
     }
     for name, field in (
         ("invested", "positions_value"),
@@ -394,7 +443,9 @@ class CommonEvaluator:
         *,
         stress: bool = False,
     ) -> EvaluationResult:
-        if kind not in BENCHMARKS:
+        if kind == "market_etf" and self.policy.market_etf_symbol is None:
+            raise AgentError("Market ETF must be explicitly configured")
+        if kind not in enabled_benchmarks(self.policy):
             raise AgentError("Unknown registered benchmark")
         return self._evaluate(
             data, self.policy.logic.champion, start, end, stress=stress, benchmark=kind
@@ -439,7 +490,7 @@ class CommonEvaluator:
         capital = p.logic.selection.capital_limit
         selection = p.logic.selection
         contract = EvaluationContract(
-            schema_version="krx-evaluation-v1",
+            schema_version="krx-evaluation-v2",
             evaluation_window=(start.isoformat(), end.isoformat()),
             data_bundle_id=data.fingerprint(end),
             market=p.market,
@@ -473,6 +524,10 @@ class CommonEvaluator:
             metrics_spec_version="reference-notional-tradability-v1;turnover-dual-v1;portfolio-diagnostics-v1;nav-residual-v1",
             selection_policy_id=digest(selection),
             nav_residual_absolute_tolerance=NAV_RESIDUAL_ABSOLUTE_TOLERANCE,
+            benchmark_definitions=tuple(
+                (kind, benchmark_version(kind, p.market_etf_symbol))
+                for kind in enabled_benchmarks(p)
+            ),
         )
         ledger = Ledger(capital, money_quantum=quantum)
         selector = SelectionEngine(data.securities, p.logic.selection, costs)
@@ -520,7 +575,13 @@ class CommonEvaluator:
             screening: dict[str, int] = {}
             decision = (
                 benchmark_decision(
-                    benchmark, selector, view, session_time(day, 10), wallet, screening
+                    benchmark,
+                    selector,
+                    view,
+                    session_time(day, 10),
+                    wallet,
+                    screening,
+                    etf_symbol=p.market_etf_symbol,
                 )
                 if benchmark
                 else selector(spec, view, session_time(day, 10), wallet)
@@ -691,6 +752,9 @@ class CommonEvaluator:
                     "unaffordable_candidates": screening.get(
                         "unaffordable_candidates", 0
                     ),
+                    "screening_rejection_sessions": screening.get(
+                        "screening_rejection_sessions", 0
+                    ),
                 }
             )
             if changed:
@@ -710,7 +774,9 @@ class CommonEvaluator:
         if schedule is not None:
             diagnostics["schedule"] = {"revision_boundaries": boundaries}
         return EvaluationResult(
-            benchmark_version(benchmark) if benchmark else spec.version,
+            benchmark_version(benchmark, p.market_etf_symbol)
+            if benchmark
+            else spec.version,
             start.isoformat(),
             end.isoformat(),
             float(prior / capital - 1),
