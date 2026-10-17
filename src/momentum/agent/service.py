@@ -88,6 +88,17 @@ FINAL_KINDS = EXCLUSIVE_KINDS - {"shadow"}
 
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS agent_observation_releases (
+ observation_release_id TEXT PRIMARY KEY, market TEXT NOT NULL, family_lineage_id TEXT NOT NULL,
+ champion_revision INTEGER NOT NULL, spec_version TEXT NOT NULL,
+ evidence_grade TEXT NOT NULL CHECK(evidence_grade IN ('E2','E3')),
+ source_cycle_id TEXT NOT NULL, payload_json TEXT NOT NULL, approved_by TEXT NOT NULL,
+ approved_at TEXT NOT NULL, order_authority INTEGER NOT NULL CHECK(order_authority = 0));
+CREATE TABLE IF NOT EXISTS agent_release_events (
+ event_id TEXT PRIMARY KEY, observation_release_id TEXT NOT NULL REFERENCES agent_observation_releases,
+ event TEXT NOT NULL CHECK(event IN ('STOPPED')),
+ reason TEXT NOT NULL CHECK(reason IN ('DEMOTION_CANDIDATE','DATA_FAILURE','HUMAN')),
+ detail_json TEXT NOT NULL, recorded_by TEXT NOT NULL, recorded_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS agent_champion_registry (
  market TEXT NOT NULL, family_lineage_id TEXT NOT NULL, revision INTEGER NOT NULL,
  spec_json TEXT NOT NULL, spec_version TEXT NOT NULL, evidence_grade TEXT,
@@ -301,6 +312,249 @@ class ResearchAgent:
             }
         finally:
             connection.close()
+
+    @staticmethod
+    def _release_actor(value: str) -> None:
+        if not isinstance(value, str) or not value.strip() or len(value) > 100:
+            raise AgentError(
+                "Release approver must be a nonblank string of at most 100 characters"
+            )
+
+    def _active_release(self, market: str) -> Any:
+        return self.db.execute(
+            "SELECT r.* FROM agent_observation_releases r WHERE market=? AND family_lineage_id=? "
+            "AND NOT EXISTS (SELECT 1 FROM agent_release_events e WHERE e.observation_release_id=r.observation_release_id)",
+            (market, FAMILY_LINEAGE_ID),
+        ).fetchone()
+
+    @staticmethod
+    def _release_report(row: Any) -> dict[str, Any]:
+        return {
+            **json.loads(row["payload_json"]),
+            **{
+                k: row[k]
+                for k in ("observation_release_id", "approved_by", "approved_at")
+            },
+        }
+
+    def register_observation_release(
+        self, market: str = "KRX", *, approved_by: str, revision: int | None = None
+    ) -> dict[str, Any]:
+        self._release_actor(approved_by)
+        with self.store.transaction():
+            self._migrate_registry()
+            champion = self._registry_current(market)
+            if revision is not None and (
+                champion is None or revision != champion["revision"]
+            ):
+                raise AgentError(
+                    "Observation release must target the current registry champion"
+                )
+            if champion is None or champion["evidence_grade"] not in {"E2", "E3"}:
+                raise AgentError("Observation release requires E2 or stronger evidence")
+            active = self._active_release(market)
+            if active:
+                if active["champion_revision"] == champion["revision"]:
+                    return self._release_report(active)
+                raise AgentError(
+                    "Active observation release exists; stop it before registering another"
+                )
+            cycle = self.db.execute(
+                "SELECT * FROM agent_cycles WHERE id=?", (champion["source_cycle_id"],)
+            ).fetchone()
+            if cycle is None:
+                raise AgentError("Observation release requires source cycle evidence")
+            evidence = json.loads(cycle["evidence_json"] or "{}")
+            contract_id = (
+                evidence.get("holdout", {})
+                .get("candidate", {})
+                .get("evaluation_contract_id")
+            )
+            if not contract_id:
+                raise AgentError(
+                    "Observation release requires final candidate evaluation contract ID"
+                )
+            policy = policy_from_dict(json.loads(cycle["manifest_json"])["policy"])
+            selection = policy.logic.selection
+            payload = {
+                "champion_key": {
+                    "market": market,
+                    "family_lineage_id": FAMILY_LINEAGE_ID,
+                },
+                "champion_revision": champion["revision"],
+                "spec": json.loads(champion["spec_json"]),
+                "spec_version": champion["spec_version"],
+                "evidence_grade": champion["evidence_grade"],
+                "source_cycle_id": champion["source_cycle_id"],
+                "commitment_id": champion["commitment_id"],
+                "selector_policy_id": digest(selection),
+                "cost_model_id": digest(policy.logic.costs),
+                "risk_limits_id": digest(
+                    {
+                        **{
+                            k: getattr(selection, k)
+                            for k in (
+                                "capital_limit",
+                                "max_gross",
+                                "max_position",
+                                "max_order_notional",
+                            )
+                        },
+                        "max_drawdown": policy.logic.evaluation.max_drawdown,
+                    }
+                ),
+                "evaluation_contract_id": contract_id,
+                "starting_portfolio": {
+                    "kind": "cash_only",
+                    "capital": str(selection.capital_limit),
+                },
+                "data_exposure": {
+                    "through": self.db.execute(
+                        "SELECT max(end) FROM agent_intervals WHERE market=?", (market,)
+                    ).fetchone()[0]
+                },
+                "stop_conditions": ["DEMOTION_CANDIDATE", "DATA_FAILURE", "HUMAN"],
+                "order_authority": False,
+            }
+            approved_at = aware(self.clock()).isoformat()
+            release_id = digest(
+                {**payload, "approved_by": approved_by, "approved_at": approved_at}
+            )
+            self.db.execute(
+                "INSERT INTO agent_observation_releases VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    release_id,
+                    market,
+                    FAMILY_LINEAGE_ID,
+                    champion["revision"],
+                    champion["spec_version"],
+                    champion["evidence_grade"],
+                    champion["source_cycle_id"],
+                    canonical(payload),
+                    approved_by,
+                    approved_at,
+                    0,
+                ),
+            )
+            return self._release_report(self._active_release(market))
+
+    def stop_observation_release(
+        self,
+        release_id: str,
+        *,
+        reason: str = "HUMAN",
+        stopped_by: str,
+        detail: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        self._release_actor(stopped_by)
+        if reason not in {"DEMOTION_CANDIDATE", "DATA_FAILURE", "HUMAN"}:
+            raise AgentError("Invalid observation release stop reason")
+        with self.store.transaction():
+            row = self.db.execute(
+                "SELECT * FROM agent_observation_releases r WHERE observation_release_id=? "
+                "AND NOT EXISTS (SELECT 1 FROM agent_release_events e WHERE e.observation_release_id=r.observation_release_id)",
+                (release_id,),
+            ).fetchone()
+            if row is None:
+                raise AgentError("Observation release is not active")
+            event = {
+                "observation_release_id": release_id,
+                "event": "STOPPED",
+                "reason": reason,
+                "detail": detail or {},
+                "recorded_by": stopped_by,
+                "recorded_at": aware(self.clock()).isoformat(),
+            }
+            event["event_id"] = digest(event)
+            self.db.execute(
+                "INSERT INTO agent_release_events VALUES(?,?,?,?,?,?,?)",
+                (
+                    event["event_id"],
+                    release_id,
+                    "STOPPED",
+                    reason,
+                    canonical(event["detail"]),
+                    stopped_by,
+                    event["recorded_at"],
+                ),
+            )
+            return event
+
+    def _release_status(self, market: str) -> dict[str, Any]:
+        active = self._active_release(market)
+        summary = None
+        if active:
+            summary = {
+                k: active[k]
+                for k in (
+                    "observation_release_id",
+                    "champion_revision",
+                    "evidence_grade",
+                    "approved_by",
+                    "approved_at",
+                )
+            }
+            summary["behind_registry"] = (
+                self._registry_current(market)["revision"] > active["champion_revision"]
+            )
+        last = self.db.execute(
+            "SELECT e.* FROM agent_release_events e JOIN agent_observation_releases r USING(observation_release_id) "
+            "WHERE r.market=? AND r.family_lineage_id=? ORDER BY e.rowid DESC LIMIT 1",
+            (market, FAMILY_LINEAGE_ID),
+        ).fetchone()
+        event = dict(last) if last else None
+        if event:
+            event["detail"] = json.loads(event.pop("detail_json"))
+        return {"observation_release": summary, "last_release_event": event}
+
+    def _automatic_release_stop(
+        self,
+        market: str,
+        observation: dict[str, Any] | None,
+        checkpoints: dict[str, Any] | None,
+    ) -> list[dict[str, Any]]:
+        active = self._active_release(market)
+        if active is None:
+            return []
+        failure = (
+            observation
+            if observation and observation.get("status") == "unavailable"
+            else checkpoints
+            if checkpoints and checkpoints.get("error")
+            else None
+        )
+        if failure:
+            return [
+                self.stop_observation_release(
+                    active["observation_release_id"],
+                    reason="DATA_FAILURE",
+                    stopped_by="agent",
+                    detail={
+                        "error_type": failure.get("error_type", "AgentError"),
+                        "error": failure["error"],
+                    },
+                )
+            ]
+        # Read the revision from storage: sealed public reports intentionally omit it.
+        checkpoint = self.db.execute(
+            "SELECT * FROM agent_observation_checkpoints WHERE stream=? ORDER BY seq DESC LIMIT 1",
+            (self._observation_stream(market),),
+        ).fetchone()
+        if (
+            checkpoint
+            and checkpoint["state"] == "DEMOTION_CANDIDATE"
+            and checkpoint["revision"] == active["champion_revision"]
+        ):
+            detail = {k: checkpoint[k] for k in ("seq", "window_start", "window_end")}
+            return [
+                self.stop_observation_release(
+                    active["observation_release_id"],
+                    reason="DEMOTION_CANDIDATE",
+                    stopped_by="agent",
+                    detail=detail,
+                )
+            ]
+        return []
 
     def _registry_current(self, market: str) -> Any:
         return self.db.execute(
@@ -697,6 +951,7 @@ class ResearchAgent:
                 "evidence_grade": registry["evidence_grade"] if registry else None,
             },
             "observation_state": self._latest_checkpoint(policy.market),
+            **self._release_status(policy.market),
             "cohorts": [
                 {
                     key: cohort[key]
@@ -1270,8 +1525,12 @@ class ResearchAgent:
                 observation_checkpoints = self._isolated_checkpoints(
                     name, data, policy, observation
                 )
+        release_events = self._automatic_release_stop(
+            policy.market, observation, observation_checkpoints
+        )
         return {
             "study": name,
+            "release_events": release_events,
             "cycles": completed,
             **({"committed_cycle": committed_cycle} if committed_cycle else {}),
             "shadow": shadow,
@@ -1916,10 +2175,11 @@ class ResearchAgent:
                 previous = payload
         except (AgentError, SpecUndefinedError) as exc:
             error = str(exc)
+            error_type = type(exc).__name__
         return {
             "stored": stored,
             "latest": self._latest_checkpoint(policy.market),
-            **({"error": error} if error else {}),
+            **({"error": error, "error_type": error_type} if error else {}),
         }
 
     def _isolated_observation(
