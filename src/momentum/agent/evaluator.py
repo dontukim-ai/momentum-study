@@ -13,6 +13,7 @@ from datetime import date, datetime
 from decimal import ROUND_CEILING, ROUND_HALF_UP
 from decimal import Decimal as D
 from functools import lru_cache
+from itertools import pairwise
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -414,6 +415,25 @@ class CommonEvaluator:
     ) -> EvaluationResult:
         return self._evaluate(data, spec, start, end, stress=stress)
 
+    def evaluate_schedule(
+        self,
+        data: ResearchInput,
+        schedule: list[tuple[date, RankedStrategy]],
+        start: date,
+        end: date,
+        *,
+        stress: bool = False,
+    ) -> EvaluationResult:
+        if (
+            not schedule
+            or schedule[0][0] > start
+            or any(a[0] > b[0] for a, b in pairwise(schedule))
+        ):
+            raise AgentError("Schedule requires ordered entries beginning by start")
+        return self._evaluate(
+            data, schedule[0][1], start, end, stress=stress, schedule=schedule
+        )
+
     def evaluate_benchmark(
         self,
         data: ResearchInput,
@@ -440,6 +460,7 @@ class CommonEvaluator:
         *,
         stress: bool,
         benchmark: str | None = None,
+        schedule: list[tuple[date, RankedStrategy]] | None = None,
     ) -> EvaluationResult:
         p = self.policy
         quantum = D(p.money_quantum)
@@ -516,8 +537,17 @@ class CommonEvaluator:
         daily: list[float] = []
         prior, peak, drawdown = capital, capital, D(0)
         fees, turnover = D(0), D(0)
+        boundaries: list[dict[str, Any]] = []
+        active_version: str | None = None
         for i in selected:
             day, prior_day = data.sessions[i], data.sessions[i - 1]
+            if schedule is not None:
+                spec = next(
+                    s for effective, s in reversed(schedule) if effective <= day
+                )
+            changed = active_version is not None and active_version != spec.version
+            active_version = spec.version
+            fees_before = fees
             at = session_time(prior_day, 16)
             view = data.snapshot.view(at, prior_day, allow_missing=True)
             required = max(
@@ -727,9 +757,22 @@ class CommonEvaluator:
                     ),
                 }
             )
+            if changed:
+                boundaries.append(
+                    {
+                        "session": day.isoformat(),
+                        "spec_version": spec.version,
+                        "nav_before": str(prior),
+                        "nav_after": str(equity),
+                        "fees": str(fees - fees_before),
+                    }
+                )
             prior = equity
         if any(not math.isfinite(r) for r in daily):
             raise AgentError("Nonfinite evaluation result")
+        diagnostics = portfolio_diagnostics(curve, benchmark=benchmark)
+        if schedule is not None:
+            diagnostics["schedule"] = {"revision_boundaries": boundaries}
         return EvaluationResult(
             benchmark_version(benchmark, p.market_etf_symbol)
             if benchmark
@@ -750,6 +793,7 @@ class CommonEvaluator:
                     "data": data.fingerprint(end),
                     "policy": p,
                     "spec": {"benchmark": benchmark} if benchmark else spec,
+                    **({"schedule": schedule} if schedule is not None else {}),
                     "start": start,
                     "end": end,
                     "stress": stress,
@@ -760,5 +804,5 @@ class CommonEvaluator:
             float(turnover / (sum((D(r["equity"]) for r in curve), D(0)) / len(curve))),
             contract.contract_id,
             contract.to_dict(),
-            portfolio_diagnostics(curve, benchmark=benchmark),
+            diagnostics,
         )
