@@ -258,6 +258,16 @@ fill_ratio = Σ(|filled_qty| × reference_price) / Σ(|desired_qty| × reference
 | INSUFFICIENT_EVIDENCE | 신뢰구간 하한 ≤ 0 또는 관측 수 부족 | 새 데이터 대기. 길이·블록을 바꿔 재검정 금지 |
 | TRACKING_DEGRADED | 관찰 열화 상태 진입 | 해제 후에만 국면·비용·데이터 변화 조사 입력 |
 
+### 현재 구현 (LOOP-08a)
+
+합성 회귀 범위에서 `agent_failure_snapshots`와 `agent_memory_releases`를 추가 전용으로 구현했다. 개발 실패(DATA_DEFECT·DEV_RISK·DEV_NO_IMPROVEMENT)는 commitment 저장 트랜잭션에서 봉인·해제(`development_sealed`)한다. 최종 실패(FINAL_UNDERPERFORM·INSUFFICIENT_EVIDENCE)는 COMPLETE 결정 트랜잭션에서만 봉인·해제(`final_decision_confirmed`)한다. ABANDONED에는 최종 snapshot을 만들지 않는다. 위 ABANDONED 부분 결과 봉인은 향후 계약이며 현재 구현 범위가 아니다.
+
+개발 시점에는 최종 입력 fingerprint를 포함한 cycle ID가 아직 존재하지 않으므로 개발 snapshot의 `source_cycle_id`는 commitment ID다. 이후 `agent_cycles.manifest_json.commitment_id`로 연결한다. 최종·관찰 snapshot은 cycle ID를 사용한다. 구간·마지막 반영 세션·payload 해시·봉인 시각을 저장하고, payload는 관련 trial·gate·집계 지표로 제한한다. 원시 일별 수익률은 복사하지 않는다.
+
+관찰 실패(TRACKING_DEGRADED)는 `observations == policy.shadow_sessions`인 완결 shadow만 봉인·해제(`observation_window_closed`)한다. 부분 shadow는 열화가 있어도 해제하지 않는다. `agent_shadow` 갱신은 이미 봉인된 snapshot을 변경하지 않는다. 현재 고정 길이 shadow는 한 완결 구간만 만들며, 연속 관찰 checkpoint는 후속 범위다.
+
+`development_memory(market="KRX")`는 해제 기록과 결합된 snapshot만 삽입 순서(SQLite rowid)로 반환한다. `eligible_for_proposer=True`와 최종·관찰의 `consumed_windows`를 포함하며 개발 기억의 소비 구간은 빈 목록이다. commitment의 `proposer_inputs`는 같은 트랜잭션에서 새 개발 snapshot 봉인 전에 보이던 snapshot ID 목록이다. grid 제안기는 아직 기억을 사용하지 않는다. `status(name).memory`는 연구별 snapshot·해제 수와 코드별 개수를 보고한다. 기억을 쓰는 제안(RES-04/05), 검증 cohort 봉인(LOOP-09), 실데이터 검증은 미구현이다.
+
 ## 10. 관찰 원장과 열화 정책 — S4 (LOOP-05)
 
 ### 실험 원장과 관찰 원장의 분리
