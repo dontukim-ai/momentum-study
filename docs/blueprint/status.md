@@ -24,7 +24,7 @@
 | S1 후보 생성 | 부분 | KRX 필터·3가지 ranking·고정 grid 제안 | 시장 추상화·전략군 레지스트리·결정 주기 파라미터·가설형 제안·실패 기억 활용 없음(해제 기록은 LOOP-08a 합성 회귀 구현) | LOOP-01, LOOP-02, LOOP-08, RES-04, RES-05 |
 | S2 동일 조건 평가 | 부분 | 공통 평가기·원장·비용 스트레스 | 평가 계약 ID·동일 조건 검사·거래 가능성 지표 구현(합성 회귀). 현금/적격 동일 비중 보고 구현. 기준 전략 gate·capacity는 후속 | LOOP-03, RES-01, FIN-01~04 |
 | S3 독립 검증 | 부분 | 개발 종료 시 후보 사전 고정·구간 예약·시장 단위 소비·승격 조건 10개·E1/E2 기록(RES-03a 합성 회귀), kind 분리·고정 트랜잭션의 ValidationCohort 등록(LOOP-09a 합성 회귀) | 외부에서 확인 가능한 고정 시각(별도 저장소·서명)은 미구현. 시장·전략군 예산 원장 구현(LOOP-02a 합성 회귀), 명시적 할당은 미구현. opt-in 통계 v2와 합성 진단 도구 구현; 실제 오류율·개발 블록 선정 근거는 후속 | RES-02, RES-03, LOOP-07 |
-| S4 갱신·추적 | 부분 | 시장·전략군 champion 레지스트리·신규 연구 동기화·legacy 이행(LOOP-04a 합성 회귀), 유지·20세션 shadow, 연속 관찰 원장(LOOP-05a 보고 전용·미저장), 관찰 노출 기록·다음 미고정 최종 구간 앞 상한·cohort 봉인 표시(LOOP-09a 합성 회귀 범위 구현) | 관찰 checkpoint 저장·열화 상태 전이(LOOP-05b), ObservationRelease(LOOP-06), 다중 challenger cohort(자기 개선 §6)는 미구현 | LOOP-04~06, LOOP-09, OPS-05, OPS-06 |
+| S4 갱신·추적 | 부분 | 시장·전략군 champion 레지스트리·신규 연구 동기화·legacy 이행(LOOP-04a 합성 회귀), 유지·20세션 shadow, 연속 관찰 원장(LOOP-05a 조회는 미저장), checkpoint 저장·사전 등록 열화 상태·cohort 봉인/기억 연동(LOOP-05b 합성 회귀 범위 구현), 관찰 노출 기록·다음 미고정 최종 구간 앞 상한·cohort 봉인 표시(LOOP-09a 합성 회귀 범위 구현) | 강등 실행·알림·ObservationRelease(LOOP-06), 다중 challenger cohort(자기 개선 §6)는 미구현 | LOOP-04~06, LOOP-09, OPS-05, OPS-06 |
 
 상태는 **완료 / 부분 / 미착수 / 보류**다. '완료'는 해당 코드·시험 범위에 한정하며 실거래 준비 완료를 뜻하지 않는다. 전체 완성률 숫자는 데이터·코드·운영을 혼합하므로 사용하지 않는다.
 
@@ -81,10 +81,10 @@ RES-03a는 공개 거래일 `calendar`와 관측 `sessions`를 분리하고, 개
 | 코드 자동 수정·자동 배포 | 현재 범위 밖 | 별도 격리·회귀·연구 버전 통제가 필요 |
 | MarketProfile·전략군 레지스트리·예산 계정 | 부분 | LOOP-02a: `(market, family_lineage_id)` 예산 계정과 reserve/consume 추가 전용 원장, 이름 변경·실패·폐기 후 소비 유지, 기존 DB 역채움을 합성 회귀 범위에서 구현. 명시적 할당·독립 연구군·family_version·MarketProfile·전략군 레지스트리는 미구현. 실데이터 검증 미완료 |
 | 평가 계약 ID·거래 가능성 지표 | 부분 | C1/C2: 수량 단계·reference_price 지표·turnover·평가 계약 ID와 개발/최종 동일 조건 검사 구현(합성 회귀). decision_cadence 후보 변수·capacity는 후속. LOOP-03 |
-| `(market, family)` champion·관찰 원장·열화 상태 | 부분: LOOP-04a 레지스트리 합성 회귀 구현. LOOP-05a 연속 관찰 원장(보고 전용·미저장) 합성 회귀 구현. LOOP-09a kind 분리·cohort 봉인 표시·관찰 노출 기록 합성 회귀 구현. 관찰 checkpoint 저장·열화 상태(LOOP-05b)·ObservationRelease(LOOP-06)·다중 challenger cohort 미구현, 실데이터 검증 미완료 | LOOP-04, LOOP-05 |
+| `(market, family)` champion·관찰 원장·열화 상태 | 부분: LOOP-04a 레지스트리 합성 회귀 구현. LOOP-05a 연속 관찰 원장(조회는 미저장)과 LOOP-05b checkpoint 저장·사전 등록 열화 상태·봉인/기억 연동 합성 회귀 범위 구현. LOOP-09a kind 분리·cohort 봉인 표시·관찰 노출 기록 합성 회귀 구현. 강등 실행·알림·ObservationRelease(LOOP-06)·다중 challenger cohort 미구현, 실데이터 검증 미완료 | LOOP-04, LOOP-05 |
 | ObservationRelease·ExecutionRelease | 미착수 | LOOP-06, 주문 구현과 별개 |
 | 통계 정책 v2 | 부분 | C4: opt-in 단측 v2·min_tail_draws=50·증거 metadata·오프라인 진단 구현(합성 회귀). 기본 v1의 CI 비트 결과 유지. 오류율 보장·실데이터 블록 선정·전략군 예산은 미완료. LOOP-07 |
-| 실패 기억 개발 해제 | 부분 | LOOP-08a: 개발·최종·완결 shadow 실패 snapshot, 추가 전용 해제 기록, 해제된 기억 조회와 commitment의 `proposer_inputs`를 합성 회귀 범위에서 구현. LOOP-09a 관찰 cohort 봉인 표시와 제안기 비공개 합성 회귀 구현. 기억을 쓰는 제안(RES-04/05)·관찰 checkpoint 저장은 미구현. 실데이터 검증 미완료 |
+| 실패 기억 개발 해제 | 부분 | LOOP-08a: 개발·최종·완결 shadow 실패 snapshot, 추가 전용 해제 기록, 해제된 기억 조회와 commitment의 `proposer_inputs`를 합성 회귀 범위에서 구현. LOOP-09a 관찰 cohort 봉인 표시와 제안기 비공개 합성 회귀 구현. LOOP-05b 관찰 checkpoint·봉인 해제 후 기억 연결을 합성 회귀 범위에서 구현. 기억을 쓰는 제안(RES-04/05)은 미구현. 실데이터 검증 미완료 |
 | 구간 예약·동시 사용 정책 | 부분 | LOOP-09a: kind 분리·추가 전용 cohort·관찰 노출 기록·미고정 구간 앞 상한·봉인 표시를 합성 회귀 범위에서 구현. shadow는 최종 검증과 배타이나 관찰 노출과 겹침 허용. 다중 challenger cohort·ObservationRelease·실데이터 검증은 미완료 |
 | 미국 H1~H4 개발·연구 실행 | **보류** | 사용자 명시 재개 전 진행하지 않음 |
 
@@ -171,3 +171,10 @@ ETF 보고 검증: pytest **271 passed, 1 deselected**(신규 14), KIS **122 OK*
 `agent_budget_accounts`·`agent_budget_entries`로 시장·전략군 예산을 공유한다. [신규 회귀](../../tests/unit/test_agent_budget.py) 12개는 이름 변경·완료/cache/recover·예산 소진 시 등록 롤백·정책 예산 불일치 거부·실패/폐기 소비 유지·claim 실패 시 예약 롤백·5개 상태의 기존 DB 멱등 역채움·첫 등록의 할당 확정·EVALUATED 복구를 고정한다. 기존 회귀·통계·미국 코드·KIS 앱은 변경하지 않았다. 명시적 할당·독립 연구군·family_version과 실데이터 검증은 후속이다.
 
 LOOP-02a 최종 검증(합성·오프라인): `uv run pytest -q` **269 passed, 1 deselected**(신규 12); `uv run mypy src` **33개 소스 통과**; `uv run ruff check` **All checks passed**; KIS unittest **122개 OK**. `UV_CACHE_DIR=/tmp/momentum-uv-cache`, `UV_OFFLINE=1`로 실행했다. 실데이터 검증이나 미국 가설 연구 재개를 뜻하지 않는다.
+
+
+## 12. LOOP-05b 관찰 checkpoint·사전 등록 열화 상태
+
+[신규 합성 회귀](../../tests/unit/test_agent_degradation.py) 22개는 정책 기본값·기존 JSON·거부 조건, 완결 창 경계·멱등·조회 무쓰기, 일별 NAV 창 계산, 임계·지속 열화·revision 초기화·강등 대상, 가격 수정 불변성, cohort 봉인·기억 해제, 강등 미실행과 노출 기록 실패 격리를 확인한다. `_shadow`와 TRACKING_DEGRADED는 변경하지 않았다. 강등 실행·알림·ObservationRelease(LOOP-06)와 실데이터 검증은 미구현이다.
+
+주관자 결정에 따라 checkpoint 보고는 최상위 `tick.observation_checkpoints`로 분리했다. `observation`은 LOOP-09a 및 직접 조회와의 동등성 계약을 유지하고, 관찰이 None/unavailable이면 checkpoint 보고도 None이다. 기존 테스트는 수정하지 않았다. 신규 회귀는 이 보고 위치와 관찰 부재·실패 시 무저장을 포함한다. `UV_CACHE_DIR=/tmp/momentum-uv-cache`, `UV_OFFLINE=1`에서 최종 전체 pytest **367 passed, 1 deselected**(신규 합성 회귀 22개 포함), mypy **33개 소스 통과**, ruff **All checks passed!**, KIS unittest **122개 OK**다. 기존 관찰·cohort 동등성 회귀와 `_shadow`·TRACKING_DEGRADED 회귀도 그대로 통과한다. 실데이터 검증 완료를 뜻하지 않는다.

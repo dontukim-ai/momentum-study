@@ -9,6 +9,7 @@ import statistics
 from collections.abc import Callable
 from dataclasses import asdict
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -134,6 +135,13 @@ CREATE TABLE IF NOT EXISTS agent_failure_snapshots (
 CREATE TABLE IF NOT EXISTS agent_memory_releases (
  snapshot_id TEXT PRIMARY KEY REFERENCES agent_failure_snapshots,
  released_at TEXT NOT NULL, rule TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS agent_observation_checkpoints (
+ checkpoint_id TEXT PRIMARY KEY, market TEXT NOT NULL, stream TEXT NOT NULL,
+ study TEXT NOT NULL, seq INTEGER NOT NULL, window_start TEXT NOT NULL,
+ window_end TEXT NOT NULL, revision INTEGER NOT NULL, spec_version TEXT NOT NULL,
+ state TEXT NOT NULL CHECK(state IN ('OBSERVING','WARNING','DEMOTION_CANDIDATE')),
+ sealed INTEGER NOT NULL, payload_json TEXT NOT NULL, result_hash TEXT NOT NULL,
+ input_hash TEXT NOT NULL, recorded_at TEXT NOT NULL, UNIQUE(stream, seq));
 CREATE TABLE IF NOT EXISTS agent_shadow (
  cycle_id TEXT PRIMARY KEY REFERENCES agent_cycles(id), end TEXT NOT NULL,
  input_hash TEXT NOT NULL, report_json TEXT NOT NULL, report_hash TEXT NOT NULL);
@@ -688,6 +696,7 @@ class ResearchAgent:
                 "current_spec_version": registry["spec_version"] if registry else None,
                 "evidence_grade": registry["evidence_grade"] if registry else None,
             },
+            "observation_state": self._latest_checkpoint(policy.market),
             "cohorts": [
                 {
                     key: cohort[key]
@@ -1236,6 +1245,7 @@ class ResearchAgent:
             "SELECT count(*) FROM agent_cycles WHERE study=?", (name,)
         ).fetchone()[0]
         observation = self._isolated_observation(name, data)
+        observation_checkpoints = None
         if observation is not None and observation["status"] == "ok":
             try:
                 with self.store.transaction():
@@ -1251,12 +1261,22 @@ class ResearchAgent:
             except AgentError as exc:
                 observation["exposure_recorded"] = False
                 observation["exposure_error"] = str(exc)
+                observation_checkpoints = {
+                    "stored": 0,
+                    "latest": self._latest_checkpoint(policy.market),
+                    "error": str(exc),
+                }
+            else:
+                observation_checkpoints = self._isolated_checkpoints(
+                    name, data, policy, observation
+                )
         return {
             "study": name,
             "cycles": completed,
             **({"committed_cycle": committed_cycle} if committed_cycle else {}),
             "shadow": shadow,
             "observation": observation,
+            "observation_checkpoints": observation_checkpoints,
             "status": self.status(name),
             "waiting_for_data": next_plan["holdout_end"] >= len(data.sessions),
             "next_window_sessions_required": max(
@@ -1694,6 +1714,212 @@ class ResearchAgent:
             "status": "ABANDONED",
             "claims_preserved": True,
             "orders_submitted": 0,
+        }
+
+    def _checkpoint_sealed(self, market: str, start: str, end: str) -> bool:
+        stream = self._observation_stream(market)
+        return any(
+            cohort["sealed"]
+            and stream in json.loads(cohort["observation_streams_json"])
+            and cohort["start"] <= end
+            and cohort["end"] >= start
+            for cohort in self._cohorts(market)
+        )
+
+    def _latest_checkpoint(self, market: str) -> dict[str, Any] | None:
+        row = self.db.execute(
+            "SELECT * FROM agent_observation_checkpoints WHERE stream=? ORDER BY seq DESC LIMIT 1",
+            (self._observation_stream(market),),
+        ).fetchone()
+        if row is None:
+            return None
+        # The stored flag records sealing at insertion. Disclosure and memory
+        # permission follow the current cohort decisions without updating it.
+        sealed = self._checkpoint_sealed(market, row["window_start"], row["window_end"])
+        report = {
+            key: row[key] for key in ("seq", "window_start", "window_end", "state")
+        }
+        report["sealed"] = sealed
+        if not sealed:
+            report.update(json.loads(row["payload_json"]))
+        return report
+
+    @staticmethod
+    def _checkpoint_window(
+        result: EvaluationResult, offset: int, count: int, capital: Decimal
+    ) -> tuple[float, float]:
+        curve = result.equity_curve
+        base = Decimal(curve[offset - 1]["equity"]) if offset else capital
+        peak, drawdown = base, Decimal(0)
+        for row in curve[offset : offset + count]:
+            nav = Decimal(row["equity"])
+            peak = max(peak, nav)
+            drawdown = max(drawdown, 1 - nav / peak)
+        return float(Decimal(curve[offset + count - 1]["equity"]) / base - 1), float(
+            drawdown
+        )
+
+    def _isolated_checkpoints(
+        self,
+        name: str,
+        data: ResearchInput,
+        policy: AgentPolicy,
+        observation: dict[str, Any],
+    ) -> dict[str, Any]:
+        stored = 0
+        error = None
+        try:
+            start = date.fromisoformat(observation["start"])
+            days = [
+                d
+                for d in data.sessions
+                if start <= d <= date.fromisoformat(observation["end"])
+            ]
+            entries = observation["schedule"]
+            registry = {
+                row["revision"]: dict(row)
+                for row in self.db.execute(
+                    "SELECT * FROM agent_champion_registry WHERE market=? AND family_lineage_id=?",
+                    (policy.market, FAMILY_LINEAGE_ID),
+                )
+            }
+            schedule = [
+                (
+                    date.fromisoformat(entry["effective_from"]),
+                    ranked_spec(json.loads(registry[entry["revision"]]["spec_json"])),
+                )
+                for entry in entries
+            ]
+            stream = self._observation_stream(policy.market)
+            size = policy.observation_checkpoint_sessions
+            previous: dict[str, Any] | None = None
+            evaluator = CommonEvaluator(policy)
+            for seq in range(len(days) // size):
+                offset = seq * size
+                window_start, end = days[offset], days[offset + size - 1]
+                # Restart from the observation origin, not from a fresh wallet
+                # at each window: holdings and revision-switch costs carry over.
+                frozen = data.prefix(end)
+                result = evaluator.evaluate_schedule(frozen, schedule, start, end)
+                reference = evaluator.evaluate_benchmark(
+                    frozen, policy.degradation_reference, start, end
+                )
+                require_same_contract(result, reference)
+                capital = policy.logic.selection.capital_limit
+                net, drawdown = self._checkpoint_window(result, offset, size, capital)
+                reference_net, _ = self._checkpoint_window(
+                    reference, offset, size, capital
+                )
+                active = next(
+                    e
+                    for e in reversed(entries)
+                    if e["effective_from"] <= end.isoformat()
+                )
+                revision = active["revision"]
+                limit = policy.degradation_drawdown
+                if limit is None:
+                    limit = policy.logic.evaluation.max_drawdown
+                difference = net - reference_net
+                breach = (
+                    drawdown > limit
+                    or difference < -policy.degradation_underperformance
+                )
+                consecutive = 0
+                if breach:
+                    consecutive = 1
+                    if (
+                        previous
+                        and previous["revision"] == revision
+                        and previous["breach"]
+                    ):
+                        consecutive += previous["consecutive_breaches"]
+                state = "OBSERVING"
+                if breach:
+                    state = (
+                        "DEMOTION_CANDIDATE"
+                        if consecutive >= policy.demotion_checkpoints
+                        else "WARNING"
+                    )
+                older = [r for r in registry if r < revision]
+                target = registry[max(older)] if older else None
+                payload = {
+                    "window_start": window_start.isoformat(),
+                    "window_end": end.isoformat(),
+                    "revision": revision,
+                    "spec_version": active["spec_version"],
+                    "window_return": net,
+                    "window_drawdown": drawdown,
+                    "reference": policy.degradation_reference,
+                    "reference_return": reference_net,
+                    "difference": difference,
+                    "drawdown_limit": limit,
+                    "underperformance_threshold": policy.degradation_underperformance,
+                    "demotion_checkpoints": policy.demotion_checkpoints,
+                    "breach": breach,
+                    "consecutive_breaches": consecutive,
+                    "demotion_target": {
+                        key: target[key] for key in ("revision", "spec_version")
+                    }
+                    if target
+                    else None,
+                }
+                input_hash, result_hash = data.fingerprint(end), digest(payload)
+                checkpoint_id = digest(
+                    {"stream": stream, "seq": seq, "result_hash": result_hash}
+                )
+                sealed = self._checkpoint_sealed(
+                    policy.market, window_start.isoformat(), end.isoformat()
+                )
+                with self.store.transaction():
+                    existing = self.db.execute(
+                        "SELECT * FROM agent_observation_checkpoints WHERE stream=? AND seq=?",
+                        (stream, seq),
+                    ).fetchone()
+                    if existing:
+                        if (
+                            existing["input_hash"] != input_hash
+                            or existing["result_hash"] != result_hash
+                        ):
+                            raise AgentError("Stored observation checkpoint changed")
+                    else:
+                        self.db.execute(
+                            "INSERT INTO agent_observation_checkpoints VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                            (
+                                checkpoint_id,
+                                policy.market,
+                                stream,
+                                name,
+                                seq,
+                                window_start.isoformat(),
+                                end.isoformat(),
+                                revision,
+                                active["spec_version"],
+                                state,
+                                int(sealed),
+                                canonical(payload),
+                                result_hash,
+                                input_hash,
+                                aware(self.clock()).isoformat(),
+                            ),
+                        )
+                    if breach and not sealed:
+                        self._seal_memory(
+                            existing["study"] if existing else name,
+                            checkpoint_id,
+                            "observation",
+                            "TRACKING_" + state,
+                            window_start.isoformat(),
+                            end.isoformat(),
+                            payload,
+                        )
+                stored += int(existing is None)
+                previous = payload
+        except (AgentError, SpecUndefinedError) as exc:
+            error = str(exc)
+        return {
+            "stored": stored,
+            "latest": self._latest_checkpoint(policy.market),
+            **({"error": error} if error else {}),
         }
 
     def _isolated_observation(
