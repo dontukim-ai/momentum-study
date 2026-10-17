@@ -8,7 +8,7 @@ import sqlite3
 import statistics
 from collections.abc import Callable
 from dataclasses import asdict
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -82,6 +82,8 @@ def benchmark_report(
 
 
 FAMILY_LINEAGE_ID = "ranked-momentum"
+EXCLUSIVE_KINDS = {"holdout", "shadow", "final_validation"}
+FINAL_KINDS = EXCLUSIVE_KINDS - {"shadow"}
 
 
 SCHEMA = """
@@ -108,6 +110,11 @@ CREATE TABLE IF NOT EXISTS agent_studies (
 CREATE TABLE IF NOT EXISTS agent_commitments (
  commitment_id TEXT PRIMARY KEY, study TEXT NOT NULL, ordinal INTEGER NOT NULL,
  payload_json TEXT NOT NULL, committed_at TEXT NOT NULL, UNIQUE(study, ordinal));
+CREATE TABLE IF NOT EXISTS agent_cohorts (
+ cohort_id TEXT PRIMARY KEY, market TEXT NOT NULL, start TEXT NOT NULL, end TEXT NOT NULL,
+ commitment_id TEXT NOT NULL UNIQUE, baseline_version TEXT NOT NULL,
+ observation_streams_json TEXT NOT NULL, registered_at TEXT NOT NULL,
+ first_execution_at TEXT NOT NULL, registered_before_start INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS agent_cycles (
  id TEXT PRIMARY KEY, study TEXT NOT NULL REFERENCES agent_studies(name), ordinal INTEGER NOT NULL,
  status TEXT NOT NULL, manifest_json TEXT NOT NULL, evidence_json TEXT, evidence_hash TEXT, result_json TEXT,
@@ -681,6 +688,20 @@ class ResearchAgent:
                 "current_spec_version": registry["spec_version"] if registry else None,
                 "evidence_grade": registry["evidence_grade"] if registry else None,
             },
+            "cohorts": [
+                {
+                    key: cohort[key]
+                    for key in (
+                        "cohort_id",
+                        "start",
+                        "end",
+                        "registered_before_start",
+                        "sealed",
+                    )
+                }
+                for cohort in self._cohorts(policy.market)
+                if cohort["study"] == name
+            ],
             "memory": {
                 "snapshots": self.db.execute(
                     "SELECT count(*) FROM agent_failure_snapshots WHERE study=?",
@@ -757,6 +778,34 @@ class ResearchAgent:
             (end.isoformat(), data.fingerprint(end), name),
         )
 
+    @staticmethod
+    def _observation_stream(market: str) -> str:
+        return f"observation:{market}:{FAMILY_LINEAGE_ID}"
+
+    def _cohorts(self, market: str) -> list[dict[str, Any]]:
+        # Ownership moves to the cycle at evaluation registration; the cohort
+        # always retains its original, immutable commitment reference.
+        return [
+            {**dict(row), "sealed": row["status"] not in ("COMPLETE", "ABANDONED")}
+            for row in self.db.execute(
+                "SELECT h.*, c.study, c.ordinal, y.id AS cycle_id, y.status "
+                "FROM agent_cohorts h JOIN agent_commitments c USING(commitment_id) "
+                "LEFT JOIN agent_cycles y ON y.study=c.study AND y.ordinal=c.ordinal "
+                "WHERE h.market=? ORDER BY h.start,h.cohort_id",
+                (market,),
+            )
+        ]
+
+    def _cohort_covers(
+        self, market: str, owner: str, stream: str, start: str, end: str
+    ) -> bool:
+        return any(
+            owner in (cohort["commitment_id"], cohort["cycle_id"])
+            and cohort["start"] <= start <= end <= cohort["end"]
+            and stream in json.loads(cohort["observation_streams_json"])
+            for cohort in self._cohorts(market)
+        )
+
     def _claim(
         self,
         policy: AgentPolicy,
@@ -766,31 +815,89 @@ class ResearchAgent:
         kind: str,
         data: ResearchInput,
     ) -> None:
-        args = (policy.market, owner, start.isoformat(), end.isoformat())
-        if self.db.execute(
-            "SELECT 1 FROM agent_intervals WHERE market=? AND owner<>? AND NOT(end<? OR start>?)",
-            args,
-        ).fetchone():
-            raise AgentError("Evaluation interval overlaps consumed market evidence")
-        # Legacy KIS tables participate in the same transaction. This prevents
-        # switching to the old CLI or renaming the universe to reopen evidence.
-        if self.db.execute(
-            "SELECT 1 FROM holdouts WHERE run_id<>? AND NOT(end<? OR start>?)", args[1:]
-        ).fetchone():
-            raise AgentError(
-                "Evaluation interval overlaps consumed legacy KIS evidence"
+        if kind not in EXCLUSIVE_KINDS | {"observation_exposure"}:
+            raise AgentError("Unsupported evaluation interval kind")
+        existing = self.db.execute(
+            "SELECT start,end FROM agent_intervals WHERE market=? AND owner=? AND kind=?",
+            (policy.market, owner, kind),
+        ).fetchone()
+        # Validate the entire resulting observation interval, including gaps
+        # crossed by an extension. The stream's original start never moves.
+        extending_observation = kind == "observation_exposure" and existing is not None
+        claim_start = existing["start"] if extending_observation else start.isoformat()
+        claim_end = (
+            max(end.isoformat(), existing["end"])
+            if extending_observation
+            else end.isoformat()
+        )
+        args = (policy.market, owner, claim_start, claim_end)
+        overlaps = list(
+            self.db.execute(
+                "SELECT * FROM agent_intervals WHERE market=? AND owner<>? AND NOT(end<? OR start>?)",
+                args,
             )
+        )
+        if kind in EXCLUSIVE_KINDS:
+            if any(row["kind"] in EXCLUSIVE_KINDS for row in overlaps):
+                raise AgentError(
+                    "Evaluation interval overlaps consumed market evidence"
+                )
+            if kind in FINAL_KINDS and any(
+                row["kind"] == "observation_exposure" for row in overlaps
+            ):
+                # A newly registered cohort cannot retroactively legitimize
+                # observation already exposed before the final reservation.
+                raise AgentError(
+                    "Final validation window overlaps observation exposure without a registered cohort"
+                )
+        else:
+            for row in overlaps:
+                if row["kind"] in FINAL_KINDS and not self._cohort_covers(
+                    policy.market,
+                    row["owner"],
+                    owner,
+                    max(claim_start, row["start"]),
+                    min(claim_end, row["end"]),
+                ):
+                    raise AgentError(
+                        "Observation exposure overlaps final validation outside its cohort"
+                    )
+        # Legacy KIS mirrors final/shadow claims. Unmatched legacy evidence is
+        # still final consumption; only a matching shadow or cohort may permit
+        # an observation stream to overlap it.
+        legacy = self.db.execute(
+            "SELECT * FROM holdouts WHERE run_id<>? AND NOT(end<? OR start>?)", args[1:]
+        )
+        for row in legacy:
+            if kind in EXCLUSIVE_KINDS:
+                raise AgentError(
+                    "Evaluation interval overlaps consumed legacy KIS evidence"
+                )
+            overlap_start = max(claim_start, row["start"])
+            overlap_end = min(claim_end, row["end"])
+            shadow = self.db.execute(
+                "SELECT 1 FROM agent_intervals WHERE market=? AND owner=? AND kind='shadow' "
+                "AND start<=? AND end>=?",
+                (policy.market, row["run_id"], overlap_start, overlap_end),
+            ).fetchone()
+            if not shadow and not self._cohort_covers(
+                policy.market, row["run_id"], owner, overlap_start, overlap_end
+            ):
+                raise AgentError(
+                    "Observation exposure overlaps final validation outside its cohort"
+                )
         self.db.execute(
             "INSERT INTO agent_intervals VALUES(?,?,?,?,?) ON CONFLICT(market,owner,kind) DO UPDATE SET end=MAX(end,excluded.end)",
             (policy.market, start.isoformat(), end.isoformat(), owner, kind),
         )
-        self.db.executemany(
-            "INSERT OR IGNORE INTO holdouts VALUES(?,?,?,?)",
-            [
-                (s, start.isoformat(), end.isoformat(), owner)
-                for s in data.snapshot.symbols
-            ],
-        )
+        if kind in EXCLUSIVE_KINDS:
+            self.db.executemany(
+                "INSERT OR IGNORE INTO holdouts VALUES(?,?,?,?)",
+                [
+                    (symbol, start.isoformat(), end.isoformat(), owner)
+                    for symbol in data.snapshot.symbols
+                ],
+            )
 
     def _plan(
         self, data: ResearchInput, policy: AgentPolicy, previous: Any
@@ -942,6 +1049,33 @@ class ResearchAgent:
                             ordinal,
                             canonical(payload),
                             committed_at,
+                        ),
+                    )
+                    cohort = {
+                        "market": policy.market,
+                        "start": payload["holdout_start"],
+                        "end": payload["holdout_end"],
+                        "commitment_id": commitment_id,
+                        "baseline_version": champion.version,
+                        "observation_streams": [
+                            self._observation_stream(policy.market)
+                        ],
+                    }
+                    registered_at = aware(self.clock())
+                    first_execution_at = session_time(payload["holdout_start"], 9)
+                    self.db.execute(
+                        "INSERT INTO agent_cohorts VALUES(?,?,?,?,?,?,?,?,?,?)",
+                        (
+                            digest(cohort),
+                            policy.market,
+                            payload["holdout_start"].isoformat(),
+                            payload["holdout_end"].isoformat(),
+                            commitment_id,
+                            champion.version,
+                            canonical(cohort["observation_streams"]),
+                            registered_at.isoformat(),
+                            first_execution_at.isoformat(),
+                            int(registered_at < first_execution_at),
                         ),
                     )
                     self._seal_development(name, commitment_id, payload, policy)
@@ -1101,12 +1235,28 @@ class ResearchAgent:
         count = self.db.execute(
             "SELECT count(*) FROM agent_cycles WHERE study=?", (name,)
         ).fetchone()[0]
+        observation = self._isolated_observation(name, data)
+        if observation is not None and observation["status"] == "ok":
+            try:
+                with self.store.transaction():
+                    self._claim(
+                        policy,
+                        date.fromisoformat(observation["start"]),
+                        date.fromisoformat(observation["end"]),
+                        self._observation_stream(policy.market),
+                        "observation_exposure",
+                        data,
+                    )
+                observation["exposure_recorded"] = True
+            except AgentError as exc:
+                observation["exposure_recorded"] = False
+                observation["exposure_error"] = str(exc)
         return {
             "study": name,
             "cycles": completed,
             **({"committed_cycle": committed_cycle} if committed_cycle else {}),
             "shadow": shadow,
-            "observation": self._isolated_observation(name, data),
+            "observation": observation,
             "status": self.status(name),
             "waiting_for_data": next_plan["holdout_end"] >= len(data.sessions),
             "next_window_sessions_required": max(
@@ -1566,6 +1716,45 @@ class ResearchAgent:
                 "proposer_visible": False,
             }
 
+    def _observation_limit(
+        self, name: str, data: ResearchInput, policy: AgentPolicy
+    ) -> dict[str, Any]:
+        end = data.sessions[-1]
+        limit: dict[str, Any] = {
+            "end": end,
+            "reason": "data_end",
+            "next_holdout_start": None,
+        }
+        if self._budget(policy)["remaining"] <= 0:
+            return limit
+        previous = None
+        for ordinal in range(policy.max_validation_cycles):
+            cycle = self.db.execute(
+                "SELECT * FROM agent_cycles WHERE study=? AND ordinal=?",
+                (name, ordinal),
+            ).fetchone()
+            if cycle and cycle["status"] in ("COMPLETE", "ABANDONED"):
+                previous = cycle
+                continue
+            commitment = self.db.execute(
+                "SELECT payload_json FROM agent_commitments WHERE study=? AND ordinal=?",
+                (name, ordinal),
+            ).fetchone()
+            if commitment:
+                previous = {"manifest_json": commitment["payload_json"]}
+                continue
+            plan = self._plan(data, policy, previous)
+            if plan["holdout_start"] < len(data.calendar):
+                next_start = data.calendar[plan["holdout_start"]]
+                limit["next_holdout_start"] = next_start
+                if next_start <= end:
+                    limit.update(
+                        end=next_start - timedelta(days=1),
+                        reason="next_uncommitted_holdout",
+                    )
+            break
+        return limit
+
     def observation_ledger(
         self, name: str, data: ResearchInput
     ) -> dict[str, Any] | None:
@@ -1646,7 +1835,8 @@ class ResearchAgent:
                     "effective_from": effective.isoformat(),
                 }
             )
-        end = data.sessions[-1]
+        observation_limit = self._observation_limit(name, data, policy)
+        end = observation_limit["end"]
         if sum(start <= d <= end for d in data.sessions) < 2:
             return None
         # Revision zero is the baseline, including when another study already
@@ -1660,9 +1850,31 @@ class ResearchAgent:
         frozen = data.prefix(end)
         evaluator = CommonEvaluator(policy)
         result = evaluator.evaluate_schedule(frozen, schedule, start, end)
+        cohorts = [
+            {
+                key: cohort[key]
+                for key in ("cohort_id", "start", "end", "commitment_id", "sealed")
+            }
+            for cohort in self._cohorts(policy.market)
+            if cohort["start"] <= end.isoformat() and cohort["end"] >= start.isoformat()
+        ]
+        exposure = self.db.execute(
+            "SELECT 1 FROM agent_intervals WHERE market=? AND owner=? "
+            "AND kind='observation_exposure' AND start<=? AND end>=?",
+            (
+                policy.market,
+                self._observation_stream(policy.market),
+                start.isoformat(),
+                end.isoformat(),
+            ),
+        ).fetchone()
         report = {
             "kind": "CONTINUOUS_OBSERVATION_LEDGER",
             "status": "ok",
+            "observation_limit": observation_limit,
+            "cohorts": cohorts,
+            "sealed": any(cohort["sealed"] for cohort in cohorts),
+            "exposure_recorded": bool(exposure),
             "start": start,
             "end": end,
             "observations": len(result.daily_returns),
