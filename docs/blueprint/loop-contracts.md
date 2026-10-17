@@ -209,7 +209,11 @@ fill_ratio = Σ(|filled_qty| × reference_price) / Σ(|desired_qty| × reference
 | source_cycle_id, commitment_id | 근거 사이클과 고정 기록 |
 | previous_revision | 강등 시 돌아갈 revision |
 
-현재 `agent_studies.champion_json`/`revision`은 연구 단위다. 이전 경로: 기존 연구 하나를 `(KRX, ranked-momentum)` 키로 등록하고, 같은 키에 다른 연구가 champion을 쓰려면 같은 예산 계정에서 할당을 받게 한다.
+**현재 구현 (LOOP-04a, 합성 회귀 범위).** `agent_champion_registry`는 예산 계정과 같은 `(market, family_lineage_id)` 키의 추가 전용 이력이다. 최대 revision이 현재 champion이며 spec·버전·증거 등급·source cycle·commitment·이전 revision·연구·시각을 보존한다. 첫 commitment 트랜잭션에서 연구 champion을 revision 0으로 등록하고, 이후 고정은 연구 spec과 revision이 현재 레지스트리와 일치해야 한다. 승격은 manifest revision을 다시 검사한 같은 트랜잭션에서 새 행과 연구 상태를 기록하며 유지는 행을 추가하지 않는다.
+
+새 연구만 정책의 제안 공간·위험 한도와 호환되는 현재 registry champion 및 revision으로 초기화한다. 기존 연구는 자동 동기화하지 않고 불일치 시 고정을 거부한다. `champion_registry(market)`는 키별 오름차순 전체 이력과 현재 행을, `status`는 registry key·현재 revision·spec version·증거 등급을 제공한다.
+
+기존 DB는 첫 접근 시 과거 revision을 역채우지 않는다. 해당 키에 registry가 없고 COMPLETE 사이클이 있는 연구 중 현재 revision이 가장 큰 연구(동률이면 이름 오름차순)의 현재 champion을 그 revision 그대로 단 한 행, `evidence_grade='legacy'`로 기록한다. 이행은 멱등이며 과거 평가 증거를 새로 만들지 않는다. 실데이터 검증·연속 관찰 원장·열화 상태·Release는 이 구현 범위에 포함되지 않는다.
 
 ## 9. 실패 기억과 개발 해제 — S4 → S1 (LOOP-08, RES-04)
 
