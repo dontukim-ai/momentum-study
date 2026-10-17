@@ -268,9 +268,9 @@ fill_ratio = Σ(|filled_qty| × reference_price) / Σ(|desired_qty| × reference
 
 개발 시점에는 최종 입력 fingerprint를 포함한 cycle ID가 아직 존재하지 않으므로 개발 snapshot의 `source_cycle_id`는 commitment ID다. 이후 `agent_cycles.manifest_json.commitment_id`로 연결한다. 최종·관찰 snapshot은 cycle ID를 사용한다. 구간·마지막 반영 세션·payload 해시·봉인 시각을 저장하고, payload는 관련 trial·gate·집계 지표로 제한한다. 원시 일별 수익률은 복사하지 않는다.
 
-관찰 실패(TRACKING_DEGRADED)는 `observations == policy.shadow_sessions`인 완결 shadow만 봉인·해제(`observation_window_closed`)한다. 부분 shadow는 열화가 있어도 해제하지 않는다. `agent_shadow` 갱신은 이미 봉인된 snapshot을 변경하지 않는다. 현재 고정 길이 shadow는 한 완결 구간만 만들며, 연속 관찰 checkpoint는 후속 범위다.
+관찰 실패(TRACKING_DEGRADED)는 `observations == policy.shadow_sessions`인 완결 shadow만 봉인·해제(`observation_window_closed`)한다. 부분 shadow는 열화가 있어도 해제하지 않는다. `agent_shadow` 갱신은 이미 봉인된 snapshot을 변경하지 않는다. 현재 고정 길이 shadow는 한 완결 구간만 만들며, 연속 관찰 checkpoint는 LOOP-05b에서 별도 추가 전용 테이블과 실패 코드로 연결한다.
 
-`development_memory(market="KRX")`는 해제 기록과 결합된 snapshot만 삽입 순서(SQLite rowid)로 반환한다. `eligible_for_proposer=True`와 최종·관찰의 `consumed_windows`를 포함하며 개발 기억의 소비 구간은 빈 목록이다. commitment의 `proposer_inputs`는 같은 트랜잭션에서 새 개발 snapshot 봉인 전에 보이던 snapshot ID 목록이다. grid 제안기는 아직 기억을 사용하지 않는다. `status(name).memory`는 연구별 snapshot·해제 수와 코드별 개수를 보고한다. LOOP-09a는 관찰 cohort 봉인 표시와 제안기 비공개를 합성 회귀로 고정한다. 기억을 쓰는 제안(RES-04/05), 관찰 checkpoint 저장, 실데이터 검증은 미구현이다.
+`development_memory(market="KRX")`는 해제 기록과 결합된 snapshot만 삽입 순서(SQLite rowid)로 반환한다. `eligible_for_proposer=True`와 최종·관찰의 `consumed_windows`를 포함하며 개발 기억의 소비 구간은 빈 목록이다. commitment의 `proposer_inputs`는 같은 트랜잭션에서 새 개발 snapshot 봉인 전에 보이던 snapshot ID 목록이다. grid 제안기는 아직 기억을 사용하지 않는다. `status(name).memory`는 연구별 snapshot·해제 수와 코드별 개수를 보고한다. LOOP-09a는 관찰 cohort 봉인 표시와 제안기 비공개를 합성 회귀로 고정한다. 관찰 checkpoint 저장·봉인 해제 후 기억 연결은 LOOP-05b 합성 회귀 범위에서 구현했다. 기억을 쓰는 제안(RES-04/05)과 실데이터 검증은 미구현이다.
 
 ## 10. 관찰 원장과 열화 정책 — S4 (LOOP-05)
 
@@ -303,7 +303,15 @@ fill_ratio = Σ(|filled_qty| × reference_price) / Σ(|desired_qty| × reference
 - 열화 판정은 해제 규칙(§9)을 거쳐 S1의 실패 기억이 된다.
 - 관찰 원장이 쓰는 날짜와 다음 사이클의 최종 검증 구간이 겹치는 문제는 §12의 구간 예약 정책을 따른다.
 
-**현재 구현 (LOOP-05a).** `CommonEvaluator.evaluate_schedule`은 하나의 기존 Ledger와 체결 경로로 날짜별 spec을 선택하며 현금·보유·배당채권을 유지한다. `portfolio_diagnostics.schedule.revision_boundaries`는 변경 세션의 전일 종가 NAV·당일 종가 NAV·당일 수수료를 기록한다. `ResearchAgent.observation_ledger`와 `tick.observation`은 첫 COMPLETE 최종 검증 다음 calendar 세션부터 registry revision을 이어 계산하고 동일 계약의 현금·적격 동일 비중 기준과 비교한다. 시작 시 현금 초기화는 한 번뿐이다. 관찰 원장 계산은 미저장이며 실패 기억·제안기·예산·주문 권한에 연결하지 않는다. LOOP-09a에서 `tick`은 성공한 보고 구간의 노출만 별도 트랜잭션의 `_claim`으로 기록한다(§12). legacy 근거가 없으면 해당 legacy 연구의 마지막 COMPLETE 이후로 시작하며 과거 revision을 복원하지 않는다. 관찰 계산이 데이터 문제(`AgentError`, `SpecUndefinedError`)로 실패하면 `tick`은 멈추지 않고 `observation.status = "unavailable"`과 오류 종류·메시지를 보고한다. 연구 사이클의 등록·평가·champion 갱신은 그대로 진행된다. 그 밖의 예외(코드 결함)는 숨기지 않고 그대로 올린다. 기존 `_shadow`는 이 격리를 적용하지 않았다. 합성 회귀 범위에서 구현됐으며 관찰 checkpoint 저장·열화 상태(LOOP-05b)와 실데이터 검증은 미구현이다. §12의 단일 challenger cohort 동시 사용·봉인 표시는 LOOP-09a 합성 회귀 범위에서 구현했다.
+**현재 구현 (LOOP-05a).** `CommonEvaluator.evaluate_schedule`은 하나의 기존 Ledger와 체결 경로로 날짜별 spec을 선택하며 현금·보유·배당채권을 유지한다. `portfolio_diagnostics.schedule.revision_boundaries`는 변경 세션의 전일 종가 NAV·당일 종가 NAV·당일 수수료를 기록한다. `ResearchAgent.observation_ledger`와 `tick.observation`은 첫 COMPLETE 최종 검증 다음 calendar 세션부터 registry revision을 이어 계산하고 동일 계약의 현금·적격 동일 비중 기준과 비교한다. 시작 시 현금 초기화는 한 번뿐이다. 관찰 원장 계산은 미저장이며 실패 기억·제안기·예산·주문 권한에 연결하지 않는다. LOOP-09a에서 `tick`은 성공한 보고 구간의 노출만 별도 트랜잭션의 `_claim`으로 기록한다(§12). legacy 근거가 없으면 해당 legacy 연구의 마지막 COMPLETE 이후로 시작하며 과거 revision을 복원하지 않는다. 관찰 계산이 데이터 문제(`AgentError`, `SpecUndefinedError`)로 실패하면 `tick`은 멈추지 않고 `observation.status = "unavailable"`과 오류 종류·메시지를 보고한다. 연구 사이클의 등록·평가·champion 갱신은 그대로 진행된다. 그 밖의 예외(코드 결함)는 숨기지 않고 그대로 올린다. 기존 `_shadow`는 이 격리를 적용하지 않았다. 합성 회귀 범위에서 구현됐으며 checkpoint 저장·열화 상태는 아래 LOOP-05b 구현을 따른다. 실데이터 검증은 미완료다. §12의 단일 challenger cohort 동시 사용·봉인 표시는 LOOP-09a 합성 회귀 범위에서 구현했다.
+
+**현재 구현 (LOOP-05b).** `agent_observation_checkpoints`는 스트림별 `seq`와 창·revision·spec_version·상태·최초 봉인 여부·집계 payload·입력/결과 해시를 추가 전용으로 저장한다. 관찰 시작부터 관측 세션 N개마다 완결 창만 순서대로 저장하며 부분 창은 저장하지 않는다. `observation_checkpoint_sessions=20`(최소 2), `degradation_reference="equal_weight_eligible"`(또는 `cash`), `degradation_underperformance=0.03`, `degradation_drawdown=None`(기존 평가 낙폭 한도 사용), `demotion_checkpoints=3`을 정책으로 사전 등록한다. 명시적 낙폭 한도와 열세 임계는 0 초과 1 미만, 지속 checkpoint 수는 최소 1이다. 기존 정책 JSON은 기본값으로 읽는다.
+
+매 창 끝까지 관찰 시작에서 이어 계산한 일별 NAV로 창 수익률과 낙폭을 구한다. 기준점은 창 시작 전일 NAV(첫 창은 초기 자본)이며 낙폭 peak에도 포함한다. 동일 계약 기준 전략도 관찰 시작부터 같은 끝까지 계산한다. `breach = 창 낙폭 > 한도 or (창 수익률 - 기준 창 수익률) < -열세 임계`다. breach가 없으면 OBSERVING, 같은 revision에서 연속 breach 수가 지속 수 미만이면 WARNING, 이상이면 DEMOTION_CANDIDATE다. revision 변경과 정상 창은 연속 수를 초기화한다. 창 끝 유효 revision과 그보다 작은 최대 registry revision의 강등 대상만 기록하며 강등은 실행하지 않는다.
+
+`input_hash=data.fingerprint(창 끝)`, `result_hash=digest(payload)`, `checkpoint_id=digest({stream, seq, result_hash})`다. 기존 seq와 입력 또는 결과 해시가 달라지면 `Stored observation checkpoint changed`를 보고하고 행을 보존한다. checkpoint 오류는 연구 진행과 격리한다. 겹치는 진행 cohort가 있으면 최초 저장의 `sealed=1`을 보존하고 보고에서 수치를 숨긴다. 이후 현재 cohort 상태를 다시 읽어 모두 해제됐을 때만 WARNING/DEMOTION_CANDIDATE를 `TRACKING_WARNING`/`TRACKING_DEMOTION_CANDIDATE` snapshot으로 봉인·개발 해제한다. 최초 비봉인 실패는 checkpoint와 같은 트랜잭션에서 기억을 만든다. OBSERVING은 기억을 만들지 않는다. 일별 원자료는 payload에 넣지 않는다.
+
+`tick.observation_checkpoints`는 이번 저장 수·최근 요약·오류를, `status.observation_state`는 스트림의 최근 상태를 보고한다. 봉인 중에는 성과·임계·강등 대상 payload를 보고하지 않으며 해제 뒤 공개한다. `observation`은 LOOP-09a의 보고 계약을 유지하며 직접 `observation_ledger` 조회 결과와 같다. 관찰이 None/unavailable이면 `observation_checkpoints`도 None이다. `observation_ledger` 조회는 계속 DB에 쓰지 않는다. 기존 `_shadow`·TRACKING_DEGRADED 규칙은 유지한다. 합성 회귀 범위 구현이며 실데이터 검증, 강등 실행·알림·ObservationRelease(LOOP-06)는 미구현이다.
 
 ## 11. Release — S4 → 운용 (LOOP-06)
 
@@ -407,4 +415,4 @@ LOOP-09a 이전 `ResearchAgent._claim`은 시장과 날짜가 겹치고 owner가
 
 `observation_ledger` 자체는 DB에 쓰지 않는다. `tick`은 status ok인 관찰 구간을 별도 트랜잭션으로 노출 기록하고 `exposure_recorded`를 보고한다. AgentError는 연구 진행과 격리하여 false와 `exposure_error`로 남긴다. 직접 조회의 `exposure_recorded`는 기존 저장 구간이 보고 구간을 덮는지 읽기만 한다. 관찰 보고의 `cohorts`와 `sealed`는 겹치는 cohort의 최종 결정이 COMPLETE/ABANDONED 전인지 나타낸다. `status(name).cohorts`는 이 연구의 cohort와 등록 시각 비교·봉인 상태를 보고한다. 관찰 성과는 계속 `proposer_visible=false`이고 개발 기억과 commitment의 proposer_inputs에 넣지 않는다.
 
-기존 DB의 holdout/shadow/import 행에는 cohort를 역채우지 않으며 날짜·소유자·소비 기록을 보존한다. cohort 없는 기존 holdout/final_validation은 관찰 노출과 겹칠 수 없고, 기존 shadow는 최종 검증과 배타성을 유지하면서 관찰 노출과는 겹칠 수 있다. 다중 challenger cohort(자기 개선 §6), 관찰 checkpoint 저장·열화 상태(LOOP-05b), ObservationRelease(LOOP-06)는 미구현이다. 실데이터 검증이나 운용 준비 완료를 뜻하지 않는다.
+기존 DB의 holdout/shadow/import 행에는 cohort를 역채우지 않으며 날짜·소유자·소비 기록을 보존한다. cohort 없는 기존 holdout/final_validation은 관찰 노출과 겹칠 수 없고, 기존 shadow는 최종 검증과 배타성을 유지하면서 관찰 노출과는 겹칠 수 있다. 관찰 checkpoint 저장·열화 상태·봉인 연동은 LOOP-05b 합성 회귀 범위에서 구현했다. 다중 challenger cohort(자기 개선 §6)와 ObservationRelease(LOOP-06)는 미구현이다. 실데이터 검증이나 운용 준비 완료를 뜻하지 않는다.

@@ -167,7 +167,27 @@ class AgentPolicy:
     min_tail_draws: int = 50
     market_etf_symbol: str | None = None
 
+    observation_checkpoint_sessions: int = 20
+    degradation_reference: str = "equal_weight_eligible"
+    degradation_underperformance: float = 0.03
+    degradation_drawdown: float | None = None
+    demotion_checkpoints: int = 3
+
     def __post_init__(self) -> None:
+        ratios = [self.degradation_underperformance]
+        if self.degradation_drawdown is not None:
+            ratios.append(self.degradation_drawdown)
+        if (
+            type(self.observation_checkpoint_sessions) is not int
+            or self.observation_checkpoint_sessions < 2
+            or type(self.demotion_checkpoints) is not int
+            or self.demotion_checkpoints < 1
+            or self.degradation_reference not in ("cash", "equal_weight_eligible")
+            or any(
+                type(value) not in (int, float) or not 0 < value < 1 for value in ratios
+            )
+        ):
+            raise AgentError("Invalid preregistered degradation policy")
         if self.market_etf_symbol is not None and (
             not isinstance(self.market_etf_symbol, str)
             or not re.fullmatch(r"[A-Za-z0-9_]{1,30}", self.market_etf_symbol)
