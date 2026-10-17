@@ -83,6 +83,8 @@
 ## 5. 키와 실행 위치
 
 - 공공데이터포털 서비스 키, OpenDART 인증키는 무료 발급이다. PC 환경변수 `DATA_GO_KR_SERVICE_KEY`, `OPENDART_API_KEY`에만 둔다. 저장소·대화·로그에 남기지 않는다.
+- 공공데이터포털 키는 마이페이지의 **일반 인증키(Decoding)** 값을 넣는다. 도구가 URL 인코딩을 하므로 Encoding 값을 넣으면 이중 인코딩으로 거부된다.
+- 탐침 실행(PC, 읽기 전용): `uv run python tools/data_probe.py --date 2024-06-03 --out artifacts/data-probe`. 결과 `artifacts/data-probe/summary.json`(필드 목록·빈 값 수·표본값·형태)과 `manifest.json`(원본 해시)을 근거로 이 문서의 `미확인` 칸을 채운다. 원본 파일은 저장소에 커밋하지 않는다. KIND는 목록 주소와 폼을 `--kind-url`·`--kind-form`으로 직접 지정해야 하며, 지정하지 않으면 건너뛴다.
 - 수집은 PC에서 실행한다. 클라우드 세션은 수집 결과(원본 해시가 붙은 묶음)를 검증·변환하는 코드만 다룬다.
 
 ## 6. 다음 작업
