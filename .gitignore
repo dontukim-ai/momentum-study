@@ -13,3 +13,6 @@ artifacts/
 *.sqlite3
 *.sqlite3-*
 *.egg-info/
+
+# Codex 위임 작업 파일·보고서 (.claude/skills/codex-delegate)
+.codex-tasks/
