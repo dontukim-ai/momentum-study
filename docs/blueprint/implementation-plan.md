@@ -65,7 +65,7 @@ M0의 연구 champion은 M4~M6의 운용 자격을 자동으로 얻지 않는다
 
 | ID / 담당 | 현재 | 세부 구현 | 선행 조건 | 완료 조건 |
 | --- | --- | --- | --- | --- |
-| RES-01 / 검증 | 부분 | 기존 champion 외 현금·단순 기준 전략; 동일 비용/노출 비교; 절대/상대 성과를 분리한 정책 v2 | M1, FIN-01~03 | 손실 후보가 덜 손실이라는 이유만으로 목표 운용 자격을 얻지 않음. 정책은 평가 전 고정 |
+| RES-01 / 검증 | 부분(C3 및 후속: 현금·적격 동일 비중·opt-in 고정 ETF 최종/유지/shadow 보고·실제 투자/현금/보유 수·예산 부족 진단 구현, 합성 회귀; gate는 기존 정책 유지) | 기존 champion 외 현금·단순 기준 전략; 동일 비용/노출 비교; 절대/상대 성과를 분리한 정책 v2 | M1, FIN-01~03 | 손실 후보가 덜 손실이라는 이유만으로 목표 운용 자격을 얻지 않음. 정책은 평가 전 고정 |
 | RES-02 / 검증 | 부분 | 보유·라벨 기간별 purge/embargo; block 길이 민감도; 비정상성·국면·기간 일관성; 평가 경계 정리 | FIN-04 | 다른 주기·라벨에 5일 블록을 일괄 사용하지 않음. 개발/최종 경계 누수 회귀 |
 | RES-03 / 기억·검증 | 부분 | 연구군·후보·모델·정책 변경의 예산 registry; 미래 데이터 도착 전 일정 commitment; 외부 노출 기록 | DATA-03,04 | 연구 이름·빌드·모델 변경으로 예산을 초기화하지 않음. 예약 이전/이후 자료 구분 증거 |
 | RES-04 / 기억 | 부분 | 개발 실패 taxonomy; 중복 가설 탐지; 데이터 오류/성과 열세/증거 부족 분류; 후속 가설 보고 | RES-01~03 | 같은 실패를 비용 없이 반복 제안하지 않으며 최종 증거를 개발 입력으로 몰래 섞지 않음 |
@@ -95,11 +95,11 @@ RES-04~06의 세부 학습 계약은 [자기 개선 설계](self-improvement.md)
 | --- | --- | --- | --- | --- |
 | LOOP-01 / S1·S2 | 미착수 | `MarketProfile`: 통화·달력·실행 시계·호가·비용·거래 제약·유니버스·신선도 규칙을 한 계약으로. KRX 동작을 그대로 옮김 | 없음(값은 DATA-03, FIN-01 결과로 교체) | 기존 회귀 20개 무변경 통과. 장 시각·KRX 필터가 코드 상수에서 사라짐. 미국 최종 평가 잠금 유지 |
 | LOOP-02 / S1 | 미착수 | `StrategyFamily`(계보 키·버전·`decision_cadence`·`holding_horizon`)와 예산 계정 원장(allocate/reserve/consume/release_unused) | LOOP-01 | 결정 주기가 후보 변수. 이름·정책·빌드·family 버전 변경이나 폐기 후에도 소비 기록 유지. 새 정책 예산은 명시적 할당 또는 근거 있는 독립 연구군 |
-| LOOP-03 / S2 | 미착수 | `EvaluationContract`(평가 구간·valuation basis·자본/위험 수치·초기 포트폴리오·실행 시계·비용·체결·원장·시나리오별 하위 ID), 거래 가능성 지표의 cap 이전 분모(`desired → volume_capped → cash_risk_capped → filled`), turnover 현행/v2 구분 | LOOP-01 | 같은 bundle이라도 기간·초기 자본·위험 한도가 다르면 우위 판정 거부. 일간/주간 결정 주기 후보가 같은 계약에서 비교됨. 목표 100 → cap 10 → 체결 10이 체결률 10%, 거래량 제약 90%로 대사. 계획 금액이 같은 주문 2개 중 하나 전량 체결·하나 시가 결측이면 fill_ratio 50%(`reference_price` 가중, 절대 수량). 계획 0은 N/A, `reference_price` 누락은 품질 보류로 별도 보고 |
+| LOOP-03 / S2 | 부분(C1/C2 합성 회귀: 수량 단계·reference_price 지표·turnover·계약 ID/비교 검사·원시 NAV 절대 잔차 1e-9원 검사 구현; 결정 주기·capacity 대기) | `EvaluationContract`(평가 구간·valuation basis·자본/위험 수치·초기 포트폴리오·실행 시계·비용·체결·원장·시나리오별 하위 ID), 거래 가능성 지표의 cap 이전 분모(`desired → volume_capped → cash_risk_capped → filled`), turnover 현행/v2 구분 | LOOP-01 | 같은 bundle이라도 기간·초기 자본·위험 한도가 다르면 우위 판정 거부. 일간/주간 결정 주기 후보가 같은 계약에서 비교됨. 목표 100 → cap 10 → 체결 10이 체결률 10%, 거래량 제약 90%로 대사. 계획 금액이 같은 주문 2개 중 하나 전량 체결·하나 시가 결측이면 fill_ratio 50%(`reference_price` 가중, 절대 수량). 계획 0은 N/A, `reference_price` 누락은 품질 보류로 별도 보고 |
 | LOOP-04 / S4 | 미착수 | `ChampionRegistry` 키 `(market, family_lineage)`, 증거 등급·commitment·이전 revision 기록, 기존 연구 이전 | LOOP-02, RES-03 | 연구 이름을 바꿔도 같은 키의 champion·예산 계정을 공유. 기존 DB 이전 회귀 |
 | LOOP-05 / S4 | 미착수 | 실험 원장과 분리된 관찰 원장(현금·보유·배당채권 연속, 교체 거래·비용 기록), 유지 사이클의 기준 전략 비교, 사전 등록 열화 상태(OBSERVING/WARNING/DEMOTION_CANDIDATE) | LOOP-03, LOOP-04, RES-01 | revision 교체 전후 자산이 실제 거래·비용 외에 불연속 없음. 유지 사이클에서 동일 전략 비교가 사라짐. 1회성 열세로 상태가 바뀌지 않음. 강등은 이전 검증 revision으로만 |
 | LOOP-06 / S4→운용 | 미착수 | 두 단계 Release: `ObservationRelease`(E2 이상, 주문 권한 없음) → E3 관찰 → `ExecutionRelease`(paper/live, 승인자, rollback, 총자본 범위) | LOOP-04, LOOP-05, OPS-05 | 사전 E3 기록 없이 첫 관찰 버전 등록 가능. 관찰만으로 주문 권한 없음. ExecutionRelease 없이 모의 OMS가 전략을 받지 않음 |
-| LOOP-07 / S2·S3 | 미착수 | 통계 정책 v2: 단측 명목 예산 명시, 지표 역할 표(주 검정/경제적 최소 효과/보조), 개발 구간에서 고정하는 블록 민감도 | RES-02 | null 시뮬레이션의 실제 승격률 보고, 여러 seed·재표집 수에서 하한 안정성 확인. 기존 정책 연구는 무변경 |
+| LOOP-07 / S2·S3 | 부분(C4: opt-in 단측 v2·꼬리 draw 하한·정책 JSON 호환·합성 진단 구현; 실데이터 블록 선정/오류율 검토 대기) | 통계 정책 v2: 단측 명목 예산 명시, 지표 역할 표(주 검정/경제적 최소 효과/보조), 개발 구간에서 고정하는 블록 민감도 | RES-02 | null 시뮬레이션의 실제 승격률 보고, 여러 seed·재표집 수에서 하한 안정성 확인. 기존 정책 연구는 무변경 |
 | LOOP-08 / S4→S1 | 미착수 | 실패 기억 개발 해제: 확정 결과 snapshot(`source_window`·`observed_through`·`result_hash`·`sealed_at`) 단위 해제, `eligible_for_proposer`·`consumed_windows`, 관찰 checkpoint 주기 | RES-04 | 사이클은 COMPLETE지만 관찰 구간이 열려 있으면 해제 거부. 봉인된 과거 구간만 개발 입력. 뒤에 추가된 관찰 결과가 해제된 snapshot에 섞이지 않음. 해제된 실패로 만든 후보는 소비 구간과 겹치지 않는 새 평가 구간 사용 |
 | LOOP-09 / S3·S4 | 미착수 | 구간 예약·동시 사용·공개 정책: 날짜 사용을 `final_validation`(배타)과 `observation_exposure`(노출 기록)로 구분, 구간 시작 전에 등록하는 검증 cohort(단일 challenger + 고정 관찰 버전), cohort 기간 관찰 결과 봉인, `_claim`의 kind 반영 | RES-03, LOOP-06 | 관찰을 중단하지 않고 다음 E2 사이클 완료. 구간 시작 후 추가한 후보·다른 연구의 같은 날짜 최종 검증 거부. 봉인된 관찰 결과가 제안기에 전달되지 않음. 기존 shadow 소비 기록은 배타로 호환 |
 
