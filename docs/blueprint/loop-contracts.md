@@ -313,6 +313,9 @@ fill_ratio = Σ(|filled_qty| × reference_price) / Σ(|desired_qty| × reference
 
 `tick.observation_checkpoints`는 이번 저장 수·최근 요약·오류를, `status.observation_state`는 스트림의 최근 상태를 보고한다. 봉인 중에는 성과·임계·강등 대상 payload를 보고하지 않으며 해제 뒤 공개한다. `observation`은 LOOP-09a의 보고 계약을 유지하며 직접 `observation_ledger` 조회 결과와 같다. 관찰이 None/unavailable이면 `observation_checkpoints`도 None이다. `observation_ledger` 조회는 계속 DB에 쓰지 않는다. 기존 `_shadow`·TRACKING_DEGRADED 규칙은 유지한다. 합성 회귀 범위 구현이며 실데이터 검증, 강등 실행·알림·ObservationRelease(LOOP-06)는 미구현이다.
 
+
+**현재 구현 (LOOP-05c).** 매 tick 시작 시 가장 최근에 저장된 seq 하나는 build가 같아도 관찰 시작부터 다시 계산해 결과 해시까지 비교한다. 새 seq도 계산하며, 나머지 같은 build의 저장된 seq는 창 끝의 입력 지문만 확인한다. 동일 입력 재방문은 최신 저장 창 1개, 한 창 증가 시에는 이전 최신 저장 창과 새 창 2개를 평가한다. 직전 저장 payload의 revision·breach·consecutive_breaches를 이어받는다. 봉인 중 payload도 내부 계산에만 사용하고 기존 공개 제한은 유지한다. 새 checkpoint payload에 service의 `build_id()`인 `build`를 추가한다. build가 다르거나 없는 기존 행은 전체 계산 경로로 결과 해시까지 재검증하며 저장 행은 갱신하지 않는다. 따라서 이전 build 행은 이후 tick에서도 재검증 대상이다. `build`는 경제 결과 해시에서 제외하여 LOOP-05b의 result_hash·checkpoint_id와 호환한다. 입력 지문 또는 재계산 결과가 달라지면 기존과 같은 `Stored observation checkpoint changed`로 격리한다. 매 tick 모든 저장 checkpoint의 현재 봉인 여부를 확인하고 저장 payload로 실패 기억 해제를 판정한다. 봉인 해제 자체는 추가 재계산을 요구하지 않는다. 최신 창 안전 재검증에서 데이터 결함이 발생하면 기존 오류 종류를 보존하여 격리하고 활성 ObservationRelease의 DATA_FAILURE 중단으로 연결한다. 증분·전체 계산의 동일성과 호출 수는 합성 회귀 범위에서 확인하며 실데이터 성능·운영 검증은 미완료다.
+
 ## 11. Release — S4 → 운용 (LOOP-06)
 
 관찰 등록과 실행 자격을 분리한다. 이렇게 해야 사전 E3 기록이 없어도 첫 관찰 버전을 등록할 수 있다.

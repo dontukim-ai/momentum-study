@@ -2055,94 +2055,120 @@ class ResearchAgent:
             size = policy.observation_checkpoint_sessions
             previous: dict[str, Any] | None = None
             evaluator = CommonEvaluator(policy)
+            current_build = build_id()
+            # Keep one safety replay even on unchanged input. Capture the latest
+            # stored seq before appending so new windows do not displace it.
+            latest_stored_seq = self.db.execute(
+                "SELECT MAX(seq) FROM agent_observation_checkpoints WHERE stream=?",
+                (stream,),
+            ).fetchone()[0]
             for seq in range(len(days) // size):
                 offset = seq * size
                 window_start, end = days[offset], days[offset + size - 1]
-                # Restart from the observation origin, not from a fresh wallet
-                # at each window: holdings and revision-switch costs carry over.
-                frozen = data.prefix(end)
-                result = evaluator.evaluate_schedule(frozen, schedule, start, end)
-                reference = evaluator.evaluate_benchmark(
-                    frozen, policy.degradation_reference, start, end
-                )
-                require_same_contract(result, reference)
-                capital = policy.logic.selection.capital_limit
-                net, drawdown = self._checkpoint_window(result, offset, size, capital)
-                reference_net, _ = self._checkpoint_window(
-                    reference, offset, size, capital
-                )
-                active = next(
-                    e
-                    for e in reversed(entries)
-                    if e["effective_from"] <= end.isoformat()
-                )
-                revision = active["revision"]
-                limit = policy.degradation_drawdown
-                if limit is None:
-                    limit = policy.logic.evaluation.max_drawdown
-                difference = net - reference_net
-                breach = (
-                    drawdown > limit
-                    or difference < -policy.degradation_underperformance
-                )
-                consecutive = 0
-                if breach:
-                    consecutive = 1
-                    if (
-                        previous
-                        and previous["revision"] == revision
-                        and previous["breach"]
-                    ):
-                        consecutive += previous["consecutive_breaches"]
-                state = "OBSERVING"
-                if breach:
-                    state = (
-                        "DEMOTION_CANDIDATE"
-                        if consecutive >= policy.demotion_checkpoints
-                        else "WARNING"
+                existing = self.db.execute(
+                    "SELECT * FROM agent_observation_checkpoints WHERE stream=? AND seq=?",
+                    (stream, seq),
+                ).fetchone()
+                input_hash = data.fingerprint(end)
+                if existing and (
+                    existing["window_end"] != end.isoformat()
+                    or input_hash != existing["input_hash"]
+                ):
+                    raise AgentError("Stored observation checkpoint changed")
+                saved_payload = json.loads(existing["payload_json"]) if existing else None
+                if (
+                    saved_payload is None
+                    or saved_payload.get("build") != current_build
+                    or seq == latest_stored_seq
+                ):
+                    # Restart from the observation origin, not from a fresh wallet
+                    # at each window: holdings and revision-switch costs carry over.
+                    frozen = data.prefix(end)
+                    result = evaluator.evaluate_schedule(frozen, schedule, start, end)
+                    reference = evaluator.evaluate_benchmark(
+                        frozen, policy.degradation_reference, start, end
                     )
-                older = [r for r in registry if r < revision]
-                target = registry[max(older)] if older else None
-                payload = {
-                    "window_start": window_start.isoformat(),
-                    "window_end": end.isoformat(),
-                    "revision": revision,
-                    "spec_version": active["spec_version"],
-                    "window_return": net,
-                    "window_drawdown": drawdown,
-                    "reference": policy.degradation_reference,
-                    "reference_return": reference_net,
-                    "difference": difference,
-                    "drawdown_limit": limit,
-                    "underperformance_threshold": policy.degradation_underperformance,
-                    "demotion_checkpoints": policy.demotion_checkpoints,
-                    "breach": breach,
-                    "consecutive_breaches": consecutive,
-                    "demotion_target": {
-                        key: target[key] for key in ("revision", "spec_version")
+                    require_same_contract(result, reference)
+                    capital = policy.logic.selection.capital_limit
+                    net, drawdown = self._checkpoint_window(result, offset, size, capital)
+                    reference_net, _ = self._checkpoint_window(
+                        reference, offset, size, capital
+                    )
+                    active = next(
+                        e
+                        for e in reversed(entries)
+                        if e["effective_from"] <= end.isoformat()
+                    )
+                    revision = active["revision"]
+                    limit = policy.degradation_drawdown
+                    if limit is None:
+                        limit = policy.logic.evaluation.max_drawdown
+                    difference = net - reference_net
+                    breach = (
+                        drawdown > limit
+                        or difference < -policy.degradation_underperformance
+                    )
+                    consecutive = 0
+                    if breach:
+                        consecutive = 1
+                        if (
+                            previous
+                            and previous["revision"] == revision
+                            and previous["breach"]
+                        ):
+                            consecutive += previous["consecutive_breaches"]
+                    state = "OBSERVING"
+                    if breach:
+                        state = (
+                            "DEMOTION_CANDIDATE"
+                            if consecutive >= policy.demotion_checkpoints
+                            else "WARNING"
+                        )
+                    older = [r for r in registry if r < revision]
+                    target = registry[max(older)] if older else None
+                    payload = {
+                        "window_start": window_start.isoformat(),
+                        "window_end": end.isoformat(),
+                        "revision": revision,
+                        "spec_version": active["spec_version"],
+                        "window_return": net,
+                        "window_drawdown": drawdown,
+                        "reference": policy.degradation_reference,
+                        "reference_return": reference_net,
+                        "difference": difference,
+                        "drawdown_limit": limit,
+                        "underperformance_threshold": policy.degradation_underperformance,
+                        "demotion_checkpoints": policy.demotion_checkpoints,
+                        "breach": breach,
+                        "consecutive_breaches": consecutive,
+                        "demotion_target": {
+                            key: target[key] for key in ("revision", "spec_version")
+                        }
+                        if target
+                        else None,
                     }
-                    if target
-                    else None,
-                }
-                input_hash, result_hash = data.fingerprint(end), digest(payload)
-                checkpoint_id = digest(
-                    {"stream": stream, "seq": seq, "result_hash": result_hash}
-                )
+                    # Build is provenance, not an economic result. Keeping it
+                    # outside the hash preserves LOOP-05b identities on replay.
+                    result_hash = digest(payload)
+                    if existing and existing["result_hash"] != result_hash:
+                        raise AgentError("Stored observation checkpoint changed")
+                    payload["build"] = current_build
+                if existing:
+                    # Even sealed payloads remain internal continuity inputs.
+                    payload = json.loads(existing["payload_json"])
+                    checkpoint_id = existing["checkpoint_id"]
+                    state = existing["state"]
+                else:
+                    checkpoint_id = digest(
+                        {"stream": stream, "seq": seq, "result_hash": result_hash}
+                    )
+                revision = payload["revision"]
+                breach = payload["breach"]
                 sealed = self._checkpoint_sealed(
                     policy.market, window_start.isoformat(), end.isoformat()
                 )
                 with self.store.transaction():
-                    existing = self.db.execute(
-                        "SELECT * FROM agent_observation_checkpoints WHERE stream=? AND seq=?",
-                        (stream, seq),
-                    ).fetchone()
-                    if existing:
-                        if (
-                            existing["input_hash"] != input_hash
-                            or existing["result_hash"] != result_hash
-                        ):
-                            raise AgentError("Stored observation checkpoint changed")
-                    else:
+                    if existing is None:
                         self.db.execute(
                             "INSERT INTO agent_observation_checkpoints VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                             (
