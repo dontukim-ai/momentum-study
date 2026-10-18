@@ -17,15 +17,23 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qsl, quote, quote_plus, urlencode, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
-SOURCES = ("fsc_stock", "fsc_etf", "dart", "kind")
+SOURCES = ("fsc_stock", "fsc_etf", "dart", "dart_detail", "kind")
 FSC = {
     "fsc_stock": "https://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo",
     "fsc_etf": "https://apis.data.go.kr/1160100/service/GetSecuritiesProductInfoService/getETFPriceInfo",
 }
 
+# Candidate endpoints: the probe records supplier responses to verify these mappings.
+DART_DETAILS = (
+    ("유무상증자결정", "pifricDecsn"),
+    ("무상증자결정", "fricDecsn"),
+    ("유상증자결정", "piicDecsn"),
+    ("감자결정", "crDecsn"),
+)
+
 
 class ProbeError(Exception):
-    """Only static, credential-free diagnostics may leave the request boundary."""
+    """Only credential-checked diagnostics may leave the request boundary."""
 
 
 def http_get(url, data):
@@ -34,7 +42,8 @@ def http_get(url, data):
         with urlopen(Request(url, data=data), timeout=30) as response:
             return response.status, response.read()
     except HTTPError as exc:
-        return exc.code, b""
+        with exc:
+            return exc.code, exc.read()
 
 
 def masked_url(url):
@@ -98,11 +107,23 @@ def main(argv=None, *, http=http_get, sleep=time.sleep, environ=None):
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--source", choices=("all", *SOURCES), default="all")
     parser.add_argument("--max-pages", type=int, default=20)
+    parser.add_argument("--dart-bgn", type=date.fromisoformat)
+    parser.add_argument("--dart-end", type=date.fromisoformat)
+    parser.add_argument("--max-detail", type=int, default=10)
+    parser.add_argument("--with-dart-detail", action="store_true")
     parser.add_argument("--kind-url", action="append", default=[])
     parser.add_argument("--kind-form", action="append", default=[])
     args = parser.parse_args(argv)
     if args.max_pages < 1:
         parser.error("--max-pages must be positive")
+    if args.max_detail < 1:
+        parser.error("--max-detail must be positive")
+    if (args.dart_bgn is None) != (args.dart_end is None):
+        parser.error("provide both --dart-bgn and --dart-end")
+    bgn, end = args.dart_bgn or args.date, args.dart_end or args.date
+    if not 0 <= (end - bgn).days <= 91:
+        parser.error("DART range must be ordered and at most 92 days inclusive")
+    dart_period = f"{bgn.isoformat()}_{end.isoformat()}"
     env = os.environ if environ is None else environ
     secrets = [
         env.get(name, "") for name in ("DATA_GO_KR_SERVICE_KEY", "OPENDART_API_KEY")
@@ -129,15 +150,15 @@ def main(argv=None, *, http=http_get, sleep=time.sleep, environ=None):
                 status, body = http(url, data)
                 break
             except HTTPError as exc:
-                raise ProbeError(f"HTTP status {exc.code}") from None
+                with exc:
+                    status, body = exc.code, exc.read()
+                break
             except (URLError, OSError):
                 if attempt == 2:
                     raise ProbeError("network retries exhausted") from None
                 sleep(float(2 ** (attempt + 1)))
             except Exception:  # noqa: BLE001 - transport exceptions must not expose URLs/keys
                 raise ProbeError("transport failed") from None
-        if not 200 <= status < 300:
-            raise ProbeError(f"HTTP status {status}")
         if any(key in body for key in forbidden):
             raise ProbeError("response contains credentials; not saved")
         try:
@@ -156,10 +177,31 @@ def main(argv=None, *, http=http_get, sleep=time.sleep, environ=None):
         if any(key in json.dumps(metadata).encode() for key in forbidden):
             raise ProbeError("request metadata contains credentials; not saved")
         manifest["requests"].append(metadata)
+        if not 200 <= status < 300:
+            extension = "txt"
+            stripped = body.lstrip()
+            if stripped.startswith(b"<"):
+                extension = "xml"
+            elif stripped.startswith((b"{", b"[")):
+                extension = "json"
+            save(
+                source, f"error-{len(manifest['requests'])}", extension, body, metadata
+            )
+            excerpt = " ".join(body.decode("utf-8", errors="replace").split())[:200]
+            message = f"HTTP status {status}"
+            if excerpt:
+                message += f": {excerpt}"
+            raise ProbeError(message)
         return body, metadata
 
     def save(source, page, extension, body, metadata):
-        relative = Path(source) / args.date.isoformat() / f"page-{page}.{extension}"
+        period = args.date.isoformat()
+        if source in ("dart", "dart_detail"):
+            period = dart_period
+        filename = f"page-{page}" if isinstance(page, int) else page
+        relative = Path(source) / period / f"{filename}.{extension}"
+        if any(key in relative.as_posix().encode() for key in forbidden):
+            raise ProbeError("file path contains credentials; not saved")
         target = out / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(body)
@@ -171,7 +213,97 @@ def main(argv=None, *, http=http_get, sleep=time.sleep, environ=None):
             }
         )
 
-    for source in SOURCES if args.source == "all" else (args.source,):
+    dart_rows = []
+    selected = (
+        tuple(source for source in SOURCES if source != "dart_detail")
+        if args.source == "all"
+        else (args.source,)
+    )
+    if args.with_dart_detail or args.source == "dart_detail":
+        # Detail probing requires the list first, even when another source is selected.
+        selected = tuple(
+            source for source in SOURCES if source in (*selected, "dart", "dart_detail")
+        )
+    for source in selected:
+        if source == "dart_detail":
+            result = {"status": "ok", "endpoints": {}}
+            summary[source] = result
+            if summary.get("dart", {}).get("status") != "ok":
+                result.update(status="skipped", message="DART source unavailable")
+                continue
+            seen, endpoint_rows = set(), {}
+            for row in dart_rows:
+                if not row.get("stock_code"):
+                    continue
+                endpoint = next(
+                    (
+                        name
+                        for keyword, name in DART_DETAILS
+                        if keyword in row.get("report_nm", "")
+                    ),
+                    None,
+                )
+                if endpoint is None:
+                    continue
+                corp, received = row.get("corp_code"), row.get("rcept_dt")
+                identity = (endpoint, corp, received)
+                if identity in seen:
+                    continue
+                if len(seen) >= args.max_detail:
+                    break
+                seen.add(identity)
+                entry = result["endpoints"].setdefault(
+                    endpoint, {"status": "ok", "calls": 0, **summarize([])}
+                )
+                batch_rows = endpoint_rows.setdefault(endpoint, [])
+                entry["calls"] += 1
+                try:
+                    # Supplier identifiers become filenames; never permit path components.
+                    if (
+                        not isinstance(corp, str)
+                        or not re.fullmatch(r"\d{8}", corp)
+                        or not isinstance(received, str)
+                        or not re.fullmatch(r"\d{8}", received)
+                    ):
+                        raise ProbeError("invalid filing identifiers")
+                    params = {
+                        "crtfc_key": env["OPENDART_API_KEY"],
+                        "corp_code": corp,
+                        "bgn_de": received,
+                        "end_de": received,
+                    }
+                    body, metadata = request(
+                        f"https://opendart.fss.or.kr/api/{endpoint}.json?"
+                        + urlencode(params)
+                    )
+                    save(
+                        source, f"{endpoint}-{corp}-{received}", "json", body, metadata
+                    )
+                    payload = json.loads(body)
+                    if payload["status"] not in ("000", "013"):
+                        raise ProbeError("supplier returned an error code")
+                    batch = (
+                        payload.get("list", []) if payload["status"] == "000" else []
+                    )
+                    if not isinstance(batch, list) or not all(
+                        isinstance(r, dict) for r in batch
+                    ):
+                        raise ProbeError("unexpected row schema")
+                    batch_rows.extend(batch)
+                except ProbeError as exc:
+                    entry.update(status="error", message=str(exc))
+                except Exception:  # noqa: BLE001 - parser input may contain credentials
+                    entry.update(
+                        status="error", message="invalid response or local file error"
+                    )
+                entry.update(summarize(batch_rows))
+            if not result["endpoints"]:
+                result["message"] = "no matching filings"
+            if any(
+                entry["status"] == "error" for entry in result["endpoints"].values()
+            ):
+                result["status"] = "error"
+            continue
         rows = []
         result = {"status": "ok", **summarize([])}
         summary[source] = result
@@ -224,8 +356,8 @@ def main(argv=None, *, http=http_get, sleep=time.sleep, environ=None):
                 else:
                     params = {
                         "crtfc_key": key,
-                        "bgn_de": args.date.strftime("%Y%m%d"),
-                        "end_de": args.date.strftime("%Y%m%d"),
+                        "bgn_de": bgn.strftime("%Y%m%d"),
+                        "end_de": end.strftime("%Y%m%d"),
                         "pblntf_ty": "B",
                         "page_count": 100,
                         "page_no": page,
@@ -271,6 +403,8 @@ def main(argv=None, *, http=http_get, sleep=time.sleep, environ=None):
                 status="error", message="invalid response or local file error"
             )
         result.update(summarize(rows))
+        if source == "dart":
+            dart_rows = rows
     for filename, content in (("manifest.json", manifest), ("summary.json", summary)):
         (out / filename).write_text(
             json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8"

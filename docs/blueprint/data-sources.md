@@ -79,6 +79,8 @@ PC 탐침 결과(2026-10-17, 기준일 2024-06-03, `pblntf_ty=B` 주요사항보
 
 첫 탐침(2026-10-17)에서 주식·ETF 시세 모두 HTTP 403이 났다. 활용신청 미승인 또는 승인 직후 반영 지연이 흔한 원인이다. DATA-01b 탐침은 오류 응답 본문도 저장해 원인 메시지를 확인한다.
 
+재탐침 명령(PC): `uv run python tools/data_probe.py --date 2024-06-03 --out artifacts/data-probe --dart-bgn 2024-04-01 --dart-end 2024-06-30 --with-dart-detail`. 오류 응답은 `error-*.xml/json`으로 저장되고 summary 메시지에 앞 200자가 남는다. 상세 엔드포인트(`pifricDecsn`·`fricDecsn`·`piicDecsn`·`crDecsn`)는 추정이며 결과로 확인한다.
+
 ## 3. 정보 시계(available_at) 정책
 
 공공데이터 시세는 기준일 다음 영업일 이후에 갱신된다(정확한 시각 미확인). 그대로 쓰면 t일 종가가 t+1일 장 시작 전에 보이지 않아, 전일 종가로 수량을 정하는 현재 체결 규칙과 맞지 않는다.
