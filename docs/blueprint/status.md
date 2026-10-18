@@ -62,7 +62,7 @@
 | 기억 | 실험·사유·gate·shadow 저장 | 실패 분류·중복 가설·개발 전용 기억 검색 | RES-04 |
 | 제안 | grid, 별도 앱의 strict JSON 코드 | 통합 포트의 LLM 계약·실제 호출 검증·예산 | RES-05 |
 | 전진 | 파일 replay 블록과 열화 flag | selector-bound 운용 버전·실시간 캠페인·중단/재개 | OPS-05,06 |
-| 운영 | CLI watcher·JSON·DB event | 서비스·heartbeat·알림·backup·전체 migration | OPS-01~04 |
+| 운영 | CLI watcher·JSON·DB event, OPS-02a 일관 백업·witness·복원 격리(합성 회귀) | 서비스·heartbeat·알림·실데이터 백업 운영·전체 migration | OPS-01~04 |
 | 증권사 | 실전 읽기·모의 OMS 코드와 수기 fixture | 실제 읽기/모의 계약·새 연구 흐름 연결 | ORD-01,02 |
 
 RES-03a는 공개 거래일 `calendar`와 관측 `sessions`를 분리하고, 개발 종료 후 최종 날짜가 달력에 있으면 후보·baseline·기준·개발 증거를 추가 전용 `agent_commitments`에 고정한다. 같은 트랜잭션에서 예산과 최종 구간을 예약한다. 최종 자료 도착 후 manifest를 저장하고 고정된 후보만 평가하며 개발 지문·최종 달력 변경을 거부한다. 내부 저장 시각이 첫 세션 09:00보다 이르면 E2, 그 외 E1을 evidence·result·status에 기록한다. 기존 commitment 없는 종료 사이클은 변경 없이 E1로 표시한다. 구현 완료 근거는 합성 회귀 범위이며 실데이터 전진 검증 완료를 뜻하지 않는다. 외부에서 확인 가능한 고정 시각(별도 저장소·서명)과 commitment만 있는 ordinal의 폐기는 미구현이다.
@@ -74,7 +74,7 @@ RES-03a는 공개 거래일 `calendar`와 관측 `sessions`를 분리하고, 개
 | 실제 데이터 수집 scheduler | 미착수 | DATA-06, 필드 적합성 확인 선행 |
 | 학습 모델 fit/retrain·학습 pipeline | 미착수 | RES-06, 현재 자동 파라미터 선택과 구별 |
 | 실패 기억을 사용하는 제안 의사결정 | 미착수 | 기록의 자동 해석·추천은 후속 |
-| 검증된 backup·복원 리허설 | 미착수 | OPS-02, DB 과거 복원이 소비를 지우지 않아야 함 |
+| 검증된 backup·복원 리허설 | 부분(OPS-02a, 합성 회귀 범위 완료) | SQLite 일관 백업·manifest, DB 밖 추가 전용 witness, 복원 후 tick/init 차단·멱등 격리·예산 소비·동일 구간 재고정 방지. [운영 절차](operations-backup.md). 실데이터 운영 검증·원본/환경 전체 보관 미완료 |
 | 실제 새 데이터 전진 캠페인 | 미실시 | OPS-06, 파일 replay 성공을 대신 사용하지 않음 |
 | 실제 모의 서버 운용 검증 | 미실시·후순위 | ORD-02, 현재 fixture와 분리 |
 | 실전 주문 어댑터·계좌 위험 집행 | 미착수·후순위 | ORD-03,04, 읽기 키 설정과 별개 |
