@@ -335,6 +335,8 @@ fill_ratio = Σ(|filled_qty| × reference_price) / Σ(|desired_qty| × reference
 
 ### ExecutionRelease
 
+FIN-01a: 관찰 release는 근거 사이클 정책의 `spread_mode`와 `execution_eligible`(quoted일 때만 true)을 동결한다. 후속 ExecutionRelease는 `execution_eligible=false`인 관찰 release를 거부해야 한다.
+
 | 필드 | 뜻 |
 | --- | --- |
 | execution_release_id | 실행 버전 식별자 |

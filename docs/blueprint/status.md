@@ -53,7 +53,7 @@
 | 데이터 | 파일 계약·시점 조회·prefix | 실제 공급자·역사적 상태·영구 ID·정정 원본 | DATA-01,02,05,06 |
 | 달력 | 명시 세션·고정 KRX 시각 | 실제 휴장·특별장·주말 freshness | DATA-03 |
 | 입력 일관성 | 출력 JSON 원자적 교체 | 가격/상태/달력/행동 입력 bundle의 원자적 공개 | DATA-04 |
-| 비용·호가 | 예제 bps·원 단위 | 주식/ETF·유효 날짜·계좌·호가·정산의 실제 계약 | FIN-01 |
+| 비용·호가 | 예제 bps·원 단위; FIN-01a 과거 호가 없음 사전 등록 모드·편도 25bp 하한·관찰 release 실행 자격 표시(합성 회귀 범위 완료) | 주식/ETF·유효 날짜·계좌·호가·정산의 실제 계약 | FIN-01 |
 | 기업행동 | raw ledger split/dividend | 신호 보정·정정·권리·합병·일부 미지원 행동 | FIN-02 |
 | 경제 평가 | NAV·현금·채권·일봉 체결 | 실제 결제·기말 청산·장중/부분 체결·capacity | FIN-03,04 |
 | 비교군 | champion 및 현금·적격 동일 비중 성과/투자·현금 비중/보유 수/예산 부족 보고(최종/유지/shadow) | 기준 전략을 승격 gate에 반영하는 새 정책·실제 ETF 가격/메타데이터/비용 검증 | RES-01 |
@@ -184,3 +184,11 @@ LOOP-02a 최종 검증(합성·오프라인): `uv run pytest -q` **269 passed, 1
 추가 전용 관찰 등록·STOPPED 이벤트, E2/E3 현재 champion 승인, 근거 사이클 정책/최종 후보 평가 계약 동결, 멱등 등록·사람 중단·같은 revision 열화/데이터 오류 자동 중단, status·tick 이벤트·CLI를 구현했다. 봉인 중에도 열화 안전 중단은 가능하며 이벤트에는 checkpoint 순번·창만 남긴다. 주문 권한은 항상 0이며 주문 모듈 연결은 없다. ExecutionRelease·알림 전송·E3 실시간 관찰 검증·실데이터 검증은 미구현이다. 회귀 근거는 `tests/unit/test_agent_release.py`다.
 
 검증: 오프라인 UV 캐시 환경에서 전체 pytest `389 passed, 1 deselected`; 이후 오류 종류 보존 보완을 포함한 최종 열화·release 회귀 `35 passed`(release 13개), mypy `Success: no issues found in 33 source files`, ruff `All checks passed!`, KIS unittest `Ran 122 tests / OK`. 기존 테스트·임계값·골든 픽스처는 수정하지 않았다. 실데이터/운영 검증 근거가 아니다.
+
+## FIN-01a 과거 호가 없음 모드 (합성 회귀 범위)
+
+`historical_unavailable`은 결측 호가를 만들지 않고 해당 호가 필터만 생략하며 다른 선정 필터는 유지한다. 기본 `quoted`는 기존 선정 사유·특성을 유지한다. `AgentPolicy`는 편도 slippage 25bp 이상을 요구하고 선정 digest가 평가 계약 ID에 반영된다. 기존 status·tick의 `policy.logic.selection.spread_mode`로 정책을 확인하므로 별도 보고 필드와 portfolio_diagnostics 필드는 추가하지 않았다. 관찰 release는 근거 사이클 정책의 `spread_mode`와 `execution_eligible`을 동결하며 quoted만 실행 자격 true다. 주문 권한은 항상 false다. 주문 경로가 SelectionPolicy를 받지 않으므로 주관자 결정에 따라 주문 거부 검사는 추가하지 않았다. 후속 ExecutionRelease는 실행 자격 false를 거부해야 한다.
+
+신규 회귀는 `apps/kis-agent/tests/test_spread_mode.py`와 `tests/unit/test_agent_spread_mode.py`다. 기본/기존 JSON·결측/실제/넓은 호가·잘못된 모드·비용 하한·계약 ID·현금 유지와 4,000원→4,010원 손계산 체결·두 모드의 E2 승격 후 release 실행 자격을 고정한다. 실데이터 비용 검증·전진 호가 수집·ExecutionRelease는 후속이다.
+
+FIN-01a 최종 검증(`UV_CACHE_DIR=/tmp/momentum-uv-cache`, `UV_OFFLINE=1`): root pytest **409 passed, 1 deselected**(신규 5개), mypy **Success: no issues found in 33 source files**, ruff **All checks passed!**, KIS unittest **Ran 126 tests / OK**(신규 4개). 구현 전 신규 회귀의 미지원 모드·release 필드 실패를 확인했다. 합성·오프라인 회귀 근거이며 실데이터 검증 완료를 뜻하지 않는다.

@@ -155,8 +155,11 @@ class SelectionPolicy:
     max_gross: D = D(".8")
     max_position: D = D(".4")
     max_order_notional: D = D("400000")
+    spread_mode: str = "quoted"
 
     def __post_init__(self):
+        if self.spread_mode not in ("quoted", "historical_unavailable"):
+            raise AgentError("Unsupported spread mode")
         for name in ("capital_limit", "min_price", "min_average_turnover", "min_average_volume", "max_daily_volatility",
                      "max_spread_bps", "max_gross", "max_position", "max_order_notional"):
             object.__setattr__(self, name, dec(getattr(self, name)))
@@ -218,8 +221,13 @@ def select_candidates(spec: RankedStrategy, view: MarketView, securities: Securi
             if (view.as_of - state.effective_at).total_seconds() > policy.max_state_age_seconds:
                 reasons.append("STALE_SECURITY_STATE")
             if state.bid is None:
-                reasons.append("SPREAD_UNAVAILABLE")
+                if policy.spread_mode == "historical_unavailable":
+                    features["spread_source"] = "unavailable_preregistered"
+                else:
+                    reasons.append("SPREAD_UNAVAILABLE")
             else:
+                if policy.spread_mode == "historical_unavailable":
+                    features["spread_source"] = "quoted"
                 features["spread_bps"] = (state.ask - state.bid) / ((state.ask + state.bid) / 2) * 10000
                 if features["spread_bps"] > policy.max_spread_bps:
                     reasons.append("WIDE_SPREAD")
