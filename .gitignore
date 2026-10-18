@@ -16,3 +16,6 @@ artifacts/
 
 # Codex 위임 작업 파일·보고서 (.claude/skills/codex-delegate)
 .codex-tasks/
+
+# Local OpenDART disclosure ledger
+data/krx/
