@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import re
 import sqlite3
 import statistics
+import tempfile
 from collections.abc import Callable
+from contextlib import closing
 from dataclasses import asdict
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -36,6 +40,7 @@ from .evaluator import (
     enabled_benchmarks,
     require_same_contract,
 )
+from .witness import WitnessLog
 
 
 def benchmark_report(
@@ -88,6 +93,10 @@ FINAL_KINDS = EXCLUSIVE_KINDS - {"shadow"}
 
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS agent_witness_quarantine (
+ witness_seq INTEGER PRIMARY KEY, witness_hash TEXT NOT NULL, kind TEXT NOT NULL,
+ payload_json TEXT NOT NULL, operator TEXT NOT NULL, recorded_at TEXT NOT NULL);
+
 CREATE TABLE IF NOT EXISTS agent_observation_releases (
  observation_release_id TEXT PRIMARY KEY, market TEXT NOT NULL, family_lineage_id TEXT NOT NULL,
  champion_revision INTEGER NOT NULL, spec_version TEXT NOT NULL,
@@ -227,8 +236,21 @@ def _commitment_grade(committed_at: str, holdout_start: str) -> str:
 
 
 class ResearchAgent:
-    def __init__(self, store: Store, *, clock: Callable[[], datetime] | None = None):
+    def __init__(
+        self,
+        store: Store,
+        *,
+        clock: Callable[[], datetime] | None = None,
+        witness: WitnessLog | None = None,
+    ):
         self.clock = clock or (lambda: datetime.now(UTC))
+        self.witness = witness
+        if self.witness is None and store.path != ":memory:":
+            path = Path(store.path)
+            self.witness = WitnessLog(
+                path.parent / "witness" / (path.name + ".witness.jsonl"),
+                clock=self.clock,
+            )
         self.store = store
         self.db = store.db
         self.db.executescript(SCHEMA)
@@ -242,6 +264,157 @@ class ResearchAgent:
             raise AgentError(
                 "Unsupported unified research schema; preserve the database"
             )
+
+    def witness_status(self) -> dict[str, Any]:
+        records = self.witness.read() if self.witness else []
+        missing = []
+        for record in records:
+            p = record["payload"]
+            quarantine = self.db.execute(
+                "SELECT witness_hash FROM agent_witness_quarantine WHERE witness_seq=?",
+                (record["seq"],),
+            ).fetchone()
+            if quarantine:
+                if quarantine["witness_hash"] != record["hash"]:
+                    raise AgentError("Witness log is corrupted")
+                continue
+            if record["kind"] == "commitment":
+                reflected = self.db.execute(
+                    "SELECT 1 FROM agent_commitments WHERE commitment_id=?",
+                    (p["commitment_id"],),
+                ).fetchone()
+            else:
+                reflected = self.db.execute(
+                    "SELECT 1 FROM agent_intervals WHERE market=? AND kind=? "
+                    "AND start<=? AND end>=? AND (owner=? OR owner IN ("
+                    "SELECT id FROM agent_cycles WHERE "
+                    "json_extract(manifest_json,'$.commitment_id')=?))",
+                    (
+                        p["market"],
+                        p["kind"],
+                        p["start"],
+                        p["end"],
+                        p["owner"],
+                        p["owner"],
+                    ),
+                ).fetchone()
+            if not reflected:
+                missing.append(record)
+        return {
+            "path": str(self.witness.path) if self.witness else None,
+            "last_seq": records[-1]["seq"] if records else 0,
+            "last_hash": records[-1]["hash"] if records else "genesis",
+            "missing": missing,
+        }
+
+    def _require_witness(self) -> None:
+        if self.witness_status()["missing"]:
+            raise AgentError(
+                "Witnessed consumption is missing from the database; run reconcile-witness"
+            )
+
+    def reconcile_witness(self, *, operator: str) -> dict[str, Any]:
+        self._release_actor(operator)
+        with self.store.transaction():
+            for record in self.witness_status()["missing"]:
+                p = record["payload"]
+                if record["kind"] == "commitment":
+                    policy = policy_from_dict(
+                        json.loads(self._study(p["study"])["policy_json"])
+                    )
+                    account = self._budget_account(policy, p["study"])
+                    # Reserve as well as consume: remaining budget counts reservations.
+                    for kind in ("reserve", "consume"):
+                        self._budget_entry(
+                            account["account_id"], kind, p["commitment_id"], p["study"]
+                        )
+                    owner = "witness-commitment:" + p["commitment_id"]
+                    kind, start, end = "holdout", p["holdout_start"], p["holdout_end"]
+                else:
+                    kind, start, end = p["kind"], p["start"], p["end"]
+                    owner = (
+                        p["owner"]
+                        if kind == "observation_exposure"
+                        else "witness:" + str(record["seq"])
+                    )
+                # Recovery blocks evidence even if it overlaps surviving claims.
+                # It must never recreate evaluations or infer missing outcomes.
+                self.db.execute(
+                    "INSERT INTO agent_intervals VALUES(?,?,?,?,?) "
+                    "ON CONFLICT(market,owner,kind) DO UPDATE SET "
+                    "start=MIN(start,excluded.start),end=MAX(end,excluded.end)",
+                    (p["market"], start, end, owner, kind),
+                )
+                self.db.execute(
+                    "INSERT INTO agent_witness_quarantine VALUES(?,?,?,?,?,?)",
+                    (
+                        record["seq"],
+                        record["hash"],
+                        record["kind"],
+                        canonical(p),
+                        operator,
+                        aware(self.clock()).isoformat(),
+                    ),
+                )
+            result = self.witness_status()
+            if result["missing"]:
+                raise AgentError("Witness reconciliation incomplete")
+        return result
+
+    def backup(self, dest_dir: Path) -> dict[str, Any]:
+        created_at = aware(self.clock()).astimezone(UTC)
+        dest_dir = Path(dest_dir)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        target = dest_dir / (
+            "research-" + created_at.strftime("%Y%m%dT%H%M%S%fZ") + ".sqlite3"
+        )
+        manifest_path = target.with_suffix(".manifest.json")
+        if target.exists() or manifest_path.exists():
+            raise AgentError("Backup already exists")
+        if self.db.in_transaction:
+            raise AgentError("Backup requires a committed database")
+        descriptor, temporary = tempfile.mkstemp(dir=dest_dir, suffix=".sqlite3.tmp")
+        os.close(descriptor)
+        temp = Path(temporary)
+        try:
+            with closing(sqlite3.connect(temp)) as copy:
+                self.db.backup(copy)
+                tables = [
+                    row[0]
+                    for row in copy.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name GLOB 'agent_*'"
+                    )
+                ]
+                counts = {
+                    table: copy.execute(
+                        'SELECT count(*) FROM "' + table.replace('"', '""') + '"'
+                    ).fetchone()[0]
+                    for table in tables
+                }
+                schema_version = copy.execute(
+                    "SELECT value FROM meta WHERE key='agent_schema_version'"
+                ).fetchone()[0]
+            status = self.witness_status()
+            manifest = {
+                "sha256": hashlib.sha256(temp.read_bytes()).hexdigest(),
+                "bytes": temp.stat().st_size,
+                "created_at": created_at.isoformat(),
+                "build_id": build_id(),
+                "agent_schema_version": schema_version,
+                "table_counts": counts,
+                "witness": {k: status[k] for k in ("path", "last_seq", "last_hash")},
+            }
+            # Exclusive creation reserves the name before atomic publication.
+            with target.open("xb"):
+                pass
+            temp.replace(target)
+            with manifest_path.open("x") as stream:
+                stream.write(canonical(manifest) + "\n")
+                stream.flush()
+                os.fsync(stream.fileno())
+            return {"path": str(target), "manifest": str(manifest_path), **manifest}
+        finally:
+            temp.unlink(missing_ok=True)
 
     def import_history(self, source: Path) -> dict[str, Any]:
         """Import consumption only, without accounts, credentials or experiments.
@@ -636,6 +809,7 @@ class ResearchAgent:
         )
 
     def init(self, name: str, policy: AgentPolicy) -> dict[str, Any]:
+        self._require_witness()
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", name):
             raise AgentError(
                 "Study name must use 1..80 ASCII letters, digits, underscores or hyphens"
@@ -1156,6 +1330,17 @@ class ResearchAgent:
             "INSERT INTO agent_intervals VALUES(?,?,?,?,?) ON CONFLICT(market,owner,kind) DO UPDATE SET end=MAX(end,excluded.end)",
             (policy.market, start.isoformat(), end.isoformat(), owner, kind),
         )
+        if self.witness is not None:
+            self.witness.append(
+                "interval_claim",
+                {
+                    "market": policy.market,
+                    "start": claim_start,
+                    "end": claim_end,
+                    "owner": owner,
+                    "kind": kind,
+                },
+            )
         if kind in EXCLUSIVE_KINDS:
             self.db.executemany(
                 "INSERT OR IGNORE INTO holdouts VALUES(?,?,?,?)",
@@ -1186,6 +1371,7 @@ class ResearchAgent:
     def tick(
         self, name: str, data: ResearchInput, *, max_cycles: int = 1
     ) -> dict[str, Any]:
+        self._require_witness()
         require_observed(data, now=self.clock())
         row = self._study(name)
         policy = policy_from_dict(json.loads(row["policy_json"]))
@@ -1317,6 +1503,18 @@ class ResearchAgent:
                             committed_at,
                         ),
                     )
+                    if self.witness is not None:
+                        self.witness.append(
+                            "commitment",
+                            {
+                                "commitment_id": commitment_id,
+                                "study": name,
+                                "ordinal": ordinal,
+                                "market": policy.market,
+                                "holdout_start": payload["holdout_start"],
+                                "holdout_end": payload["holdout_end"],
+                            },
+                        )
                     cohort = {
                         "market": policy.market,
                         "start": payload["holdout_start"],
@@ -2075,7 +2273,9 @@ class ResearchAgent:
                     or input_hash != existing["input_hash"]
                 ):
                     raise AgentError("Stored observation checkpoint changed")
-                saved_payload = json.loads(existing["payload_json"]) if existing else None
+                saved_payload = (
+                    json.loads(existing["payload_json"]) if existing else None
+                )
                 if (
                     saved_payload is None
                     or saved_payload.get("build") != current_build
@@ -2090,7 +2290,9 @@ class ResearchAgent:
                     )
                     require_same_contract(result, reference)
                     capital = policy.logic.selection.capital_limit
-                    net, drawdown = self._checkpoint_window(result, offset, size, capital)
+                    net, drawdown = self._checkpoint_window(
+                        result, offset, size, capital
+                    )
                     reference_net, _ = self._checkpoint_window(
                         reference, offset, size, capital
                     )

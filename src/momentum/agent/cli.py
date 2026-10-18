@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import shutil
 import sqlite3
 import sys
+import tempfile
 import time
 from collections.abc import Callable
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal as D
 from pathlib import Path
 from typing import Any
@@ -124,6 +127,10 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument(
         "action",
         choices=(
+            "backup",
+            "restore",
+            "reconcile-witness",
+            "witness-status",
             "release-observation",
             "release-stop",
             "init",
@@ -136,6 +143,10 @@ def parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument("--db", type=Path, default=Path("artifacts/agent/research.sqlite3"))
+    p.add_argument("--to", type=Path)
+    p.add_argument("--from", dest="backup_source", type=Path)
+    p.add_argument("--replace", action="store_true")
+    p.add_argument("--operator")
     p.add_argument("--study", default="main")
     p.add_argument("--policy", type=Path)
     p.add_argument("--csv", type=Path)
@@ -173,7 +184,56 @@ def parser() -> argparse.ArgumentParser:
     return p
 
 
+def restore(args: argparse.Namespace) -> dict[str, Any]:
+    source = args.backup_source
+    if source is None:
+        raise AgentError("Restore requires --from")
+    manifest = json.loads(source.with_suffix(".manifest.json").read_text())
+    if hashlib.sha256(source.read_bytes()).hexdigest() != manifest["sha256"]:
+        raise AgentError("Backup hash mismatch")
+    target = args.db
+    if source.resolve() == target.resolve():
+        raise AgentError("Restore target must differ from backup")
+    files = [Path(str(target) + suffix) for suffix in ("", "-wal", "-shm")]
+    if any(path.exists() for path in files) and not args.replace:
+        raise AgentError("Target database exists; use --replace")
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    preserved = [
+        (path, Path(str(target) + ".replaced-" + stamp + str(path)[len(str(target)) :]))
+        for path in files
+        if path.exists()
+    ]
+    if any(dest.exists() for _, dest in preserved):
+        raise AgentError("Preserved database name already exists")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(dir=target.parent, suffix=".restore.tmp")
+    os.close(descriptor)
+    temp = Path(temporary)
+    try:
+        shutil.copyfile(source, temp)
+        # Verify the staged bytes as well, before touching the existing database.
+        if hashlib.sha256(temp.read_bytes()).hexdigest() != manifest["sha256"]:
+            raise AgentError("Backup hash mismatch")
+        with temp.open("rb") as stream:
+            os.fsync(stream.fileno())
+        for path, dest in preserved:
+            path.rename(dest)
+        temp.rename(target)
+    finally:
+        temp.unlink(missing_ok=True)
+    store = Store(target)
+    try:
+        result = ResearchAgent(store).witness_status()
+        if result["missing"]:
+            result["next_action"] = "reconcile-witness --operator NAME"
+        return result
+    finally:
+        store.close()
+
+
 def run(args: argparse.Namespace) -> dict[str, Any]:
+    if args.action == "restore":
+        return restore(args)
     if args.action == "demo":
         from .demo import run_demo
 
@@ -189,7 +249,15 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     store = Store(args.db)
     try:
         agent = ResearchAgent(store)
-        if args.action == "init":
+        if args.action == "backup":
+            if args.to is None:
+                raise AgentError("Backup requires --to")
+            result = agent.backup(args.to)
+        elif args.action == "witness-status":
+            result = agent.witness_status()
+        elif args.action == "reconcile-witness":
+            result = agent.reconcile_witness(operator=args.operator)
+        elif args.action == "init":
             policy = (
                 policy_from_dict(json.loads(args.policy.read_text()))
                 if args.policy
@@ -258,7 +326,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
 def main() -> int:
     try:
-        result = run(parser().parse_args())
+        args = parser().parse_args()
+        result = run(args)
+        if args.action in {"backup", "restore", "witness-status", "reconcile-witness"}:
+            print(canonical(result))
+            return 0
         print(
             canonical(
                 {
