@@ -1,0 +1,79 @@
+{
+  "status": "000",
+  "message": "정상",
+  "page_no": 1,
+  "total_page": 1,
+  "total_count": 7,
+  "list": [
+    {
+      "rcept_no": "20240603000001",
+      "rcept_dt": "20240603",
+      "corp_code": "00000001",
+      "corp_cls": "K",
+      "stock_code": "000001",
+      "corp_name": "가상회사1",
+      "report_nm": "유무상증자결정",
+      "rm": ""
+    },
+    {
+      "rcept_no": "20240603000002",
+      "rcept_dt": "20240603",
+      "corp_code": "00000002",
+      "corp_cls": "K",
+      "stock_code": "000002",
+      "corp_name": "가상회사2",
+      "report_nm": "무상증자결정",
+      "rm": ""
+    },
+    {
+      "rcept_no": "20240603000003",
+      "rcept_dt": "20240603",
+      "corp_code": "00000003",
+      "corp_cls": "K",
+      "stock_code": "000003",
+      "corp_name": "가상회사3",
+      "report_nm": "[기재정정]유상증자결정",
+      "rm": ""
+    },
+    {
+      "rcept_no": "20240603000004",
+      "rcept_dt": "20240603",
+      "corp_code": "00000004",
+      "corp_cls": "K",
+      "stock_code": "000004",
+      "corp_name": "가상회사4",
+      "report_nm": "감자결정",
+      "rm": ""
+    },
+    {
+      "rcept_no": "20240603000005",
+      "rcept_dt": "20240603",
+      "corp_code": "00000005",
+      "corp_cls": "K",
+      "stock_code": "000005",
+      "corp_name": "가상회사5",
+      "report_nm": "주식분할결정",
+      "rm": ""
+    },
+    {
+      "rcept_no": "20240603000006",
+      "rcept_dt": "20240603",
+      "corp_code": "00000006",
+      "corp_cls": "K",
+      "stock_code": "000006",
+      "corp_name": "가상회사6",
+      "report_nm": "주식병합결정",
+      "rm": ""
+    },
+    {
+      "rcept_no": "20240603000007",
+      "rcept_dt": "20240603",
+      "corp_code": "00000007",
+      "corp_cls": "K",
+      "stock_code": "",
+      "corp_name": "가상회사7",
+      "report_nm": "[첨부정정]기타보고",
+      "rm": ""
+    }
+  ]
+}
