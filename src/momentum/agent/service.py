@@ -388,6 +388,8 @@ class ResearchAgent:
                 "source_cycle_id": champion["source_cycle_id"],
                 "commitment_id": champion["commitment_id"],
                 "selector_policy_id": digest(selection),
+                "spread_mode": selection.spread_mode,
+                "execution_eligible": selection.spread_mode == "quoted",
                 "cost_model_id": digest(policy.logic.costs),
                 "risk_limits_id": digest(
                     {

@@ -18,6 +18,10 @@ from trading_agent.selection import SecurityHistory
 
 from momentum.ledger.ledger import CorporateAction
 
+# Preregistered before results: conservatively covers at least half a 1-KRW
+# tick near the 1,000-KRW price floor and the gap above the default 5 bps.
+HISTORICAL_SPREAD_MIN_SLIPPAGE_BPS = Decimal("25")  # noqa: FURB157
+
 
 @lru_cache(maxsize=1)
 def build_id() -> str:
@@ -174,6 +178,13 @@ class AgentPolicy:
     demotion_checkpoints: int = 3
 
     def __post_init__(self) -> None:
+        if (
+            self.logic.selection.spread_mode == "historical_unavailable"
+            and self.logic.costs.slippage_bps < HISTORICAL_SPREAD_MIN_SLIPPAGE_BPS
+        ):
+            raise AgentError(
+                "Historical spread-unavailable mode requires preregistered slippage of at least 25 bps"
+            )
         ratios = [self.degradation_underperformance]
         if self.degradation_drawdown is not None:
             ratios.append(self.degradation_drawdown)
