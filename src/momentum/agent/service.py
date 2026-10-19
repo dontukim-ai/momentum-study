@@ -18,7 +18,14 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from trading_agent.contracts import AgentError, aware, canonical, digest, session_time
+from trading_agent.contracts import (
+    KST,
+    AgentError,
+    aware,
+    canonical,
+    digest,
+    session_time,
+)
 from trading_agent.logic import LogicProposer, ranked_spec
 from trading_agent.selection import select_candidates
 from trading_agent.store import Store
@@ -98,6 +105,17 @@ CREATE TABLE IF NOT EXISTS agent_witness_quarantine (
  witness_seq INTEGER PRIMARY KEY, witness_hash TEXT NOT NULL, kind TEXT NOT NULL,
  payload_json TEXT NOT NULL, operator TEXT NOT NULL, recorded_at TEXT NOT NULL);
 
+CREATE TABLE IF NOT EXISTS agent_execution_releases (
+ execution_release_id TEXT PRIMARY KEY,
+ observation_release_id TEXT NOT NULL REFERENCES agent_observation_releases,
+ market TEXT NOT NULL, family_lineage_id TEXT NOT NULL, champion_revision INTEGER NOT NULL,
+ target_mode TEXT NOT NULL CHECK(target_mode = 'paper'), capital_scope TEXT NOT NULL,
+ payload_json TEXT NOT NULL, approved_by TEXT NOT NULL, approved_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS agent_execution_release_events (
+ event_id TEXT PRIMARY KEY, execution_release_id TEXT NOT NULL REFERENCES agent_execution_releases,
+ event TEXT NOT NULL CHECK(event IN ('STOPPED')),
+ reason TEXT NOT NULL CHECK(reason IN ('OBSERVATION_RELEASE_STOPPED','HUMAN','RECONCILIATION_MISMATCH','ORDER_STATE_UNKNOWN')),
+ detail_json TEXT NOT NULL, recorded_by TEXT NOT NULL, recorded_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS agent_observation_releases (
  observation_release_id TEXT PRIMARY KEY, market TEXT NOT NULL, family_lineage_id TEXT NOT NULL,
  champion_revision INTEGER NOT NULL, spec_version TEXT NOT NULL,
@@ -732,6 +750,262 @@ class ResearchAgent:
             ]
         return []
 
+    _EXECUTION_STOP_REASONS = frozenset(
+        {"OBSERVATION_RELEASE_STOPPED", "HUMAN", "RECONCILIATION_MISMATCH", "ORDER_STATE_UNKNOWN"}
+    )
+    _ACTIVE_EXECUTION = (
+        "NOT EXISTS (SELECT 1 FROM agent_execution_release_events e "
+        "WHERE e.execution_release_id=x.execution_release_id)"
+    )
+
+    def _active_execution(self, market: str) -> Any:
+        return self.db.execute(
+            "SELECT x.* FROM agent_execution_releases x WHERE market=? AND family_lineage_id=? AND "
+            + self._ACTIVE_EXECUTION,
+            (market, FAMILY_LINEAGE_ID),
+        ).fetchone()
+
+    @staticmethod
+    def _execution_report(row: Any) -> dict[str, Any]:
+        return {
+            **json.loads(row["payload_json"]),
+            **{
+                k: row[k]
+                for k in ("execution_release_id", "approved_by", "approved_at")
+            },
+        }
+
+    def _e3_window(
+        self, market: str, observation: Any, policy: AgentPolicy
+    ) -> dict[str, Any]:
+        """Real-time evidence observed after the observation release was approved.
+
+        Only disclosed (unsealed) checkpoints whose window starts after the
+        approval date count; a sealed window is not yet evidence anyone may use.
+        """
+        approved_day = (
+            datetime.fromisoformat(observation["approved_at"]).astimezone(KST).date()
+        )
+        counted = [
+            row
+            for row in self.db.execute(
+                "SELECT * FROM agent_observation_checkpoints WHERE stream=? ORDER BY seq",
+                (self._observation_stream(market),),
+            )
+            if row["window_start"] > approved_day.isoformat()
+            and not self._checkpoint_sealed(market, row["window_start"], row["window_end"])
+        ]
+        return {
+            "min_sessions": policy.execution_min_observation_sessions,
+            "observed_sessions": len(counted) * policy.observation_checkpoint_sessions,
+            "start": counted[0]["window_start"] if counted else None,
+            "end": counted[-1]["window_end"] if counted else None,
+            "checkpoint_seqs": [row["seq"] for row in counted],
+        }
+
+    def register_execution_release(
+        self,
+        market: str = "KRX",
+        *,
+        approved_by: str,
+        capital_scope: Any,
+        target_mode: str = "paper",
+    ) -> dict[str, Any]:
+        """Grant paper execution eligibility; the release itself places no orders.
+
+        The order path (ORD-02) reads this record. Live mode stays out of scope
+        until a separate account-level contract is verified (M6).
+        """
+        self._release_actor(approved_by)
+        if target_mode != "paper":
+            raise AgentError("Live execution release is outside the current scope")
+        try:
+            capital = Decimal(str(capital_scope))
+        except (ArithmeticError, ValueError):
+            raise AgentError("Invalid execution capital scope") from None
+        with self.store.transaction():
+            observation = self._active_release(market)
+            if observation is None:
+                raise AgentError("Execution release requires an active observation release")
+            obs = json.loads(observation["payload_json"])
+            if obs.get("execution_eligible") is not True:
+                raise AgentError("Observation release is not execution eligible")
+            limit = min(Decimal(1000000), Decimal(obs["starting_portfolio"]["capital"]))
+            if (
+                not capital.is_finite()
+                or capital != capital.to_integral_value()
+                or not Decimal(0) < capital <= limit
+            ):
+                raise AgentError(
+                    f"Invalid execution capital scope; must be a whole KRW amount in (0, {limit}]"
+                )
+            cycle = self.db.execute(
+                "SELECT manifest_json FROM agent_cycles WHERE id=?",
+                (observation["source_cycle_id"],),
+            ).fetchone()
+            policy = policy_from_dict(json.loads(cycle["manifest_json"])["policy"])
+            window = self._e3_window(market, observation, policy)
+            if window["observed_sessions"] < window["min_sessions"]:
+                raise AgentError(
+                    "Insufficient E3 observation: "
+                    f"{window['observed_sessions']} of {window['min_sessions']} sessions"
+                )
+            latest = self.db.execute(
+                "SELECT * FROM agent_observation_checkpoints WHERE stream=? ORDER BY seq DESC LIMIT 1",
+                (self._observation_stream(market),),
+            ).fetchone()
+            if (
+                latest is None
+                or latest["state"] != "OBSERVING"
+                or latest["revision"] != observation["champion_revision"]
+            ):
+                raise AgentError(
+                    "Latest observation checkpoint must be OBSERVING for the released revision"
+                )
+            active = self._active_execution(market)
+            if active is not None:
+                existing = self._execution_report(active)
+                if (
+                    active["observation_release_id"] == observation["observation_release_id"]
+                    and existing["capital_scope"] == str(capital)
+                ):
+                    return existing
+                raise AgentError(
+                    "Active execution release exists; stop it before registering another"
+                )
+            previous = self.db.execute(
+                "SELECT execution_release_id FROM agent_execution_releases "
+                "WHERE market=? AND family_lineage_id=? ORDER BY rowid DESC LIMIT 1",
+                (market, FAMILY_LINEAGE_ID),
+            ).fetchone()
+            payload = {
+                "observation_release_id": observation["observation_release_id"],
+                "observation_approved_at": observation["approved_at"],
+                "champion_key": obs["champion_key"],
+                "champion_revision": observation["champion_revision"],
+                "spec_version": observation["spec_version"],
+                "evidence_grade": "E3",
+                "selector_policy_id": obs["selector_policy_id"],
+                "cost_model_id": obs["cost_model_id"],
+                "risk_limits_id": obs["risk_limits_id"],
+                "target_mode": target_mode,
+                "capital_scope": str(capital),
+                "e3_window": window,
+                "rollback_release_id": previous["execution_release_id"] if previous else None,
+                "stop_conditions": sorted(self._EXECUTION_STOP_REASONS),
+                "orders_submitted": 0,
+            }
+            approved_at = aware(self.clock()).isoformat()
+            release_id = digest(
+                {**payload, "approved_by": approved_by, "approved_at": approved_at}
+            )
+            self.db.execute(
+                "INSERT INTO agent_execution_releases VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (
+                    release_id,
+                    observation["observation_release_id"],
+                    market,
+                    FAMILY_LINEAGE_ID,
+                    observation["champion_revision"],
+                    target_mode,
+                    str(capital),
+                    canonical(payload),
+                    approved_by,
+                    approved_at,
+                ),
+            )
+            return self._execution_report(self._active_execution(market))
+
+    def stop_execution_release(
+        self,
+        release_id: str,
+        *,
+        reason: str = "HUMAN",
+        stopped_by: str,
+        detail: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        self._release_actor(stopped_by)
+        if reason not in self._EXECUTION_STOP_REASONS:
+            raise AgentError("Invalid execution release stop reason")
+        with self.store.transaction():
+            row = self.db.execute(
+                "SELECT x.* FROM agent_execution_releases x WHERE execution_release_id=? AND "
+                + self._ACTIVE_EXECUTION,
+                (release_id,),
+            ).fetchone()
+            if row is None:
+                raise AgentError("Execution release is not active")
+            event = {
+                "execution_release_id": release_id,
+                "event": "STOPPED",
+                "reason": reason,
+                "detail": detail or {},
+                "recorded_by": stopped_by,
+                "recorded_at": aware(self.clock()).isoformat(),
+            }
+            event["event_id"] = digest(event)
+            self.db.execute(
+                "INSERT INTO agent_execution_release_events VALUES(?,?,?,?,?,?,?)",
+                (
+                    event["event_id"],
+                    release_id,
+                    "STOPPED",
+                    reason,
+                    canonical(event["detail"]),
+                    stopped_by,
+                    event["recorded_at"],
+                ),
+            )
+            return event
+
+    def _execution_status(self, market: str) -> dict[str, Any]:
+        active = self._active_execution(market)
+        summary = None
+        if active is not None:
+            summary = {
+                k: active[k]
+                for k in (
+                    "execution_release_id",
+                    "observation_release_id",
+                    "champion_revision",
+                    "target_mode",
+                    "capital_scope",
+                    "approved_by",
+                    "approved_at",
+                )
+            }
+        last = self.db.execute(
+            "SELECT e.* FROM agent_execution_release_events e JOIN agent_execution_releases x "
+            "USING(execution_release_id) WHERE x.market=? AND x.family_lineage_id=? "
+            "ORDER BY e.rowid DESC LIMIT 1",
+            (market, FAMILY_LINEAGE_ID),
+        ).fetchone()
+        event = dict(last) if last else None
+        if event:
+            event["detail"] = json.loads(event.pop("detail_json"))
+        return {"execution_release": summary, "last_execution_release_event": event}
+
+    def _automatic_execution_stop(self, market: str) -> list[dict[str, Any]]:
+        # Execution eligibility never outlives its observation basis: any stop of
+        # the observation release (degradation, data failure, human) stops it.
+        active = self._active_execution(market)
+        if active is None:
+            return []
+        observation = self._active_release(market)
+        if (
+            observation is not None
+            and observation["observation_release_id"] == active["observation_release_id"]
+        ):
+            return []
+        return [
+            self.stop_execution_release(
+                active["execution_release_id"],
+                reason="OBSERVATION_RELEASE_STOPPED",
+                stopped_by="agent",
+                detail={"observation_release_id": active["observation_release_id"]},
+            )
+        ]
+
     def _registry_current(self, market: str) -> Any:
         return self.db.execute(
             "SELECT * FROM agent_champion_registry WHERE market=? AND family_lineage_id=? "
@@ -1129,6 +1403,7 @@ class ResearchAgent:
             },
             "observation_state": self._latest_checkpoint(policy.market),
             **self._release_status(policy.market),
+            **self._execution_status(policy.market),
             "cohorts": [
                 {
                     key: cohort[key]
@@ -1733,6 +2008,7 @@ class ResearchAgent:
         return {
             "study": name,
             "release_events": release_events,
+            "execution_release_events": self._automatic_execution_stop(policy.market),
             "cycles": completed,
             **({"committed_cycle": committed_cycle} if committed_cycle else {}),
             "shadow": shadow,

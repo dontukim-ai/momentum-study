@@ -155,6 +155,8 @@ def parser() -> argparse.ArgumentParser:
             "reconcile-witness",
             "witness-status",
             "release-observation",
+            "release-execution",
+            "release-execution-stop",
             "release-stop",
             "init",
             "run",
@@ -193,6 +195,8 @@ def parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--source-db", type=Path)
     p.add_argument("--approved-by")
+    p.add_argument("--capital-scope")
+    p.add_argument("--target-mode", default="paper")
     p.add_argument("--revision", type=int)
     p.add_argument("--release-id")
     p.add_argument("--stopped-by")
@@ -385,6 +389,18 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         elif args.action == "release-observation":
             result = agent.register_observation_release(
                 approved_by=args.approved_by, revision=args.revision
+            )
+        elif args.action == "release-execution":
+            result = agent.register_execution_release(
+                approved_by=args.approved_by,
+                capital_scope=args.capital_scope,
+                target_mode=args.target_mode,
+            )
+        elif args.action == "release-execution-stop":
+            result = agent.stop_execution_release(
+                args.release_id,
+                stopped_by=args.stopped_by,
+                reason=args.reason or "HUMAN",
             )
         elif args.action == "release-stop":
             result = agent.stop_observation_release(

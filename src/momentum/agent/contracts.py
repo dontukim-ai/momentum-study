@@ -178,6 +178,7 @@ class AgentPolicy:
     degradation_underperformance: float = 0.03
     degradation_drawdown: float | None = None
     demotion_checkpoints: int = 3
+    execution_min_observation_sessions: int = 60
 
     def __post_init__(self) -> None:
         if self.memory_policy not in ("none", "suppress_failed_final_v1"):
@@ -187,6 +188,11 @@ class AgentPolicy:
             or self.memory_cooldown_cycles < 1
         ):
             raise AgentError("Invalid preregistered memory cooldown")
+        if (
+            type(self.execution_min_observation_sessions) is not int
+            or self.execution_min_observation_sessions < 1
+        ):
+            raise AgentError("Invalid preregistered execution observation minimum")
         if (
             self.logic.selection.spread_mode == "historical_unavailable"
             and self.logic.costs.slippage_bps < HISTORICAL_SPREAD_MIN_SLIPPAGE_BPS
