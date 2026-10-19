@@ -117,3 +117,29 @@ PC 탐침 결과(2026-10-17, 기준일 2024-06-03, `pblntf_ty=B` 주요사항보
 2. DATA-02: 원본 → 가격 CSV·종목 상태 JSONL·기업행동 JSON 변환기, 영구 ID(ISIN), 정정 이벤트.
 3. DATA-03: 거래소 달력(시세 응답의 기준일 집합 + 공개 휴장일).
 4. DATA-05·FIN-01: 품질 코드, §4 호가 공백 정책 등록.
+
+
+## 입력 묶음(DATA-04a)
+
+오프라인 연구 입력은 다음 불변 디렉터리로 공개한다. 필수 파일은 `prices.csv`, `securities.jsonl`이며 행동·세션·달력은 기존 입력 계약대로 선택 사항이다.
+
+```text
+<root>/
+  staging/<임시 이름>/
+  bundles/<bundle_id>/
+    prices.csv
+    securities.jsonl
+    actions.json       # 선택
+    sessions.json      # 선택
+    calendar.json      # 선택
+    manifest.json
+  CURRENT              # bundle_id 한 줄
+```
+
+manifest 스키마 v1은 `schema_version`, 파일별 `sha256`·`bytes`를 가진 `files`, 기업행동 기준 `basis`, 자유 메타데이터 객체 `sources`, clock의 `created_at`, `bundle_id`를 기록한다. ID는 정규화 JSON `{schema_version, files, basis, sources}`의 SHA-256이며 생성 시각은 제외한다. 같은 파일·basis·sources 재발행은 기존 manifest와 디렉터리를 그대로 유지한다.
+
+`created_at`은 시간대가 있는 시각이어야 하며 staging에서 검증한다. 잘못된 시각도 입력 파싱 실패와 같이 새 버전 디렉터리나 CURRENT를 공개하지 않는다.
+
+`momentum-agent bundle-publish --bundle ROOT --csv PRICES --securities STATES`에 선택 `--actions`, `--sessions`, `--calendar`, `--source-meta JSON파일`, `--corporate-action-basis`를 지정할 수 있다. 발행은 staging 복사 → 해시·manifest 작성 → 기존 `read_input`으로 ResearchInput 생성 검증 → bundles 디렉터리 rename → 임시 CURRENT 파일의 `os.replace` 순서다. 실패 시 staging을 정리하고 기존 CURRENT와 bundles를 보존한다. 발행 원본 파일도 복사 동안 동일 수집 snapshot으로 유지해야 한다.
+
+수집기는 파일을 직접 덮어쓰지 않고 검증된 묶음만 발행하며, 연구 worker는 `run --bundle ROOT`로 묶음만 읽는 운영 규칙을 따른다. 기존 직접 경로 실행은 호환성을 위해 유지하지만 bundle과 함께 지정할 수 없다. worker는 tick마다 CURRENT를 한 번 읽고 그 버전의 전체 파일명·크기·해시와 manifest ID를 대조한 뒤 파싱한다. 중간 포인터 교체는 진행 중 읽기에 영향을 주지 않는다. 누락·추가·불일치는 `Input bundle integrity failure`로 중단한다. 공개 디렉터리는 수정·삭제하지 않으며, 결과 JSON에 `input_bundle: {bundle_id, created_at}`을 남긴다. 이 ID는 파일 공개 버전이며 기존 연구 지문이나 DB·commitment 계약을 대체하지 않는다. 현재 근거는 합성 회귀이며 실제 공급원 수집·상시 운영 검증은 후속이다.

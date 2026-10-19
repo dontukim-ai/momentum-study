@@ -52,7 +52,7 @@
 | --- | --- | --- | --- |
 | 데이터 | 파일 계약·시점 조회·prefix | 실제 공급자·역사적 상태·영구 ID·정정 원본 | DATA-01,02,05,06 |
 | 달력 | 명시 세션·고정 KRX 시각 | 실제 휴장·특별장·주말 freshness | DATA-03 |
-| 입력 일관성 | 출력 JSON 원자적 교체 | 가격/상태/달력/행동 입력 bundle의 원자적 공개 | DATA-04 |
+| 입력 일관성 | DATA-04a: 입력 bundle manifest·해시·파서 검증·CURRENT 원자 교체·tick별 단일 버전 읽기(합성 회귀 범위 완료) | 실데이터 수집기의 bundle 발행 연동·상시 운영 검증 | DATA-04 |
 | 비용·호가 | 예제 bps·원 단위; FIN-01a 과거 호가 없음 사전 등록 모드·편도 25bp 하한·관찰 release 실행 자격 표시(합성 회귀 범위 완료) | 주식/ETF·유효 날짜·계좌·호가·정산의 실제 계약 | FIN-01 |
 | 기업행동 | raw ledger split/dividend | 신호 보정·정정·권리·합병·일부 미지원 행동 | FIN-02 |
 | 경제 평가 | NAV·현금·채권·일봉 체결 | 실제 결제·기말 청산·장중/부분 체결·capacity | FIN-03,04 |
@@ -203,3 +203,12 @@ FIN-01a 최종 검증(`UV_CACHE_DIR=/tmp/momentum-uv-cache`, `UV_OFFLINE=1`): ro
 
 
 LOOP-05c 최종 검증(`UV_CACHE_DIR=/tmp/momentum-uv-cache`, `UV_OFFLINE=1`): 전체 pytest **418 passed, 1 deselected in 458.91s**(신규 합성 회귀 9개 포함), mypy **Success: no issues found in 33 source files**, ruff **All checks passed!**, KIS unittest **Ran 126 tests / OK**. 신규 checkpoint 회귀와 기존 release 오류 종류 보존 회귀의 별도 실행도 **10 passed**다. 증분 계산·최신 저장 창 안전 재검증은 합성·오프라인 회귀 범위에서 완료했으며 실데이터 성능·운영 검증 완료를 뜻하지 않는다.
+
+
+## DATA-04a 입력 묶음 (합성 회귀 범위)
+
+`agent.bundle`은 가격·상태와 선택 행동·세션·달력을 staging에 복사하고 기존 `read_input`으로 검증한 뒤 내용 기반 bundle ID 디렉터리와 CURRENT를 공개한다. manifest는 파일별 SHA-256·크기·basis·sources·created_at을 보존하며 created_at은 ID에서 제외한다. 재발행은 기존 디렉터리를 변경하지 않는다. 열기는 CURRENT를 한 번만 읽고 manifest ID와 모든 파일을 검사한다. 검증 실패는 포인터를 유지하고 staging을 정리한다.
+
+`bundle-publish`와 `run --bundle`을 제공하며 경로 입력 혼용은 거부한다. watch는 tick마다 새 CURRENT를 해석하고 결과 JSON의 `input_bundle`에 실제 읽은 ID·시각을 기록한다. 연구 DB·commitment payload·기존 경로 입력 계약은 유지한다. 신규 `tests/unit/test_input_bundle.py`는 왕복 지문, 읽기 도중 v2 발행의 v1 격리, 실패 정리, 변조·삭제·추가·manifest 불일치, 동일 내용 재발행, 선택 입력·지정 버전, 고정 시계의 실제 사이클 CLI 동등성, watch 버전 전환과 sources 형식을 검증한다. 실데이터 검증 완료를 뜻하지 않는다.
+
+재시작 후 추가한 `test_invalid_clock_preserves_current_and_bundle_directories`는 시간대 없는 clock의 발행 실패가 새 bundles 디렉터리를 남기는 실패를 먼저 확인하고, staging 단계의 시각 검증으로 CURRENT·기존 버전·staging 정리를 보존한다. 기존의 빈 버전 디렉터리도 교체하지 않는 회귀를 유지한다.
