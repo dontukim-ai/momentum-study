@@ -24,20 +24,26 @@
 
 | 연구 필드 | 공급원 필드(추정) | 변환 | 확인 |
 | --- | --- | --- | --- |
-| session | `basDt` (YYYYMMDD) | 날짜 변환 | 미확인 |
-| symbol | `srtnCd` (단축코드 6자리) | 그대로. 영구 ID는 `isinCd`로 따로 보관(DATA-02) | 미확인 |
-| open/high/low/close | `mkp`/`hipr`/`lopr`/`clpr` | 원 단위 Decimal. 수정주가 아님(원시가) 여부 확인 필요 | 미확인 |
-| volume | `trqu` | 정수 | 미확인 |
+| session | `basDt` (YYYYMMDD) | 날짜 변환 | 확인(2026-10-19) |
+| symbol | `srtnCd` (단축코드 6자리) | 그대로. 영구 ID는 `isinCd`로 따로 보관(DATA-02) | 확인(2026-10-19) |
+| open/high/low/close | `mkp`/`hipr`/`lopr`/`clpr` | 원 단위 Decimal. 원시가 여부는 미확인(분할 전후 비교로 확인 예정) | 필드 확인(2026-10-19) |
+| volume | `trqu` | 정수 | 확인(2026-10-19) |
 | available_at | 응답에 없음 | §3 정보 시계 정책 | 정책 |
 | source | 고정 문자열 `fsc-stock-price` / `fsc-etf-price` + 수집 manifest 해시 | | 정책 |
-| (참고) 시장 구분 | `mrktCtg` (KOSPI/KOSDAQ/KONEX) | 종목 상태의 market | 미확인 |
-| (참고) 상장주식수·시가총액 | `lstgStCnt`, `mrktTotAmt` | 진단용. 신호에 쓰지 않음 | 미확인 |
+| (참고) 시장 구분 | `mrktCtg` (KOSPI/KOSDAQ/KONEX) | 종목 상태의 market | 필드 확인(2026-10-19) |
+| (참고) 상장주식수·시가총액 | `lstgStCnt`, `mrktTotAmt` | 진단용. 신호에 쓰지 않음 | 필드 확인(2026-10-19) |
 
 2026-10-19 확인(ETF, 활용가이드와 포털 시험 호출):
 - 서비스는 V2다. ETF 경로 `https://apis.data.go.kr/1160100/GetSecuritiesProductInfoService_V2/getETFPriceInfo_V2`. 예전 `/service/GetSecuritiesProductInfoService/getETFPriceInfo` 경로는 V2로 발급된 키를 `SERVICE_KEY_IS_NOT_REGISTERED_ERROR`(30)로 거부했다. 주식 경로는 같은 규칙의 `GetStockSecuritiesInfoService_V2/getStockPriceInfo_V2`다. 2026-10-19 맥 탐침에서 2024-06-03 기준 ETF 1페이지·주식 3페이지 모두 HTTP 200을 확인했다.
 - ETF 응답 필드: `basDt, srtnCd, isinCd, itmsNm, mkp, hipr, lopr, clpr, vs, fltRt, trqu, trPrc, nav, mrktTotAmt, nPptTotAmt, stLstgCnt, bssIdxIdxNm, bssIdxClpr`. 위 표의 open/high/low/close/volume 대응이 ETF에서 확인됐다. 원시가 여부는 미확인.
 - 요청: `numOfRows` 최대 10,000, 초당 30건, `beginBasDt`/`endBasDt`/`isinCd` 조회 조건이 있다.
 - 이용허락: 공공누리 4유형(출처표시·상업적 이용 금지·변경 금지)이며 제3자 제공·재배포가 금지된다. 수집 원본과 파생 파일을 저장소·공유 위치에 올리지 않는다(`artifacts/`, `data/krx/`는 Git 제외). 상업적 이용은 KRX Data Marketplace 구매 대상이다.
+
+실데이터 확인(2026-10-19, 사용자 맥, 2024-05-01~06-28 주식):
+- 주식 응답 필드: `basDt, clpr, fltRt, hipr, isinCd, itmsNm, lopr, lstgStCnt, mkp, mrktCtg, mrktTotAmt, srtnCd, trPrc, trqu, vs`.
+- 수집 43평일 → 달력 39세션, 휴장 평일 4일(2024-05-01 근로자의 날, 05-06 대체공휴일, 05-15 부처님오신날, 06-06 현충일)로 실제 휴장과 일치. 세션당 2,805~2,817행.
+- 2024-06-03 변환: 2,810행, ISIN 2,810개, 코드 변경 0건. 행 선별 2,676행 통과, 134행 격리(전부 `NONPOSITIVE_PRICE`, 0 가격 행). 거래정지 종목의 0 시가로 추정하며 미확인이다. 채우지 않고 격리한다.
+- `available_at`은 `2024-06-03T09:00:00+00:00`(= 18:00 KST)로 기록됐다.
 
 가격 변환(DATA-02b): `momentum.krx.fsc_prices`와 `tools/fsc_prices.py`는 탐침이 저장한 시세 JSON 페이지를 네트워크 없이 가격 CSV(`prices.csv`), 기준일별 단축코드–ISIN–종목명(`identities.jsonl`), 페이지 해시·행 선별 결과(`manifest.json`)로 바꾼다. `available_at`은 §3의 사전 등록 가정(기준일 18:00 KST, `MarketProfile.historical_bar_available`)이고, `source`는 `fsc-stock-price:<페이지 SHA-256>` 형식이다. 공급자 값은 고치지 않는다. 0이나 빈 가격도 그대로 옮겨 DATA-05a 행 선별이 격리한다. 기준일의 행 수가 `totalCount`와 다르거나, 페이지가 중복되거나, 한 기준일에 같은 단축코드가 두 ISIN으로 나오면 변환 전체를 거부한다. 단축코드 재사용·변경은 `identity_changes`로 보고만 하고 병합하지 않는다. 실행: `uv run python tools/fsc_prices.py --kind stock --pages <탐침 out>/fsc_stock/<날짜>/page-*.json --out data/krx/fsc/<이름>`. 근거는 합성 페이지 회귀이며, 실제 페이지 변환 결과는 사용자 PC 실행으로 확인한다. 출력은 재배포 금지 자료이므로 `data/krx/`(Git 제외)에 둔다.
 
@@ -78,6 +84,10 @@ PC 탐침 결과(2026-10-17, 기준일 2024-06-03, `pblntf_ty=B` 주요사항보
 | security_id | 공시목록 `stock_code` | 확인 |
 | action_type | `report_nm`의 보고서 종류(무상증자·유상증자·감자·주식분할/병합 등) | 분류 규칙은 DATA-02 |
 | ex_date / pay_date | 종류별 상세 API(권리락일·신주배정기준일 등) | 미확인 |
+
+OpenDART 상세 실응답(2026-10-19, 2024-06-01~14 목록 기준 10회 호출): 유상증자결정(`piicDecsn`) 4행. 필드 `rcept_no, corp_cls, corp_code, corp_name, nstk_ostk_cnt, nstk_estk_cnt, fv_ps, bfic_tisstk_ostk, bfic_tisstk_estk, fdpp_fclt, fdpp_bsninh, fdpp_op, fdpp_dtrp, fdpp_ocsa, fdpp_etc, ic_mthn, ssl_at, ssl_bgd, ssl_edd`. 수량은 `"1,242,705"`처럼 쉼표가 든 문자열이고 해당 없음은 `"-"`다. 숫자 변환 규칙은 이 두 형식을 명시적으로 처리하고 그 밖의 값은 거부한다. `corp_code`는 앞자리 0이 있으므로 문자열로 다룬다.
+
+**주의(정보 시계):** 상세 조회를 원 공시 접수일로 요청했는데 그 기간 밖의 접수번호(예: 2024-07-10 접수)가 돌아온 사례가 있다. 상세 API가 나중의 정정본을 돌려줄 수 있다는 뜻이다(추정). 그대로 쓰면 미래 정보가 과거 결정에 섞인다. 따라서 상세 행의 `available_at`은 **원 공시가 아니라 그 행의 `rcept_no` 접수일 18:00 KST**로 두고, 원 공시보다 늦은 접수번호는 정정 이벤트로 따로 기록한다(FIN-02 구현 조건).
 | split_ratio / cash_amount | 종류별 상세 API(배정비율·감자비율 등) | 미확인 |
 | available_at | `rcept_dt`에 시각이 없으므로 **접수일 18:00 KST**로 둔다. 장중 공시였더라도 그날 결정에는 쓰지 않는다(보수적) | 정책 |
 
