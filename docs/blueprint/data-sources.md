@@ -34,7 +34,7 @@
 | (참고) 상장주식수·시가총액 | `lstgStCnt`, `mrktTotAmt` | 진단용. 신호에 쓰지 않음 | 미확인 |
 
 2026-10-19 확인(ETF, 활용가이드와 포털 시험 호출):
-- 서비스는 V2다. ETF 경로 `https://apis.data.go.kr/1160100/GetSecuritiesProductInfoService_V2/getETFPriceInfo_V2`. 예전 `/service/GetSecuritiesProductInfoService/getETFPriceInfo` 경로는 V2로 발급된 키를 `SERVICE_KEY_IS_NOT_REGISTERED_ERROR`(30)로 거부했다. 주식 경로는 같은 규칙의 `GetStockSecuritiesInfoService_V2/getStockPriceInfo_V2`로 두었고 **미확인**이다.
+- 서비스는 V2다. ETF 경로 `https://apis.data.go.kr/1160100/GetSecuritiesProductInfoService_V2/getETFPriceInfo_V2`. 예전 `/service/GetSecuritiesProductInfoService/getETFPriceInfo` 경로는 V2로 발급된 키를 `SERVICE_KEY_IS_NOT_REGISTERED_ERROR`(30)로 거부했다. 주식 경로는 같은 규칙의 `GetStockSecuritiesInfoService_V2/getStockPriceInfo_V2`다. 2026-10-19 맥 탐침에서 2024-06-03 기준 ETF 1페이지·주식 3페이지 모두 HTTP 200을 확인했다.
 - ETF 응답 필드: `basDt, srtnCd, isinCd, itmsNm, mkp, hipr, lopr, clpr, vs, fltRt, trqu, trPrc, nav, mrktTotAmt, nPptTotAmt, stLstgCnt, bssIdxIdxNm, bssIdxClpr`. 위 표의 open/high/low/close/volume 대응이 ETF에서 확인됐다. 원시가 여부는 미확인.
 - 요청: `numOfRows` 최대 10,000, 초당 30건, `beginBasDt`/`endBasDt`/`isinCd` 조회 조건이 있다.
 - 이용허락: 공공누리 4유형(출처표시·상업적 이용 금지·변경 금지)이며 제3자 제공·재배포가 금지된다. 수집 원본과 파생 파일을 저장소·공유 위치에 올리지 않는다(`artifacts/`, `data/krx/`는 Git 제외). 상업적 이용은 KRX Data Marketplace 구매 대상이다.

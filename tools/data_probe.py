@@ -21,8 +21,8 @@ from urllib.request import Request, urlopen
 
 SOURCES = ("fsc_stock", "fsc_etf", "dart", "dart_detail", "kind")
 # V2 endpoints: keys issued for the V2 services are rejected by the old
-# /service/ paths with SERVICE_KEY_IS_NOT_REGISTERED_ERROR. The ETF path is from
-# the supplier guide; the stock path follows the same pattern (unverified).
+# /service/ paths with SERVICE_KEY_IS_NOT_REGISTERED_ERROR. Both paths returned
+# HTTP 200 for 2024-06-03 on 2026-10-19.
 FSC = {
     "fsc_stock": "https://apis.data.go.kr/1160100/GetStockSecuritiesInfoService_V2/getStockPriceInfo_V2",
     "fsc_etf": "https://apis.data.go.kr/1160100/GetSecuritiesProductInfoService_V2/getETFPriceInfo_V2",
