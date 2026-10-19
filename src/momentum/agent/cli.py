@@ -24,6 +24,7 @@ from trading_agent.store import Store
 
 from momentum.ledger.ledger import CorporateAction
 
+from .bundle import open_bundle, publish_bundle
 from .contracts import AgentPolicy, AnnouncedAction, ResearchInput, policy_from_dict
 from .service import ResearchAgent
 
@@ -127,6 +128,7 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument(
         "action",
         choices=(
+            "bundle-publish",
             "backup",
             "restore",
             "reconcile-witness",
@@ -149,6 +151,8 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--operator")
     p.add_argument("--study", default="main")
     p.add_argument("--policy", type=Path)
+    p.add_argument("--bundle", type=Path)
+    p.add_argument("--source-meta", type=Path)
     p.add_argument("--csv", type=Path)
     p.add_argument("--securities", type=Path)
     p.add_argument("--actions", type=Path)
@@ -232,6 +236,28 @@ def restore(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
+    if (
+        args.action == "run"
+        and args.bundle
+        and any((args.csv, args.securities, args.actions, args.sessions, args.calendar))
+    ):
+        raise AgentError("--bundle cannot be combined with input file paths")
+    if args.action == "bundle-publish":
+        if not args.bundle or not args.csv or not args.securities:
+            raise AgentError("bundle-publish requires --bundle, --csv and --securities")
+        files = {"prices.csv": args.csv, "securities.jsonl": args.securities}
+        for name in ("actions", "sessions", "calendar"):
+            path = getattr(args, name)
+            if path is not None:
+                files[name + ".json"] = path
+        sources = json.loads(args.source_meta.read_text()) if args.source_meta else {}
+        return publish_bundle(
+            args.bundle,
+            files,
+            basis=args.corporate_action_basis,
+            sources=sources,
+            clock=lambda: datetime.now(UTC),
+        )
     if args.action == "restore":
         return restore(args)
     if args.action == "demo":
@@ -289,7 +315,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 else agent.abandon(args.cycle_id, args.reason)
             )
         else:
-            if not args.csv or not args.securities:
+            if not args.bundle and (not args.csv or not args.securities):
                 raise AgentError(
                     "Run requires --csv and --securities with explicit information timestamps"
                 )
@@ -299,7 +325,16 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 else agent.status(args.study)["policy"]["max_validation_cycles"]
             )
 
+            bundle_metadata: dict[str, Any] = {}
+
             def provider() -> ResearchInput:
+                if args.bundle:
+                    data, manifest = open_bundle(args.bundle)
+                    bundle_metadata.update(
+                        bundle_id=manifest["bundle_id"],
+                        created_at=manifest["created_at"],
+                    )
+                    return data
                 return read_input(
                     args.csv,
                     args.securities,
@@ -309,8 +344,17 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                     args.calendar,
                 )
 
+            class BundleReporter(ResearchAgent):
+                def tick(
+                    self, name: str, data: ResearchInput, *, max_cycles: int = 1
+                ) -> dict[str, Any]:
+                    report = agent.tick(name, data, max_cycles=max_cycles)
+                    if args.bundle:
+                        report["input_bundle"] = dict(bundle_metadata)
+                    return report
+
             result = watch(
-                agent,
+                BundleReporter(store),
                 args.study,
                 provider,
                 args.output,
@@ -328,12 +372,23 @@ def main() -> int:
     try:
         args = parser().parse_args()
         result = run(args)
-        if args.action in {"backup", "restore", "witness-status", "reconcile-witness"}:
+        if args.action in {
+            "bundle-publish",
+            "backup",
+            "restore",
+            "witness-status",
+            "reconcile-witness",
+        }:
             print(canonical(result))
             return 0
         print(
             canonical(
                 {
+                    **(
+                        {"input_bundle": result["input_bundle"]}
+                        if "input_bundle" in result
+                        else {}
+                    ),
                     "study": result.get("study"),
                     "orders_submitted": 0,
                     "result": result.get(
