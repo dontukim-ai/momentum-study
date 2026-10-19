@@ -5,9 +5,10 @@ Example:
     --pages artifacts/data-probe-stock/fsc_stock/2024-06-03/page-*.json \
     --out data/krx/fsc/2024-06-03-stock
 
-Outputs prices.csv (raw supplier values, never repaired), identities.jsonl
-(session, symbol, ISIN, name) and manifest.json (page hashes, row screen
-counts). Supplier data may not be redistributed; keep outputs out of Git.
+Outputs prices.csv (raw supplier values, never repaired), no_trade.jsonl
+(sessions without trades; the supplier's carried-forward close is kept as
+evidence, never as a bar), identities.jsonl (session, symbol, ISIN, name) and
+manifest.json (page hashes, row screen counts). Supplier data may not be redistributed; keep outputs out of Git.
 """
 
 from __future__ import annotations
@@ -41,6 +42,9 @@ def main(argv: list[str] | None = None) -> int:
         writer = csv.DictWriter(handle, fieldnames=CSV_FIELDS)
         writer.writeheader()
         writer.writerows(result.rows)
+    with (args.out / "no_trade.jsonl").open("w", encoding="utf-8") as handle:
+        for record in result.no_trade:
+            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
     with (args.out / "identities.jsonl").open("w", encoding="utf-8") as handle:
         for identity in result.identities:
             handle.write(json.dumps(identity.to_dict(), ensure_ascii=False) + "\n")
@@ -48,6 +52,7 @@ def main(argv: list[str] | None = None) -> int:
         "kind": args.kind,
         "pages": result.pages,
         "rows": len(result.rows),
+        "no_trade": len(result.no_trade),
         "identities": len(result.identities),
         "identity_changes": identity_changes(result.identities),
         "screen": {"accepted": len(screen.accepted), "quarantined": screen.by_code()},
@@ -59,6 +64,7 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"fsc-prices: {len(result.rows)} rows, {len(screen.accepted)} accepted, "
         f"{len(result.rows) - len(screen.accepted)} quarantined, "
+        f"{len(result.no_trade)} no-trade, "
         f"{len(result.identities)} identities"
     )
     return 0

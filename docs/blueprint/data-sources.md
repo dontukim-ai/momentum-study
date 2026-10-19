@@ -26,7 +26,7 @@
 | --- | --- | --- | --- |
 | session | `basDt` (YYYYMMDD) | 날짜 변환 | 확인(2026-10-19) |
 | symbol | `srtnCd` (단축코드 6자리) | 그대로. 영구 ID는 `isinCd`로 따로 보관(DATA-02) | 확인(2026-10-19) |
-| open/high/low/close | `mkp`/`hipr`/`lopr`/`clpr` | 원 단위 Decimal. 원시가 여부는 미확인(분할 전후 비교로 확인 예정) | 필드 확인(2026-10-19) |
+| open/high/low/close | `mkp`/`hipr`/`lopr`/`clpr` | 원 단위 Decimal. **원시가**(분할일에 비율만큼 불연속, 아래 참조) | 확인(2026-10-19) |
 | volume | `trqu` | 정수 | 확인(2026-10-19) |
 | available_at | 응답에 없음 | §3 정보 시계 정책 | 정책 |
 | source | 고정 문자열 `fsc-stock-price` / `fsc-etf-price` + 수집 manifest 해시 | | 정책 |
@@ -44,6 +44,11 @@
 - 수집 43평일 → 달력 39세션, 휴장 평일 4일(2024-05-01 근로자의 날, 05-06 대체공휴일, 05-15 부처님오신날, 06-06 현충일)로 실제 휴장과 일치. 세션당 2,805~2,817행.
 - 2024-06-03 변환: 2,810행, ISIN 2,810개, 코드 변경 0건. 행 선별 2,676행 통과, 134행 격리(전부 `NONPOSITIVE_PRICE`, 0 가격 행). 거래정지 종목의 0 시가로 추정하며 미확인이다. 채우지 않고 격리한다.
 - `available_at`은 `2024-06-03T09:00:00+00:00`(= 18:00 KST)로 기록됐다.
+
+원시가·거래정지 확인(2026-10-19, 사용자 맥, 2024-04-01~05-10):
+- **원시가다.** 에코프로(086520, 1:5 액면분할, 신주상장 2024-04-25)의 `clpr`은 517,000 → 108,100, 이수스페셜티케미컬(457190, 1:5, 2024-05-02)은 339,500 → 61,000으로 분할비율만큼 떨어졌다. `lstgStCnt`는 정확히 5배가 됐다.
+- `vs`·`fltRt`는 거래소가 조정한 기준가 대비 값이다(에코프로 분할일 `fltRt` +4.55%, `clpr`로 계산하면 -79%). 수익률은 `clpr`로 직접 계산하고 `vs`·`fltRt`는 신호에 쓰지 않는다. 분할일의 큰 원시 수익률은 기업행위로 설명되지 않으면 DATA-05a가 `ABNORMAL_RETURN`으로 격리한다.
+- **거래정지일에도 행이 온다.** `mkp`·`hipr`·`lopr`·`trqu`가 모두 0이고 `clpr`에는 직전 종가가 그대로 들어 있다. 공급자가 채워 넣은 값이므로 가격 행으로 쓰면 결측을 채운 것과 같다(규칙 3 위반). DATA-02c부터 변환기는 이런 행을 가격 CSV에 넣지 않고 `no_trade.jsonl`(기준일·종목·ISIN·보고된 종가)로 따로 남긴다. 거래 상태(정지) 재구성의 근거로 쓴다. 0 시가에 거래량이 있는 행처럼 이 패턴에 맞지 않는 0 가격은 그대로 두어 `NONPOSITIVE_PRICE`로 격리한다.
 
 가격 변환(DATA-02b): `momentum.krx.fsc_prices`와 `tools/fsc_prices.py`는 탐침이 저장한 시세 JSON 페이지를 네트워크 없이 가격 CSV(`prices.csv`), 기준일별 단축코드–ISIN–종목명(`identities.jsonl`), 페이지 해시·행 선별 결과(`manifest.json`)로 바꾼다. `available_at`은 §3의 사전 등록 가정(기준일 18:00 KST, `MarketProfile.historical_bar_available`)이고, `source`는 `fsc-stock-price:<페이지 SHA-256>` 형식이다. 공급자 값은 고치지 않는다. 0이나 빈 가격도 그대로 옮겨 DATA-05a 행 선별이 격리한다. 기준일의 행 수가 `totalCount`와 다르거나, 페이지가 중복되거나, 한 기준일에 같은 단축코드가 두 ISIN으로 나오면 변환 전체를 거부한다. 단축코드 재사용·변경은 `identity_changes`로 보고만 하고 병합하지 않는다. 실행: `uv run python tools/fsc_prices.py --kind stock --pages <탐침 out>/fsc_stock/<날짜>/page-*.json --out data/krx/fsc/<이름>`. 근거는 합성 페이지 회귀이며, 실제 페이지 변환 결과는 사용자 PC 실행으로 확인한다. 출력은 재배포 금지 자료이므로 `data/krx/`(Git 제외)에 둔다.
 
@@ -86,6 +91,8 @@ PC 탐침 결과(2026-10-17, 기준일 2024-06-03, `pblntf_ty=B` 주요사항보
 | ex_date / pay_date | 종류별 상세 API(권리락일·신주배정기준일 등) | 미확인 |
 
 OpenDART 상세 실응답(2026-10-19, 2024-06-01~14 목록 기준 10회 호출): 유상증자결정(`piicDecsn`) 4행. 필드 `rcept_no, corp_cls, corp_code, corp_name, nstk_ostk_cnt, nstk_estk_cnt, fv_ps, bfic_tisstk_ostk, bfic_tisstk_estk, fdpp_fclt, fdpp_bsninh, fdpp_op, fdpp_dtrp, fdpp_ocsa, fdpp_etc, ic_mthn, ssl_at, ssl_bgd, ssl_edd`. 수량은 `"1,242,705"`처럼 쉼표가 든 문자열이고 해당 없음은 `"-"`다. 숫자 변환 규칙은 이 두 형식을 명시적으로 처리하고 그 밖의 값은 거부한다. `corp_code`는 앞자리 0이 있으므로 문자열로 다룬다.
+
+OpenDART 기업행위 상세 API(개발가이드 DS005 확인, 2026-10-19): 무상증자 `fricDecsn`(신주배정기준일 `nstk_asstd`, 1주당 배정 주식수 `nstk_ascnt_ps_ostk`, 신주 상장 예정일 `nstk_lstprd`), 유무상증자 `pifricDecsn`(유상 `piic_*`·무상 `fric_*` 접두어), 감자 `crDecsn`(감자비율 `cr_rt_ostk`(%), 감자 전후 발행주식수, 감자기준일 `cr_std`, 매매거래 정지기간, 신주상장예정일 `crsc_nstklstprd`). 공통 요청은 `corp_code, bgn_de, end_de`이고 공통 응답은 `rcept_no, corp_cls, corp_code, corp_name`이다. **주식분할·병합 전용 API는 없다.** 이 공시는 거래소 수시공시(`pblntf_ty=I`)로 제출되며 원문(document.xml)을 파싱해야 한다. 2024-01~06에 I 유형 32,064건 중 분할·병합 26건(정정 포함)이 있었다. 대안 신호는 시세의 `lstgStCnt` 정수배 변화와 원시 종가 불연속의 일치다(FIN-02에서 공시 원문과 대사).
 
 **주의(정보 시계):** 상세 조회를 원 공시 접수일로 요청했는데 그 기간 밖의 접수번호(예: 2024-07-10 접수)가 돌아온 사례가 있다. 상세 API가 나중의 정정본을 돌려줄 수 있다는 뜻이다(추정). 그대로 쓰면 미래 정보가 과거 결정에 섞인다. 따라서 상세 행의 `available_at`은 **원 공시가 아니라 그 행의 `rcept_no` 접수일 18:00 KST**로 두고, 원 공시보다 늦은 접수번호는 정정 이벤트로 따로 기록한다(FIN-02 구현 조건).
 | split_ratio / cash_amount | 종류별 상세 API(배정비율·감자비율 등) | 미확인 |

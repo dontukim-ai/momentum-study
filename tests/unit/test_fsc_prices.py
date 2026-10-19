@@ -180,7 +180,7 @@ def test_cli_writes_outputs_and_reports_screen(tmp_path, capsys):
         == 0
     )
     assert capsys.readouterr().out.strip() == (
-        "fsc-prices: 2 rows, 1 accepted, 1 quarantined, 2 identities"
+        "fsc-prices: 2 rows, 1 accepted, 1 quarantined, 0 no-trade, 2 identities"
     )
     manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["screen"]["quarantined"] == {"OHLC_INCONSISTENT": 1}
@@ -201,3 +201,34 @@ def test_cli_writes_outputs_and_reports_screen(tmp_path, capsys):
         )
         == 1
     )
+
+
+def test_no_trade_rows_keep_carried_close_as_evidence_not_bars(tmp_path):
+    # Halt pattern seen in real 2024-04 responses: zeros plus the previous close.
+    halted = item(
+        code="086520",
+        isin="KR7086520004",
+        mkp="0",
+        hipr="0",
+        lopr="0",
+        trqu="0",
+        clpr="517000",
+    )
+    zero_open_traded = item(code="000002", isin="KR7000002008", mkp="0", trqu="10")
+    result = convert_pages(
+        [page(tmp_path, "h.json", [item(), halted, zero_open_traded])], "stock"
+    )
+    assert [r["symbol"] for r in result.rows] == ["000001", "000002"]
+    assert result.no_trade == [
+        {
+            "session": "2024-06-03",
+            "symbol": "086520",
+            "isin": "KR7086520004",
+            "reported_close": "517000",
+            "source": result.rows[0]["source"],
+        }
+    ]
+    # Identity is still known for the halted security.
+    assert "086520" in {i.symbol for i in result.identities}
+    # A zero open with volume is an anomaly, not a halt: it stays for quarantine.
+    assert screen_price_rows(result.rows).by_code() == {"NONPOSITIVE_PRICE": 1}

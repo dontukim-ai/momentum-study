@@ -12,7 +12,7 @@ import hashlib
 import json
 import re
 from collections.abc import Iterable, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -29,6 +29,11 @@ _PRICE_FIELDS = (
     ("close", "clpr"),
     ("volume", "trqu"),
 )
+# On a session without trades (e.g. a halt) the supplier sends open/high/low
+# and volume as 0 but repeats the previous close in clpr. That close is a
+# carried-forward value, not a trade, so emitting it as a bar would fill a
+# missing price (CLAUDE.md rule 3). Such rows become no-trade evidence instead.
+_NO_TRADE_ZERO = ("mkp", "hipr", "lopr", "trqu")
 _ISIN = re.compile(r"[A-Z]{2}[A-Z0-9]{9}[0-9]")
 
 
@@ -51,6 +56,8 @@ class Conversion:
     rows: list[dict[str, str]]
     identities: list[SecurityIdentity]
     pages: list[dict[str, Any]]
+    # Supplier rows for sessions without any trade (see _is_no_trade).
+    no_trade: list[dict[str, str]] = field(default_factory=list)
 
 
 def _session(value: Any) -> date:
@@ -110,6 +117,7 @@ def convert_pages(paths: Sequence[Path], kind: str) -> Conversion:
     rows: list[dict[str, str]] = []
     identities: dict[tuple[date, str], SecurityIdentity] = {}
     pages = []
+    no_trade: list[dict[str, str]] = []
     for path in sorted(paths):
         body, digest = _load(path)
         batch = _items(body)
@@ -139,10 +147,21 @@ def convert_pages(paths: Sequence[Path], kind: str) -> Conversion:
             symbol = _scalar(item.get("srtnCd"), "srtnCd")
             isin = _scalar(item.get("isinCd"), "isinCd")
             row = {"session": day.isoformat(), "symbol": symbol}
-            for name, field in _PRICE_FIELDS:
-                row[name] = _scalar(item.get(field), field)
+            for name, supplier in _PRICE_FIELDS:
+                row[name] = _scalar(item.get(supplier), supplier)
             row.update(available_at=available, source=source)
-            rows.append(row)
+            if all(_scalar(item.get(f), f) == "0" for f in _NO_TRADE_ZERO):
+                no_trade.append(
+                    {
+                        "session": day.isoformat(),
+                        "symbol": symbol,
+                        "isin": isin,
+                        "reported_close": _scalar(item.get("clpr"), "clpr"),
+                        "source": source,
+                    }
+                )
+            else:
+                rows.append(row)
             if _ISIN.fullmatch(isin) is None:
                 continue  # the row screen still sees the row; identity stays unknown
             identity = SecurityIdentity(
@@ -157,7 +176,10 @@ def convert_pages(paths: Sequence[Path], kind: str) -> Conversion:
                 f"{day}: {seen['rows']} of {seen['total']} rows; fetch every page"
             )
     return Conversion(
-        rows, sorted(identities.values(), key=lambda i: (i.session, i.symbol)), pages
+        rows,
+        sorted(identities.values(), key=lambda i: (i.session, i.symbol)),
+        pages,
+        no_trade,
     )
 
 
