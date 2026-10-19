@@ -37,6 +37,10 @@ class MarketProfile:
     report_valid_until: time
     # Filings carry a date only; they become usable after this time.
     disclosure_available: time
+    # Preregistered E1 assumption for historical supplier bars: day t's bar is
+    # treated as public at this time on day t (the supplier itself publishes
+    # later; live evidence uses the actual receipt time instead).
+    historical_bar_available: time
     # Exchange daily price limit; beyond it a move is not a normal session.
     daily_price_limit: Decimal
     # Maximum share of the prior session's volume an order may take.
@@ -68,6 +72,9 @@ class MarketProfile:
     def disclosure_at(self, day: date) -> datetime:
         return self.at(day, self.disclosure_available)
 
+    def historical_bar_at(self, day: date) -> datetime:
+        return self.at(day, self.historical_bar_available)
+
 
 KRX = MarketProfile(
     market_id="KRX",
@@ -81,6 +88,7 @@ KRX = MarketProfile(
     observation_time=time(16, 0),
     report_valid_until=time(17, 0),
     disclosure_available=time(18, 0),
+    historical_bar_available=time(18, 0),
     daily_price_limit=Decimal("0.30"),
     max_volume_participation=Decimal("0.01"),
     capital_cap=Decimal(1000000),
