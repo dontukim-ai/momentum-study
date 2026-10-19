@@ -9,6 +9,8 @@ import hashlib
 import json
 import os
 import re
+import sys
+import threading
 import time
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
@@ -18,9 +20,12 @@ from urllib.parse import parse_qsl, quote, quote_plus, urlencode, urlsplit, urlu
 from urllib.request import Request, urlopen
 
 SOURCES = ("fsc_stock", "fsc_etf", "dart", "dart_detail", "kind")
+# V2 endpoints: keys issued for the V2 services are rejected by the old
+# /service/ paths with SERVICE_KEY_IS_NOT_REGISTERED_ERROR. Both paths returned
+# HTTP 200 for 2024-06-03 on 2026-10-19.
 FSC = {
-    "fsc_stock": "https://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo",
-    "fsc_etf": "https://apis.data.go.kr/1160100/service/GetSecuritiesProductInfoService/getETFPriceInfo",
+    "fsc_stock": "https://apis.data.go.kr/1160100/GetStockSecuritiesInfoService_V2/getStockPriceInfo_V2",
+    "fsc_etf": "https://apis.data.go.kr/1160100/GetSecuritiesProductInfoService_V2/getETFPriceInfo_V2",
 }
 
 # Candidate endpoints: the probe records supplier responses to verify these mappings.
@@ -36,14 +41,43 @@ class ProbeError(Exception):
     """Only credential-checked diagnostics may leave the request boundary."""
 
 
-def http_get(url, data):
-    """Injectable transport returning HTTP status and untouched bytes."""
+# Socket timeouts do not bound DNS lookups or a server that trickles bytes, so
+# each request also gets a wall-clock deadline; a stalled call is abandoned.
+REQUEST_DEADLINE_SECONDS = 60.0
+
+
+def _fetch(url, data):
     try:
         with urlopen(Request(url, data=data), timeout=30) as response:
             return response.status, response.read()
     except HTTPError as exc:
         with exc:
             return exc.code, exc.read()
+
+
+def http_get(url, data, *, deadline=None):
+    """Injectable transport returning HTTP status and untouched bytes."""
+    outcome = {}
+
+    def run():
+        try:
+            outcome["value"] = _fetch(url, data)
+        except BaseException as exc:  # noqa: BLE001 - re-raised in the caller thread
+            outcome["error"] = exc
+
+    worker = threading.Thread(target=run, daemon=True)
+    worker.start()
+    worker.join(REQUEST_DEADLINE_SECONDS if deadline is None else deadline)
+    if worker.is_alive():
+        raise TimeoutError("request deadline exceeded")
+    if "error" in outcome:
+        raise outcome["error"]
+    return outcome["value"]
+
+
+def progress(message):
+    # stderr keeps the stdout contract (last line is the summary) unchanged.
+    print(f"probe: {message}", file=sys.stderr, flush=True)
 
 
 def masked_url(url):
@@ -145,7 +179,12 @@ def main(argv=None, *, http=http_get, sleep=time.sleep, environ=None):
         if requested:
             sleep(1.0)
         requested = True
+        shown = masked_url(url)
+        if any(key in shown.encode() for key in forbidden):
+            shown = "<url withheld>"
         for attempt in range(3):
+            started = time.monotonic()
+            progress(f"request {len(manifest['requests']) + 1} {shown}")
             try:
                 status, body = http(url, data)
                 break
@@ -153,7 +192,9 @@ def main(argv=None, *, http=http_get, sleep=time.sleep, environ=None):
                 with exc:
                     status, body = exc.code, exc.read()
                 break
-            except (URLError, OSError):
+            except (URLError, OSError) as exc:
+                reason = "timeout" if isinstance(exc, TimeoutError) else "network error"
+                progress(f"  {reason} after {time.monotonic() - started:.0f}s")
                 if attempt == 2:
                     raise ProbeError("network retries exhausted") from None
                 sleep(float(2 ** (attempt + 1)))
@@ -177,6 +218,7 @@ def main(argv=None, *, http=http_get, sleep=time.sleep, environ=None):
         if any(key in json.dumps(metadata).encode() for key in forbidden):
             raise ProbeError("request metadata contains credentials; not saved")
         manifest["requests"].append(metadata)
+        progress(f"  HTTP {status}, {len(body)} bytes")
         if not 200 <= status < 300:
             extension = "txt"
             stripped = body.lstrip()

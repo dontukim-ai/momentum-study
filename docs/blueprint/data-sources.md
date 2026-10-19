@@ -33,6 +33,12 @@
 | (참고) 시장 구분 | `mrktCtg` (KOSPI/KOSDAQ/KONEX) | 종목 상태의 market | 미확인 |
 | (참고) 상장주식수·시가총액 | `lstgStCnt`, `mrktTotAmt` | 진단용. 신호에 쓰지 않음 | 미확인 |
 
+2026-10-19 확인(ETF, 활용가이드와 포털 시험 호출):
+- 서비스는 V2다. ETF 경로 `https://apis.data.go.kr/1160100/GetSecuritiesProductInfoService_V2/getETFPriceInfo_V2`. 예전 `/service/GetSecuritiesProductInfoService/getETFPriceInfo` 경로는 V2로 발급된 키를 `SERVICE_KEY_IS_NOT_REGISTERED_ERROR`(30)로 거부했다. 주식 경로는 같은 규칙의 `GetStockSecuritiesInfoService_V2/getStockPriceInfo_V2`다. 2026-10-19 맥 탐침에서 2024-06-03 기준 ETF 1페이지·주식 3페이지 모두 HTTP 200을 확인했다.
+- ETF 응답 필드: `basDt, srtnCd, isinCd, itmsNm, mkp, hipr, lopr, clpr, vs, fltRt, trqu, trPrc, nav, mrktTotAmt, nPptTotAmt, stLstgCnt, bssIdxIdxNm, bssIdxClpr`. 위 표의 open/high/low/close/volume 대응이 ETF에서 확인됐다. 원시가 여부는 미확인.
+- 요청: `numOfRows` 최대 10,000, 초당 30건, `beginBasDt`/`endBasDt`/`isinCd` 조회 조건이 있다.
+- 이용허락: 공공누리 4유형(출처표시·상업적 이용 금지·변경 금지)이며 제3자 제공·재배포가 금지된다. 수집 원본과 파생 파일을 저장소·공유 위치에 올리지 않는다(`artifacts/`, `data/krx/`는 Git 제외). 상업적 이용은 KRX Data Marketplace 구매 대상이다.
+
 시가가 0이거나 비어 있는 행(거래 없음·정지)은 **채우지 않는다**. 가격 행을 만들지 않고 DATA-05 품질 코드로 격리한다(CLAUDE.md 3번: 결측 시가 → 매수 취소).
 
 ### 2.2 종목 상태 JSONL ← KIND + 시세 응답
@@ -85,7 +91,7 @@ PC 탐침 결과(2026-10-17, 기준일 2024-06-03, `pblntf_ty=B` 주요사항보
 
 ## 3. 정보 시계(available_at) 정책
 
-공공데이터 시세는 기준일 다음 영업일 이후에 갱신된다(정확한 시각 미확인). 그대로 쓰면 t일 종가가 t+1일 장 시작 전에 보이지 않아, 전일 종가로 수량을 정하는 현재 체결 규칙과 맞지 않는다.
+공공데이터 시세는 연계받은 날로부터 **영업일 하루 뒤 13:00 이후**에 갱신된다(금융위원회 증권상품시세정보 활용가이드, 2026-10-19 확인. 금요일 자료는 다음 월요일). 그대로 쓰면 t일 종가가 t+1일 장 시작 전에 보이지 않아, 전일 종가로 수량을 정하는 현재 체결 규칙과 맞지 않는다.
 
 결정(사전 등록, 과거 검증용):
 - 과거 구간의 t일 시세 `available_at`은 **t일 18:00 KST**로 둔다. 같은 값이 그날 거래소 종가로 이미 공개됐다는 가정이다. 이 가정은 입력 묶음의 `basis`에 명시한다.

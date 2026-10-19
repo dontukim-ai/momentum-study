@@ -658,3 +658,52 @@ def test_detail_flag_runs_dart_dependency_once(tmp_path):
         assert summary["dart"]["status"] == summary["dart_detail"]["status"] == "ok"
         assert sum("/list.json?" in url for url in calls) == 1
         assert list(summary).index("dart") < list(summary).index("dart_detail")
+
+
+def test_http_get_abandons_stalled_request(monkeypatch):
+    import threading
+    import time
+
+    release = threading.Event()
+
+    def stalled(*args, **kwargs):
+        release.wait(5)
+        raise AssertionError("never reached in time")
+
+    monkeypatch.setattr(probe, "urlopen", stalled)
+    started = time.monotonic()
+    try:
+        probe.http_get("https://example.test", None, deadline=0.2)
+    except TimeoutError:
+        pass
+    else:
+        raise AssertionError("stalled request was not abandoned")
+    finally:
+        release.set()
+    assert time.monotonic() - started < 2
+
+
+def test_stalled_source_is_retried_then_skipped_with_progress(tmp_path, capsys):
+    waits, calls = [], []
+
+    def http(url, data):
+        calls.append(url)
+        if "getStockPriceInfo" in url:
+            raise TimeoutError("request deadline exceeded")
+        return 200, fsc([], 0)
+
+    result = probe.main(
+        ["--date", "2024-06-03", "--out", str(tmp_path)],
+        http=http,
+        sleep=waits.append,
+        environ={"DATA_GO_KR_SERVICE_KEY": "fake-secret"},
+    )
+    assert result == 1
+    captured = capsys.readouterr()
+    assert captured.err.count("timeout after") == 3
+    assert "HTTP 200" in captured.err
+    assert "fake-secret" not in captured.err + captured.out
+    assert captured.out.splitlines()[-1].startswith("probe: ")
+    summary = json.loads((tmp_path / "summary.json").read_text())
+    assert summary["fsc_stock"]["message"] == "network retries exhausted"
+    assert summary["fsc_etf"]["status"] == "ok"
