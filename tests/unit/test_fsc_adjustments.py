@@ -109,7 +109,7 @@ def test_split_detected_across_halt_with_factor_and_share_ratio(tmp_path):
     assert (hit.session, hit.previous_session) == (date(2024, 4, 11), date(2024, 4, 8))
     assert (hit.previous_close, hit.adjusted_base) == (D(517000), D(103400))
     assert hit.factor == D("5.000000") and hit.share_ratio == D("5.000000")
-    assert hit.kind == "SPLIT_LIKE"
+    assert hit.kind == "SPLIT_LIKE" and hit.ratio == "5"
 
 
 def test_reverse_split_and_unexplained_base_change(tmp_path):
@@ -167,3 +167,28 @@ def test_cli_writes_jsonl(tmp_path, capsys):
     )
     record = json.loads(out.read_text().splitlines()[0])
     assert record["factor"] == "5.000000" and record["session"] == "2024-04-11"
+
+
+def test_non_integer_par_value_split_and_inconsistent_merge(tmp_path):
+    # Real 2024-05 shapes: 동화기업 5,000->2,000 won (5/2) with a slightly
+    # different share ratio; 디모아 1/30 share merge whose base moved otherwise.
+    write_day(
+        tmp_path,
+        "2024-04-11",
+        [quote(ECO, 56300, 0, 20000000), quote(OTHER, 216, 0, 3000, code="016670")],
+    )
+    write_day(
+        tmp_path,
+        "2024-04-12",
+        [quote(ECO, 22650, 100, 50013400), quote(OTHER, 7400, 90, 100, code="016670")],
+    )
+    found = {a.isin: a for a in detect(tmp_path, date(2024, 4, 11), date(2024, 4, 12))}
+    assert (found[ECO].kind, found[ECO].ratio) == ("SPLIT_LIKE", "5/2")
+    assert (found[OTHER].kind, found[OTHER].ratio) == ("OTHER", None)
+
+
+def test_large_merge_ratio_is_expressible(tmp_path):
+    write_day(tmp_path, "2024-04-26", [quote(ECO, 466, 0, 2000)])
+    write_day(tmp_path, "2024-04-29", [quote(ECO, 9420, 100, 100)])
+    hit = detect(tmp_path, date(2024, 4, 26), date(2024, 4, 29))[0]
+    assert (hit.kind, hit.ratio) == ("REVERSE_SPLIT_LIKE", "1/20")

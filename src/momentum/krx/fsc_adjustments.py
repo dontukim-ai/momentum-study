@@ -16,6 +16,7 @@ import json
 from dataclasses import asdict, dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,7 @@ from .fsc_collect import weekdays
 # The adjusted base is an exchange tick-rounded price, so a split by r gives
 # previous / base within one tick of r; 0.5% covers ticks on prices >= 1,000.
 _RATIO_TOLERANCE = Decimal("0.005")
+_MAX_DENOMINATOR = 10
 
 
 @dataclass(frozen=True)
@@ -39,6 +41,7 @@ class Adjustment:
     factor: Decimal
     share_ratio: Decimal | None
     kind: str  # SPLIT_LIKE, REVERSE_SPLIT_LIKE, OTHER
+    ratio: str | None = None  # agreed simple ratio such as "5/2"; None for OTHER
 
     def to_dict(self) -> dict[str, Any]:
         value = asdict(self)
@@ -74,19 +77,29 @@ def _rows(day_dir: Path, day: date) -> list[dict[str, Any]] | None:
     return rows
 
 
-def _classify(factor: Decimal, share_ratio: Decimal | None) -> str:
-    if share_ratio is None or share_ratio == 1:
-        return "OTHER"
-    for ratio, kind in (
-        (share_ratio, "SPLIT_LIKE"),
-        (1 / share_ratio, "REVERSE_SPLIT_LIKE"),
-    ):
-        whole = ratio.to_integral_value()
-        if ratio > 1 and abs(ratio - whole) <= _RATIO_TOLERANCE * whole:
-            target = whole if kind == "SPLIT_LIKE" else 1 / whole
-            if abs(factor - target) <= _RATIO_TOLERANCE * target:
-                return kind
-    return "OTHER"
+def _simple_ratio(share_ratio: Decimal | None, factor: Decimal) -> Fraction | None:
+    """The small-denominator ratio both share count and base price agree on.
+
+    Splits are set by par values (5,000 -> 2,000 won is 5/2), so the
+    announced ratio is a simple fraction even when it is not an integer. Both
+    observations must sit within tolerance of the same fraction; a merge that
+    also changed the base for another reason fails this and stays OTHER.
+    """
+    if share_ratio is None or share_ratio <= 0:
+        return None
+    # Bound the denominator on the >1 side so 1/30 merges stay expressible.
+    upward = share_ratio if share_ratio >= 1 else 1 / share_ratio
+    ratio = Fraction(str(upward)).limit_denominator(_MAX_DENOMINATOR)
+    if share_ratio < 1:
+        ratio = 1 / ratio
+    if ratio == 1:
+        return None
+    target = Decimal(ratio.numerator) / Decimal(ratio.denominator)
+    if abs(share_ratio - target) > _RATIO_TOLERANCE * target:
+        return None
+    if abs(factor - target) > _RATIO_TOLERANCE * target:
+        return None
+    return ratio
 
 
 def detect(root: Path, start: date, end: date, kind: str = "stock") -> list[Adjustment]:
@@ -120,6 +133,7 @@ def detect(root: Path, start: date, end: date, kind: str = "stock") -> list[Adju
                         if shares and prior_shares and prior_shares > 0
                         else None
                     )
+                    agreed = _simple_ratio(share_ratio, factor)
                     found.append(
                         Adjustment(
                             day,
@@ -132,7 +146,12 @@ def detect(root: Path, start: date, end: date, kind: str = "stock") -> list[Adju
                             share_ratio.quantize(Decimal("0.000001"))
                             if share_ratio is not None
                             else None,
-                            _classify(factor, share_ratio),
+                            "OTHER"
+                            if agreed is None
+                            else "SPLIT_LIKE"
+                            if agreed > 1
+                            else "REVERSE_SPLIT_LIKE",
+                            None if agreed is None else str(agreed),
                         )
                     )
             last[isin] = (day, close, shares)
