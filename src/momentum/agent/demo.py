@@ -8,7 +8,7 @@ from decimal import Decimal as D
 from pathlib import Path
 from typing import Any
 
-from trading_agent.contracts import Bar, session_time
+from trading_agent.contracts import Bar
 from trading_agent.data import Snapshot, write_csv
 from trading_agent.logic import LogicSettings
 from trading_agent.selection import (
@@ -20,6 +20,7 @@ from trading_agent.selection import (
 from trading_agent.store import Store
 
 from .contracts import AgentPolicy, ResearchInput
+from .market import KRX
 from .service import ResearchAgent
 
 
@@ -43,15 +44,15 @@ def fixture(count: int = 460, *, flat: bool = False) -> ResearchInput:
                     min(opening, close),
                     close,
                     100000,
-                    session_time(day, 15, 40),
+                    KRX.final_bar_at(day),
                     "ENGINEERED_SOFTWARE_FIXTURE",
                 )
             )
             states.append(
                 SecurityState(
                     "ENGINEERED",
-                    session_time(day, 15, 30),
-                    session_time(day, 15, 40),
+                    KRX.close_at(day),
+                    KRX.final_bar_at(day),
                     "NORMAL",
                     "STOCK",
                     "KOSPI",

@@ -21,15 +21,16 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from trading_agent.contracts import AgentError, session_time, timestamp
+from trading_agent.contracts import AgentError, timestamp
 from trading_agent.data import CSV_FIELDS, Snapshot
 
 from .contracts import ResearchInput
+from .market import KRX
 
 # KRX daily price limit is +/-30%. A move beyond it on consecutive bars cannot
 # be a normal trading day, so it is quarantined unless a corporate action on
 # that interval explains it. Exactly 30% is a legal limit move.
-MAX_ABS_DAILY_RETURN = Decimal("0.30")
+MAX_ABS_DAILY_RETURN = KRX.daily_price_limit
 
 ROW_CODES = (
     "PARSE_ERROR",
@@ -95,7 +96,7 @@ def _row_codes(row: Mapping[str, str]) -> tuple[tuple[str, ...], tuple[date, str
         codes.append("OHLC_INCONSISTENT")
     if volume < 0:
         codes.append("NEGATIVE_VOLUME")
-    if available < session_time(day, 15, 30):
+    if available < KRX.close_at(day):
         codes.append("AVAILABLE_BEFORE_CLOSE")
     if adjusted_value is not None and adjusted_value != close:
         codes.append("ADJUSTED_CLOSE_MISMATCH")
@@ -193,7 +194,7 @@ def assess(
 
     def states(day: date) -> dict[str, Any]:
         if day not in states_at:
-            states_at[day] = data.securities.states(session_time(day, 16))
+            states_at[day] = data.securities.states(KRX.observed_at(day))
         return states_at[day]
 
     for symbol, bars in sorted(by_symbol.items()):

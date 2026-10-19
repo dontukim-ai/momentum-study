@@ -24,7 +24,6 @@ from trading_agent.contracts import (
     aware,
     canonical,
     digest,
-    session_time,
 )
 from trading_agent.logic import LogicProposer, ranked_spec
 from trading_agent.selection import select_candidates
@@ -47,6 +46,7 @@ from .evaluator import (
     enabled_benchmarks,
     require_same_contract,
 )
+from .market import KRX, profile
 from .proposals import MemoryAwareProposer
 from .witness import WitnessLog
 
@@ -249,7 +249,7 @@ def _commitment_grade(committed_at: str, holdout_start: str) -> str:
     return (
         "E2"
         if datetime.fromisoformat(committed_at)
-        < session_time(date.fromisoformat(holdout_start), 9)
+        < KRX.open_at(date.fromisoformat(holdout_start))
         else "E1"
     )
 
@@ -830,7 +830,10 @@ class ResearchAgent:
             obs = json.loads(observation["payload_json"])
             if obs.get("execution_eligible") is not True:
                 raise AgentError("Observation release is not execution eligible")
-            limit = min(Decimal(1000000), Decimal(obs["starting_portfolio"]["capital"]))
+            limit = min(
+                profile(market).capital_cap,
+                Decimal(obs["starting_portfolio"]["capital"]),
+            )
             if (
                 not capital.is_finite()
                 or capital != capital.to_integral_value()
@@ -1803,7 +1806,9 @@ class ResearchAgent:
                         ],
                     }
                     registered_at = aware(self.clock())
-                    first_execution_at = session_time(payload["holdout_start"], 9)
+                    first_execution_at = profile(policy.market).open_at(
+                        payload["holdout_start"]
+                    )
                     self.db.execute(
                         "INSERT INTO agent_cohorts VALUES(?,?,?,?,?,?,?,?,?,?)",
                         (
@@ -2185,7 +2190,9 @@ class ResearchAgent:
         ).fetchone()
         payload = json.loads(commitment["payload_json"])
         evidence = payload["development_evidence"]
-        first_execution = session_time(date.fromisoformat(payload["holdout_start"]), 9)
+        first_execution = profile(policy.market).open_at(
+            date.fromisoformat(payload["holdout_start"])
+        )
         evidence.update(
             {
                 "cycle_id": cycle_id,
@@ -2307,8 +2314,8 @@ class ResearchAgent:
                     raise AgentError("Frozen commitment missing")
                 payload = json.loads(commitment["payload_json"])
                 development = payload["development_evidence"]
-                first_execution = session_time(
-                    date.fromisoformat(payload["holdout_start"]), 9
+                first_execution = profile(policy.market).open_at(
+                    date.fromisoformat(payload["holdout_start"])
                 )
                 grade = _commitment_grade(
                     commitment["committed_at"], payload["holdout_start"]
@@ -2986,14 +2993,16 @@ class ResearchAgent:
         frozen = data.prefix(end)
         c = policy.logic.costs
         costs = MarketCosts(c.commission_bps, c.sell_tax_bps, c.slippage_bps)
-        view = frozen.snapshot.view(session_time(end, 16), end, allow_missing=True)
+        view = frozen.snapshot.view(
+            profile(policy.market).observed_at(end), end, allow_missing=True
+        )
         report["selection"] = select_candidates(
             champion,
             view,
             frozen.securities,
             policy.logic.selection,
             costs,
-            session_time(end, 17),
+            profile(policy.market).report_deadline(end),
         )
         report = json.loads(canonical(report))
         with self.store.transaction():
