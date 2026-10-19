@@ -30,3 +30,12 @@ uv run python -m momentum.agent.cli witness-status --db /research/research.sqlit
 reconcile은 사라진 최종·shadow 구간을 배타적으로 격리하고 관찰 노출을 원래 stream에 합친다. 사라진 commitment는 holdout을 막고 기존 예산 원장에 reserve/consume을 각각 한 번 기록한다. 추가 전용 quarantine에는 witness seq/hash·payload·운영자·시각이 남는다. 한 트랜잭션이며 재실행은 멱등이다. 잃어버린 평가·사이클·수익률은 복원하거나 만들어내지 않는다. COMMIT 실패로 witness에만 남은 예약도 같은 보수적 격리 대상이다. 연구 자체가 없는 백업은 정책/예산을 추정하지 않고 reconcile을 거부한다. 이 경우 해당 연구 정책·예산이 보존된 복구 자료가 필요하다.
 
 witness를 삭제·편집하지 않는다. 대체 DB를 witness 없이 사용하지 않는다. witness와 DB를 함께 과거로 되돌리지 않는다. 손상된 해시 사슬이나 잘린 끝 줄을 추정하여 고치지 않는다. 해시 사슬은 변경·순서 오류 검출용이며, 로그 전체 삭제·유효한 접미부 제거·악의적 전체 재해시에 대한 외부 서명/앵커는 아니다. 별도 사본의 보관과 운영 접근 제어가 필요하다. witness 도입 이전 소비는 자동 역채움하지 않으므로 기존 DB도 계속 보존한다.
+
+## 연구 worker 운영(OPS-01a)
+
+`momentum-agent run [--watch]`은 실행하는 동안 연구별 **단일 worker lease**를 연구 DB의 `agent_worker_leases`에 잡고 `<output>/worker.json`을 갱신한다.
+
+- **lease:** 같은 연구에 살아 있는 worker가 있으면 두 번째 실행은 "Another worker holds this study"로 거부된다. heartbeat가 `max(3 × interval, 120)`초 동안 없으면 죽은 것으로 보고 새 worker가 넘겨받는다(`took_over_from`에 기록). 넘겨받힌 쪽은 다음 heartbeat에서 스스로 멈춘다. PID 확인은 쓰지 않는다(Windows에서 `os.kill(pid, 0)`은 Ctrl+C 신호를 보낸다).
+- **상태:** `STARTING` → `RUNNING`/`WAITING_FOR_DATA`(대기 이유: 다음 최종 구간까지 필요한 세션 수) → `STOPPED`(tick 수 도달)·`FINISHED`(예산 소진·관찰 완결)·`STOPPED_BY_OPERATOR`(Ctrl+C)·`STOPPED_ERROR`·`NEEDS_OPERATOR`.
+- **재시도 없음:** 어떤 오류도 자동 재시도하지 않는다. 중단된 최종 평가(`Cycle interrupted`)는 `NEEDS_OPERATOR`로 남기고 `operator_action`에 `recover` 또는 `abandon` 절차를 적는다. 그 밖의 오류는 `STOPPED_ERROR`와 `last_error`로 남는다. 다시 시작은 사람이 원인을 본 뒤 하는 의도적 행동이다.
+- **확인:** `momentum-agent worker-status --db DB --output DIR --study NAME`은 lease·상태 파일·heartbeat 경과 초·stale 여부를 출력한다. 주문은 항상 0건이다.

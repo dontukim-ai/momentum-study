@@ -29,6 +29,7 @@ from .bundle import open_bundle, publish_bundle
 from .contracts import AgentPolicy, AnnouncedAction, ResearchInput, policy_from_dict
 from .quality import assess, screen_price_rows
 from .service import ResearchAgent
+from .worker import WorkerMonitor, worker_status
 
 
 def save_json(path: Path, value: Any) -> None:
@@ -96,6 +97,7 @@ def watch(
     interval: float = 30,
     max_ticks: int | None = None,
     pause: Callable[[float], None] = time.sleep,
+    monitor: WorkerMonitor | None = None,
 ) -> dict[str, Any]:
     if (
         not 1 <= interval <= 60
@@ -106,22 +108,37 @@ def watch(
             "Watch interval must be 1..60 seconds and ticks must be positive"
         )
     tick, result = 0, {}
-    while max_ticks is None or tick < max_ticks:
-        # Errors stop the worker; an interrupted final evaluation is never
-        # blindly retried. Complete evaluation evidence has an explicit recover.
-        result = agent.tick(study, provider(), max_cycles=max_cycles)
-        save_json(output / "agent.json", result)
-        tick += 1
-        shadow = result.get("shadow")
-        if (
-            result["validation_budget_exhausted"]
-            and not result.get("committed_cycle")
-            and shadow
-            and shadow["observations"] >= result["status"]["policy"]["shadow_sessions"]
-        ):
-            break
-        if max_ticks is None or tick < max_ticks:
-            pause(interval)
+    finished = False
+    if monitor is not None:
+        monitor.start()
+    try:
+        while max_ticks is None or tick < max_ticks:
+            # Errors stop the worker; an interrupted final evaluation is never
+            # blindly retried. Complete evaluation evidence has an explicit recover.
+            data = provider()
+            result = agent.tick(study, data, max_cycles=max_cycles)
+            save_json(output / "agent.json", result)
+            tick += 1
+            if monitor is not None:
+                monitor.heartbeat(result, data)
+            shadow = result.get("shadow")
+            if (
+                result["validation_budget_exhausted"]
+                and not result.get("committed_cycle")
+                and shadow
+                and shadow["observations"]
+                >= result["status"]["policy"]["shadow_sessions"]
+            ):
+                finished = True
+                break
+            if max_ticks is None or tick < max_ticks:
+                pause(interval)
+    except BaseException as error:
+        if monitor is not None:
+            monitor.failed(error)
+        raise
+    if monitor is not None:
+        monitor.stopped("FINISHED" if finished else "STOPPED")
     return result
 
 
@@ -146,6 +163,7 @@ def parser() -> argparse.ArgumentParser:
             "abandon",
             "import-history",
             "demo",
+            "worker-status",
         ),
     )
     p.add_argument("--db", type=Path, default=Path("artifacts/agent/research.sqlite3"))
@@ -376,6 +394,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             )
         elif args.action == "status":
             result = agent.status(args.study)
+        elif args.action == "worker-status":
+            result = worker_status(store, args.study, args.output / "worker.json")
         elif args.action == "import-history":
             if not args.source_db:
                 raise AgentError("Historical consumption import requires --source-db")
@@ -435,6 +455,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 max_cycles=budget,
                 interval=args.interval,
                 max_ticks=args.max_ticks if args.watch else 1,
+                monitor=WorkerMonitor(
+                    store,
+                    args.study,
+                    args.output / "worker.json",
+                    interval=args.interval,
+                ),
             )
         save_json(args.output / (args.action + ".json"), result)
         return result
@@ -447,6 +473,7 @@ def main() -> int:
         args = parser().parse_args()
         result = run(args)
         if args.action in {
+            "worker-status",
             "quality-screen",
             "quality-report",
             "bundle-publish",
