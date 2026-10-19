@@ -143,3 +143,28 @@ manifest 스키마 v1은 `schema_version`, 파일별 `sha256`·`bytes`를 가진
 `momentum-agent bundle-publish --bundle ROOT --csv PRICES --securities STATES`에 선택 `--actions`, `--sessions`, `--calendar`, `--source-meta JSON파일`, `--corporate-action-basis`를 지정할 수 있다. 발행은 staging 복사 → 해시·manifest 작성 → 기존 `read_input`으로 ResearchInput 생성 검증 → bundles 디렉터리 rename → 임시 CURRENT 파일의 `os.replace` 순서다. 실패 시 staging을 정리하고 기존 CURRENT와 bundles를 보존한다. 발행 원본 파일도 복사 동안 동일 수집 snapshot으로 유지해야 한다.
 
 수집기는 파일을 직접 덮어쓰지 않고 검증된 묶음만 발행하며, 연구 worker는 `run --bundle ROOT`로 묶음만 읽는 운영 규칙을 따른다. 기존 직접 경로 실행은 호환성을 위해 유지하지만 bundle과 함께 지정할 수 없다. worker는 tick마다 CURRENT를 한 번 읽고 그 버전의 전체 파일명·크기·해시와 manifest ID를 대조한 뒤 파싱한다. 중간 포인터 교체는 진행 중 읽기에 영향을 주지 않는다. 누락·추가·불일치는 `Input bundle integrity failure`로 중단한다. 공개 디렉터리는 수정·삭제하지 않으며, 결과 JSON에 `input_bundle: {bundle_id, created_at}`을 남긴다. 이 ID는 파일 공개 버전이며 기존 연구 지문이나 DB·commitment 계약을 대체하지 않는다. 현재 근거는 합성 회귀이며 실제 공급원 수집·상시 운영 검증은 후속이다.
+
+## 데이터 품질 코드와 격리(DATA-05a)
+
+품질 검사는 두 단계다. 어느 단계도 값을 추정해 채우거나 원본을 고치지 않는다.
+
+1. **원시 행 선별** `momentum-agent quality-screen --csv RAW --output DIR`: 가격 CSV를 `Bar`로 만들기 전에 행 단위로 검사해 `prices.accepted.csv`와 `prices.quarantine.csv`(원래 줄 번호·사유 코드·원래 값)로 나눈다. 원본 파일은 읽기만 한다. `quality-screen.json`에 원본·통과본 sha256과 코드별 개수를 남긴다. 통과본을 `bundle-publish`의 `--csv`로 쓰고, 이 보고서 해시를 `--source-meta`에 기록한다.
+2. **행 간 검사** `momentum-agent quality-report --bundle ROOT`(또는 `--csv --securities`): 연구 입력 전체를 검사해 `quality-report.json`을 쓴다. `momentum.agent.quality.quarantine`은 격리 코드가 붙은 봉만 빼고 세션 시계·종목 상태·기업행동은 그대로 둔다.
+
+| 코드 | 심각도 | 격리 | 뜻 |
+| --- | --- | --- | --- |
+| PARSE_ERROR | error | 행 | 날짜·숫자·시각·종목 기호를 읽을 수 없음 |
+| NONPOSITIVE_PRICE | error | 행 | 시·고·저·종가 중 0 이하 |
+| OHLC_INCONSISTENT | error | 행 | 저가 ≤ min(시,종) ≤ max(시,종) ≤ 고가 위반 |
+| NEGATIVE_VOLUME | error | 행 | 거래량 음수 |
+| AVAILABLE_BEFORE_CLOSE | error | 행 | 공개 시각이 그날 15:30 KST 이전(미래 정보 위험) |
+| ADJUSTED_CLOSE_MISMATCH | error | 행 | 수정종가가 원시 종가와 다름(기업행동 회계 미구현) |
+| DUPLICATE_ROW | error | 행 | 같은 세션·종목이 둘 이상. 어느 쪽도 고르지 않고 모두 보류 |
+| ABNORMAL_RETURN | error | 봉 | 마지막 비격리 봉 대비 종가 변화가 ±30% 초과이고 그 사이 기업행동이 없음 |
+| ACTION_EXPLAINED_RETURN | info | 아니오 | 위와 같은 변화를 그 사이 권리락일의 기업행동이 설명함 |
+| MISSING_BAR | warning | 아니오 | 첫 봉 이후 세션에 봉이 없음(마지막 봉 이후는 상태가 NORMAL일 때만) |
+| HALTED_NO_BAR | info | 아니오 | 거래정지(SUSPENDED) 상태라 봉이 없음 |
+| UNKNOWN_SECURITY_STATE | warning | 아니오 | 그 세션 16:00 KST에 공개된 종목 상태가 없음 |
+| ZERO_VOLUME | info | 아니오 | 거래량 0 |
+
+±30%는 KRX 일일 가격제한폭이다. 정확히 30%는 정상 상한가로 본다. 이상 수익률은 **마지막으로 격리되지 않은 봉**과 비교한다. 하루짜리 튀는 값은 그날만 격리되고, 설명되지 않는 영구적 수준 변화(예: 누락된 분할)는 이후 봉이 모두 격리되어 가짜 모멘텀으로 들어가지 않는다. 정정 공시·정정 시세의 이벤트화는 다음 작업이다.

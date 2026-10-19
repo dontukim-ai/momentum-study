@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import os
@@ -26,6 +27,7 @@ from momentum.ledger.ledger import CorporateAction
 
 from .bundle import open_bundle, publish_bundle
 from .contracts import AgentPolicy, AnnouncedAction, ResearchInput, policy_from_dict
+from .quality import assess, screen_price_rows
 from .service import ResearchAgent
 
 
@@ -128,6 +130,8 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument(
         "action",
         choices=(
+            "quality-screen",
+            "quality-report",
             "bundle-publish",
             "backup",
             "restore",
@@ -235,6 +239,72 @@ def restore(args: argparse.Namespace) -> dict[str, Any]:
         store.close()
 
 
+def _write_csv(path: Path, fields: list[str], rows: list[dict[str, Any]]) -> None:
+    temporary = path.with_name(path.name + f".{os.getpid()}.tmp")
+    with temporary.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+    os.replace(temporary, path)
+
+
+def quality_screen(args: argparse.Namespace) -> dict[str, Any]:
+    """Split a raw price CSV into accepted and quarantined rows.
+
+    The source file is only read. Quarantined rows keep their original values so
+    a supplier defect can be audited and reported, never silently repaired.
+    """
+    if not args.csv:
+        raise AgentError("quality-screen requires --csv")
+    raw = args.csv.read_bytes()
+    with args.csv.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        fields = list(reader.fieldnames or ())
+        result = screen_price_rows(reader)
+    args.output.mkdir(parents=True, exist_ok=True)
+    accepted_path = args.output / "prices.accepted.csv"
+    _write_csv(accepted_path, fields, result.accepted)
+    _write_csv(
+        args.output / "prices.quarantine.csv",
+        ["line", "quality_codes", *fields],
+        [
+            {"line": q.line, "quality_codes": ";".join(q.codes), **q.row}
+            for q in result.quarantined
+        ],
+    )
+    report = {
+        "source": str(args.csv),
+        "source_sha256": hashlib.sha256(raw).hexdigest(),
+        "accepted_sha256": hashlib.sha256(accepted_path.read_bytes()).hexdigest(),
+        "accepted": len(result.accepted),
+        "quarantined": len(result.quarantined),
+        "by_code": result.by_code(),
+    }
+    save_json(args.output / "quality-screen.json", report)
+    return report
+
+
+def quality_report(args: argparse.Namespace) -> dict[str, Any]:
+    if args.bundle:
+        data, manifest = open_bundle(args.bundle)
+        source: dict[str, Any] = {"bundle_id": manifest["bundle_id"]}
+    elif args.csv and args.securities:
+        data = read_input(
+            args.csv,
+            args.securities,
+            args.actions,
+            args.sessions,
+            args.corporate_action_basis,
+            args.calendar,
+        )
+        source = {"csv": str(args.csv)}
+    else:
+        raise AgentError("quality-report requires --bundle or --csv and --securities")
+    report = {**source, **assess(data).to_dict()}
+    save_json(args.output / "quality-report.json", report)
+    return {**source, "summary": report["summary"]}
+
+
 def run(args: argparse.Namespace) -> dict[str, Any]:
     if (
         args.action == "run"
@@ -242,6 +312,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         and any((args.csv, args.securities, args.actions, args.sessions, args.calendar))
     ):
         raise AgentError("--bundle cannot be combined with input file paths")
+    if args.action == "quality-screen":
+        return quality_screen(args)
+    if args.action == "quality-report":
+        return quality_report(args)
     if args.action == "bundle-publish":
         if not args.bundle or not args.csv or not args.securities:
             raise AgentError("bundle-publish requires --bundle, --csv and --securities")
@@ -373,6 +447,8 @@ def main() -> int:
         args = parser().parse_args()
         result = run(args)
         if args.action in {
+            "quality-screen",
+            "quality-report",
             "bundle-publish",
             "backup",
             "restore",
