@@ -20,9 +20,12 @@ from urllib.parse import parse_qsl, quote, quote_plus, urlencode, urlsplit, urlu
 from urllib.request import Request, urlopen
 
 SOURCES = ("fsc_stock", "fsc_etf", "dart", "dart_detail", "kind")
+# V2 endpoints: keys issued for the V2 services are rejected by the old
+# /service/ paths with SERVICE_KEY_IS_NOT_REGISTERED_ERROR. The ETF path is from
+# the supplier guide; the stock path follows the same pattern (unverified).
 FSC = {
-    "fsc_stock": "https://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo",
-    "fsc_etf": "https://apis.data.go.kr/1160100/service/GetSecuritiesProductInfoService/getETFPriceInfo",
+    "fsc_stock": "https://apis.data.go.kr/1160100/GetStockSecuritiesInfoService_V2/getStockPriceInfo_V2",
+    "fsc_etf": "https://apis.data.go.kr/1160100/GetSecuritiesProductInfoService_V2/getETFPriceInfo_V2",
 }
 
 # Candidate endpoints: the probe records supplier responses to verify these mappings.
