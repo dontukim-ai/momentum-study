@@ -170,6 +170,8 @@ class AgentPolicy:
     statistical_policy_version: str = "v1"
     min_tail_draws: int = 50
     market_etf_symbol: str | None = None
+    memory_policy: str = "none"
+    memory_cooldown_cycles: int = 2
 
     observation_checkpoint_sessions: int = 20
     degradation_reference: str = "equal_weight_eligible"
@@ -178,6 +180,13 @@ class AgentPolicy:
     demotion_checkpoints: int = 3
 
     def __post_init__(self) -> None:
+        if self.memory_policy not in ("none", "suppress_failed_final_v1"):
+            raise AgentError("Invalid preregistered memory policy")
+        if (
+            type(self.memory_cooldown_cycles) is not int
+            or self.memory_cooldown_cycles < 1
+        ):
+            raise AgentError("Invalid preregistered memory cooldown")
         if (
             self.logic.selection.spread_mode == "historical_unavailable"
             and self.logic.costs.slippage_bps < HISTORICAL_SPREAD_MIN_SLIPPAGE_BPS

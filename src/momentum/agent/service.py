@@ -40,6 +40,7 @@ from .evaluator import (
     enabled_benchmarks,
     require_same_contract,
 )
+from .proposals import MemoryAwareProposer
 from .witness import WitnessLog
 
 
@@ -1415,7 +1416,10 @@ class ResearchAgent:
                 champion = ranked_spec(json.loads(current["champion_json"]))
                 dev_end = data.calendar[plan["dev_end"]]
                 dev = data.prefix(dev_end)
-                development = self._develop(dev, policy, champion, plan)
+                memories = self.development_memory(policy.market)
+                development = self._develop(
+                    dev, policy, champion, plan, memories, ordinal, name
+                )
                 payload = {
                     "study": name,
                     "ordinal": ordinal,
@@ -1466,9 +1470,7 @@ class ResearchAgent:
                             )
                     else:
                         self._append_champion(policy.market, 0, champion, name)
-                    payload["proposer_inputs"] = [
-                        m["snapshot_id"] for m in self.development_memory(policy.market)
-                    ]
+                    payload["proposer_inputs"] = [m["snapshot_id"] for m in memories]
                     commitment_id = digest(payload)
                     self._migrate_budget()
                     account = self._budget_account(policy, name)
@@ -1747,16 +1749,48 @@ class ResearchAgent:
             "live_enabled": False,
         }
 
+    def _resolve_proposal_source(self, source_id: str) -> tuple[str | None, int | None]:
+        cycle = self.db.execute(
+            "SELECT ordinal,manifest_json FROM agent_cycles WHERE id=?", (source_id,)
+        ).fetchone()
+        if cycle:
+            manifest = json.loads(cycle["manifest_json"])
+            version = manifest.get("selected_version")
+            commitment_id = manifest.get("commitment_id")
+            if version:
+                return version, cycle["ordinal"]
+            source_id = commitment_id or source_id
+        commitment = self.db.execute(
+            "SELECT ordinal,payload_json FROM agent_commitments WHERE commitment_id=?",
+            (source_id,),
+        ).fetchone()
+        if commitment:
+            return (
+                json.loads(commitment["payload_json"]).get("selected_version"),
+                commitment["ordinal"],
+            )
+        return None, cycle["ordinal"] if cycle else None
+
     def _develop(
         self,
         data: ResearchInput,
         policy: AgentPolicy,
         champion: Any,
         plan: dict[str, int],
+        memories: list[dict[str, Any]] | None = None,
+        ordinal: int = 0,
+        study: str = "",
     ) -> dict[str, Any]:
         evaluator = CommonEvaluator(policy)
         dev = data.prefix(data.sessions[plan["dev_end"]])
-        proposer = LogicProposer(policy.logic)
+        proposer = MemoryAwareProposer(
+            LogicProposer(policy.logic),
+            memories or [],
+            ordinal,
+            study,
+            policy,
+            self._resolve_proposal_source,
+        )
         candidates = {s.version: s for s in [champion, *proposer.propose(champion)]}
         trials = []
         fold_size = policy.development_sessions // 3

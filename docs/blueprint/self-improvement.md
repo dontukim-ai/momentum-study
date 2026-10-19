@@ -10,7 +10,7 @@
 | ranking | 등록된 3가지 규칙 중 선택 | 추가 특징·신호군은 별도 전략 ID와 검증 예산 |
 | 연구 champion | 독립 검증 통과 시 revision 증가 | 시장·전략군별 registry, 운용 버전과 분리 |
 | 가중치·선택 수·위험 한도·비용·합격 기준 | 자동 변경 안 함 | 새 정책 연구로 평가. 기존 holdout 재사용 금지 |
-| 실패 기록의 자동 해석 | 결과 저장만 구현 | 실패 분류·중복 제안 억제·개발 가설 추천 |
+| 실패 기록의 자동 해석 | 실패 분류·해제 기록과 opt-in 중복 최종 실패 후보 억제(RES-04a, 합성 회귀) | 개발 가설 추천·실데이터 검증 |
 | ML 가중치·예측 모델 재학습 | 미구현 | 시간 분할·라벨 격리·재현 가능한 제한 학습 |
 | 소스 코드 | 자동 수정 안 함 | 코드 후보는 별도 격리 개발·회귀 검증 후 새 빌드로 취급 |
 
@@ -31,6 +31,16 @@ trend_stability ranking = momentum × positive_fraction
 ```
 
 모든 규칙에 같은 제외 필터·예산·체결·비용을 적용한다. 점수 내림차순, 동점이면 종목명 순이다. 평가기는 **매 세션** 전일 16:00 관측으로 다시 선정하고 리밸런싱한다. 이 주기는 지금 암묵적 고정값이며, 회전율·비용 해석의 전제이므로 `LOOP-02`에서 전략의 명시 파라미터(`decision_cadence`)로 올린다. 결정 주기는 후보 쪽 변수이고, 체결 시각을 정하는 실행 시계는 모든 후보에 공통이다([루프 계약](loop-contracts.md) §2). 후보 생성은 현재 고정된 그리드다. 직전 실패를 읽고 새 규칙을 발명하거나 범위를 자동 확대하지 않는다.
+
+### RES-04a 현재 구현 — 합성 회귀 범위
+
+연구 쪽 `MemoryAwareProposer`는 기존 `LogicProposer`를 감싸며 탐색 공간을 넓히지 않는다. 기본 `memory_policy="none"`은 후보·순서·기존 proposal metadata를 유지한다. 기존 승격 시나리오의 trial version·개발 점수·선택 version·champion·revision·promotion gate·evidence grade 동일성을 회귀로 확인한다. 새 정책 필드와 소스 build 때문에 commitment ID·payload의 비트 단위 동일성은 요구하지 않는다.
+
+사전 등록한 `suppress_failed_final_v1`은 같은 시장·전략군에서 개발로 해제된 `final` 기억 중 `FINAL_UNDERPERFORM`·`INSUFFICIENT_EVIDENCE`만 사용한다. snapshot payload의 `selected_version`을 우선하고, 없으면 원본 cycle manifest와 연결된 commitment의 `selected_version`을 조회한다. 후보 version을 찾지 못하면 억제하지 않고 snapshot ID를 `unresolved`에 기록한다. 현재 저장소의 전략군은 `ranked-momentum` 하나이며 다른 시장 기억은 기존 `development_memory(market)`에서 제외된다.
+
+`memory_cooldown_cycles`는 기본 2인 양의 정수다(`none`에서는 제안에 영향 없음). 같은 연구는 `0 < 현재 ordinal - 실패 ordinal <= cooldown`일 때 억제한다. ordinal을 복원할 수 없는 같은 연구 기억도 `unresolved`로 기록한다. 다른 연구의 ordinal은 비교하지 않는다. 다른 연구 전체에서 해제 시각 내림차순의 최근 cooldown개 **서로 다른 실패 사이클**을 사용한다. 같은 사이클의 여러 실패 코드는 한 칸으로 세고 가장 늦은 해제 시각으로 순서를 정한다. 해제 시각 동률이면 입력의 뒤쪽(SQLite snapshot 추가 순서)을 우선한다. 미해제·진행 중 최종 결과는 입력에 들어오지 않는다.
+
+억제 후 남은 후보는 원래 순서를 유지하며 별도 정렬·예산 절단은 추가하지 않는다. 개발 평가에는 champion을 항상 별도로 포함하고, challenger가 모두 억제되면 기존 `DEV_NO_IMPROVEMENT` 경로로 champion을 유지한다. opt-in proposal metadata의 `memory_policy`·`suppressed`(version → snapshot ID 목록)·`unresolved`는 개발 evidence와 commitment에 저장된다. 기억은 개발 평가 전에 한 번 읽어 제안과 `proposer_inputs`에 같은 목록을 쓴다. 합성 회귀 범위의 구현이며 실데이터 효과 검증·새 가설 생성·주문 연결은 포함하지 않는다.
 
 ## 3. 데이터 사용권과 평가 일정
 
