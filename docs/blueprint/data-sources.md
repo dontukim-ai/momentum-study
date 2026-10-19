@@ -39,6 +39,8 @@
 - 요청: `numOfRows` 최대 10,000, 초당 30건, `beginBasDt`/`endBasDt`/`isinCd` 조회 조건이 있다.
 - 이용허락: 공공누리 4유형(출처표시·상업적 이용 금지·변경 금지)이며 제3자 제공·재배포가 금지된다. 수집 원본과 파생 파일을 저장소·공유 위치에 올리지 않는다(`artifacts/`, `data/krx/`는 Git 제외). 상업적 이용은 KRX Data Marketplace 구매 대상이다.
 
+가격 변환(DATA-02b): `momentum.krx.fsc_prices`와 `tools/fsc_prices.py`는 탐침이 저장한 시세 JSON 페이지를 네트워크 없이 가격 CSV(`prices.csv`), 기준일별 단축코드–ISIN–종목명(`identities.jsonl`), 페이지 해시·행 선별 결과(`manifest.json`)로 바꾼다. `available_at`은 §3의 사전 등록 가정(기준일 18:00 KST, `MarketProfile.historical_bar_available`)이고, `source`는 `fsc-stock-price:<페이지 SHA-256>` 형식이다. 공급자 값은 고치지 않는다. 0이나 빈 가격도 그대로 옮겨 DATA-05a 행 선별이 격리한다. 기준일의 행 수가 `totalCount`와 다르거나, 페이지가 중복되거나, 한 기준일에 같은 단축코드가 두 ISIN으로 나오면 변환 전체를 거부한다. 단축코드 재사용·변경은 `identity_changes`로 보고만 하고 병합하지 않는다. 실행: `uv run python tools/fsc_prices.py --kind stock --pages <탐침 out>/fsc_stock/<날짜>/page-*.json --out data/krx/fsc/<이름>`. 근거는 합성 페이지 회귀이며, 실제 페이지 변환 결과는 사용자 PC 실행으로 확인한다. 출력은 재배포 금지 자료이므로 `data/krx/`(Git 제외)에 둔다.
+
 시가가 0이거나 비어 있는 행(거래 없음·정지)은 **채우지 않는다**. 가격 행을 만들지 않고 DATA-05 품질 코드로 격리한다(CLAUDE.md 3번: 결측 시가 → 매수 취소).
 
 ### 2.2 종목 상태 JSONL ← KIND + 시세 응답
