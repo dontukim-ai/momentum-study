@@ -21,7 +21,7 @@
 
 | 단계 | 상태 | 지금 되는 것 | 목표와의 핵심 차이 | 작업 |
 | --- | --- | --- | --- | --- |
-| S1 후보 생성 | 부분 | KRX 필터·3가지 ranking·고정 grid 제안 | 시장 추상화·전략군 레지스트리·결정 주기 파라미터·가설형 제안·실패 기억 활용 없음(해제 기록은 LOOP-08a 합성 회귀 구현) | LOOP-01, LOOP-02, LOOP-08, RES-04, RES-05 |
+| S1 후보 생성 | 부분 | KRX 필터·3가지 ranking·고정 grid 제안; RES-04a 해제된 최종 실패 후보 cooldown 억제·원래 순서 유지·proposer_inputs 일치(합성 회귀 범위 구현 완료, 기본 none) | 시장 추상화·전략군 레지스트리·결정 주기 파라미터·가설형 제안·실데이터 검증 | LOOP-01, LOOP-02, LOOP-08, RES-04, RES-05 |
 | S2 동일 조건 평가 | 부분 | 공통 평가기·원장·비용 스트레스 | 평가 계약 ID·동일 조건 검사·거래 가능성 지표 구현(합성 회귀). 현금/적격 동일 비중 보고 구현. 기준 전략 gate·capacity는 후속 | LOOP-03, RES-01, FIN-01~04 |
 | S3 독립 검증 | 부분 | 개발 종료 시 후보 사전 고정·구간 예약·시장 단위 소비·승격 조건 10개·E1/E2 기록(RES-03a 합성 회귀), kind 분리·고정 트랜잭션의 ValidationCohort 등록(LOOP-09a 합성 회귀) | 외부에서 확인 가능한 고정 시각(별도 저장소·서명)은 미구현. 시장·전략군 예산 원장 구현(LOOP-02a 합성 회귀), 명시적 할당은 미구현. opt-in 통계 v2와 합성 진단 도구 구현; 실제 오류율·개발 블록 선정 근거는 후속 | RES-02, RES-03, LOOP-07 |
 | S4 갱신·추적 | 부분 | 시장·전략군 champion 레지스트리·신규 연구 동기화·legacy 이행(LOOP-04a 합성 회귀), 유지·20세션 shadow, 연속 관찰 원장(LOOP-05a 조회는 미저장), checkpoint 저장·사전 등록 열화 상태·cohort 봉인/기억 연동(LOOP-05b), 입력 지문·build 재검증·최신 저장 창 안전 재검증 기반 증분 계산(LOOP-05c 합성 회귀 범위 구현), 관찰 노출 기록·다음 미고정 최종 구간 앞 상한·cohort 봉인 표시(LOOP-09a 합성 회귀 범위 구현) | ObservationRelease 등록·중단(주문 권한 없음)은 LOOP-06a 합성 회귀 범위 구현. 강등 실행·ExecutionRelease·알림·실데이터 검증, 다중 challenger cohort(자기 개선 §6)는 미구현 | LOOP-04~06, LOOP-09, OPS-05, OPS-06 |
@@ -84,7 +84,7 @@ RES-03a는 공개 거래일 `calendar`와 관측 `sessions`를 분리하고, 개
 | `(market, family)` champion·관찰 원장·열화 상태 | 부분: LOOP-04a 레지스트리 합성 회귀 구현. LOOP-05a 연속 관찰 원장(조회는 미저장)과 LOOP-05b checkpoint 저장·사전 등록 열화 상태·봉인/기억 연동과 LOOP-05c 증분 계산·build 재검증·최신 저장 창 안전 재검증 합성 회귀 범위 구현. LOOP-09a kind 분리·cohort 봉인 표시·관찰 노출 기록 합성 회귀 구현. ObservationRelease 등록·중단(주문 권한 없음)은 LOOP-06a 합성 회귀 범위 구현. 강등 실행·ExecutionRelease·알림·다중 challenger cohort 미구현, 실데이터 검증 미완료 | LOOP-04, LOOP-05 |
 | ObservationRelease·ExecutionRelease | 부분: LOOP-06a 관찰 등록·사람/열화/데이터 장애 중단·상태/CLI는 합성 회귀 범위 구현(주문 권한 없음). ExecutionRelease·알림·실데이터 검증 미구현 | LOOP-06, 주문 구현과 별개 |
 | 통계 정책 v2 | 부분 | C4: opt-in 단측 v2·min_tail_draws=50·증거 metadata·오프라인 진단 구현(합성 회귀). 기본 v1의 CI 비트 결과 유지. 오류율 보장·실데이터 블록 선정·전략군 예산은 미완료. LOOP-07 |
-| 실패 기억 개발 해제 | 부분 | LOOP-08a: 개발·최종·완결 shadow 실패 snapshot, 추가 전용 해제 기록, 해제된 기억 조회와 commitment의 `proposer_inputs`를 합성 회귀 범위에서 구현. LOOP-09a 관찰 cohort 봉인 표시와 제안기 비공개 합성 회귀 구현. LOOP-05b 관찰 checkpoint·봉인 해제 후 기억 연결을 합성 회귀 범위에서 구현. 기억을 쓰는 제안(RES-04/05)은 미구현. 실데이터 검증 미완료 |
+| 실패 기억 개발 해제 | 부분 | LOOP-08a: 개발·최종·완결 shadow 실패 snapshot, 추가 전용 해제 기록, 해제된 기억 조회와 commitment의 `proposer_inputs`를 합성 회귀 범위에서 구현. LOOP-09a 관찰 cohort 봉인 표시와 제안기 비공개 합성 회귀 구현. LOOP-05b 관찰 checkpoint·봉인 해제 후 기억 연결을 합성 회귀 범위에서 구현. RES-04a의 opt-in 최종 실패 후보 억제는 합성 회귀 범위 구현 완료. 가설 추천(RES-04/05)은 미구현. 실데이터 검증 미완료 |
 | 구간 예약·동시 사용 정책 | 부분 | LOOP-09a: kind 분리·추가 전용 cohort·관찰 노출 기록·미고정 구간 앞 상한·봉인 표시를 합성 회귀 범위에서 구현. shadow는 최종 검증과 배타이나 관찰 노출과 겹침 허용. ObservationRelease 등록·중단은 LOOP-06a 합성 회귀 범위 구현. 다중 challenger cohort·ExecutionRelease·알림·실데이터 검증은 미완료 |
 | 미국 H1~H4 개발·연구 실행 | **보류** | 사용자 명시 재개 전 진행하지 않음 |
 
