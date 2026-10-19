@@ -11,12 +11,14 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from trading_agent.contracts import AgentError, aware, digest, session_time
+from trading_agent.contracts import AgentError, aware, digest
 from trading_agent.data import Snapshot
 from trading_agent.logic import LogicSettings, settings_from_dict
 from trading_agent.selection import SecurityHistory
 
 from momentum.ledger.ledger import CorporateAction
+
+from .market import KRX, PROFILES
 
 # Preregistered before results: conservatively covers at least half a 1-KRW
 # tick near the 1,000-KRW price floor and the gap above the default 5 bps.
@@ -63,7 +65,7 @@ class AnnouncedAction:
             )
         ):
             raise AgentError("Unsupported or incomplete corporate action")
-        if self.available_at > session_time(a.ex_date, 9):
+        if self.available_at > KRX.open_at(a.ex_date):
             raise AgentError(
                 "Late corporate-action coverage cannot support a chronological evaluation"
             )
@@ -122,7 +124,7 @@ class ResearchInput:
                 raise AgentError("Corporate action must use declared exchange sessions")
 
     def prefix(self, end: date) -> ResearchInput:
-        clock = session_time(end, 16)
+        clock = KRX.observed_at(end)
         return ResearchInput(
             Snapshot(
                 [b for b in self.snapshot.bars if b.session <= end],
@@ -144,7 +146,7 @@ class ResearchInput:
                 "prices": prefix.snapshot.id,
                 "securities": prefix.securities.id,
                 "actions": tuple(
-                    a for a in self.actions if a.available_at <= session_time(end, 16)
+                    a for a in self.actions if a.available_at <= KRX.observed_at(end)
                 ),
                 "sessions": prefix.sessions,
                 "basis": prefix.corporate_action_basis,
@@ -219,7 +221,11 @@ class AgentPolicy:
             or not re.fullmatch(r"[A-Za-z0-9_]{1,30}", self.market_etf_symbol)
         ):
             raise AgentError("Invalid preregistered market ETF symbol")
-        if (self.market, self.currency, self.money_quantum) != ("KRX", "KRW", "1"):
+        supported = PROFILES.get(self.market)
+        if supported is None or (self.currency, self.money_quantum) != (
+            supported.currency,
+            supported.money_quantum,
+        ):
             raise AgentError(
                 "This adapter supports KRX/KRW only; US H1-H4 final evaluation remains locked"
             )
@@ -285,5 +291,5 @@ def policy_from_dict(raw: dict[str, Any]) -> AgentPolicy:
 
 
 def require_observed(data: ResearchInput, now: datetime | None = None) -> None:
-    if session_time(data.sessions[-1], 16) > aware(now or datetime.now(UTC)):
+    if KRX.observed_at(data.sessions[-1]) > aware(now or datetime.now(UTC)):
         raise AgentError("Input includes sessions that have not closed yet")

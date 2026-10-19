@@ -23,7 +23,6 @@ from trading_agent.contracts import (
     Decision,
     Wallet,
     digest,
-    session_time,
 )
 from trading_agent.data import MarketView
 from trading_agent.selection import RankedStrategy, SelectionEngine, select_candidates
@@ -33,6 +32,7 @@ from momentum.execution.engine import Fill
 from momentum.ledger.ledger import Ledger
 
 from .contracts import AgentPolicy, ResearchInput
+from .market import profile
 
 BENCHMARKS = ("cash", "equal_weight_eligible")
 NAV_RESIDUAL_ABSOLUTE_TOLERANCE = D("1e-9")
@@ -509,7 +509,7 @@ class CommonEvaluator:
             ),
             initial_portfolio="cash_only_reset_per_evaluation",
             execution_model=(
-                D(".01"),
+                profile(p.market).max_volume_participation,
                 "sell_first",
                 "next_open",
                 "open_raw_with_fixed_slippage",
@@ -530,6 +530,7 @@ class CommonEvaluator:
             ),
         )
         ledger = Ledger(capital, money_quantum=quantum)
+        market = profile(p.market)
         selector = SelectionEngine(data.securities, p.logic.selection, costs)
         curve: list[dict[str, Any]] = []
         trade_log: list[dict[str, Any]] = []
@@ -548,7 +549,7 @@ class CommonEvaluator:
             changed = active_version is not None and active_version != spec.version
             active_version = spec.version
             fees_before = fees
-            at = session_time(prior_day, 16)
+            at = market.observed_at(prior_day)
             view = data.snapshot.view(at, prior_day, allow_missing=True)
             required = max(
                 p.logic.selection.min_history, 3 if benchmark else spec.lookback + 1
@@ -578,16 +579,16 @@ class CommonEvaluator:
                     benchmark,
                     selector,
                     view,
-                    session_time(day, 10),
+                    market.decision_deadline(day),
                     wallet,
                     screening,
                     etf_symbol=p.market_etf_symbol,
                 )
                 if benchmark
-                else selector(spec, view, session_time(day, 10), wallet)
+                else selector(spec, view, market.decision_deadline(day), wallet)
             )
             caps = {
-                s: int(h[-1].volume * D(".01"))
+                s: int(h[-1].volume * market.max_volume_participation)
                 for s, h in view.histories.items()
                 if h and h[-1].session == prior_day
             }
@@ -655,7 +656,7 @@ class CommonEvaluator:
                 if symbol not in opens:
                     events.append(event)
                     continue
-                if not selector.execution_allowed(symbol, side, session_time(day, 9)):
+                if not selector.execution_allowed(symbol, side, market.open_at(day)):
                     event["status"] = "cancelled_security_state"
                     events.append(event)
                     continue

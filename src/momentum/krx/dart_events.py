@@ -9,17 +9,18 @@ import re
 import tempfile
 from collections.abc import Iterable, Sequence
 from dataclasses import asdict, dataclass
-from datetime import date, datetime, time
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from momentum.agent.market import KRX
 from momentum.config import SpecUndefinedError
 
 KST = ZoneInfo("Asia/Seoul")
 # list.json provides a date, never a reception time. Conservatively prevent
 # even intraday disclosures from entering that day's decision inputs.
-DISCLOSURE_AVAILABLE_TIME = time(18, 0)
+DISCLOSURE_AVAILABLE_TIME = KRX.disclosure_available
 _REPORT_KINDS = (
     ("유무상증자결정", "BONUS_AND_RIGHTS"),
     ("무상증자결정", "BONUS_ISSUE"),
