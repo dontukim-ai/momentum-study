@@ -247,3 +247,45 @@ def test_detail_fetcher_and_tool_round_trip(tmp_path, capsys):
     assert fetcher.fetch("20240314000003", "00049470", date(2024, 3, 14)) == "skipped"
     with pytest.raises(CollectError, match="unsupported detail API"):
         DartDetailFetcher(root, "piicDecsn", environ={"OPENDART_API_KEY": KEY})
+
+
+def test_answer_for_an_original_carries_its_latest_correction(tmp_path):
+    from momentum.krx.capital_actions import load_details
+
+    # 프로브잇 2024: the 2023-12-27 filing (rm "정") came back as its
+    # 2024-01-12 correction, under the correction's own number.
+    original = dict(ROWS[0], rm="정")
+    correction = dict(
+        ROWS[0],
+        rcept_no="20240320000009",
+        rcept_dt="20240320",
+        report_nm="[기재정정]주요사항보고서(무상증자결정)",
+    )
+    page = tmp_path / "page.json"
+    page.write_text(
+        json.dumps({"status": "000", "list": [original, correction]}), encoding="utf-8"
+    )
+    saved = tmp_path / "raw" / "dart_detail" / "fricDecsn"
+    saved.mkdir(parents=True)
+    item = {"rcept_no": "20240320000009", **DETAILS["20240314000001"]}
+    (saved / "20240314000001.json").write_text(
+        json.dumps({"status": "000", "list": [item]}), encoding="utf-8"
+    )
+    details = load_details(tmp_path / "raw")
+    assert set(details) == {"20240320000009"}
+    result = build(parse_list_pages([page]), details, ADJUSTMENTS, SESSIONS, CONFIRMED)
+    (action,) = result.actions
+    assert action["evidence"]["rcept_no"] == "20240320000009"
+    assert action["available_at"].startswith("2024-03-20T18:00")
+    assert result.skipped == [
+        {
+            "rcept_no": "20240314000001",
+            "stock_code": "408900",
+            "reason": "values only in another version",
+        }
+    ]
+    (saved / "other.json").write_text(
+        json.dumps({"status": "000", "list": [dict(item, nstk_ascnt_ps_ostk="4")]})
+    )
+    with pytest.raises(SpecUndefinedError, match="conflicting item"):
+        load_details(tmp_path / "raw")
