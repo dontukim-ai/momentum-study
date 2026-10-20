@@ -44,6 +44,7 @@ class DividendDecision:
     record_date: date
     pay_date: date | None
     board_date: date | None
+    agm_date: date | None  # 주주총회 예정일자; absent on some form versions
     subsidiary: str | None  # paying company named in a subsidiary filing
     correction: bool
 
@@ -125,6 +126,11 @@ def _find(
     return matches[0]
 
 
+def _optional_day(fields: dict[tuple[str, str | None], str], label: str) -> date | None:
+    present = [k for k in fields if label in k[0] and k[1] is None]
+    return _day(_find(fields, label)) if present else None
+
+
 def _amount(text: str) -> Decimal | None:
     if text == "-":
         return None
@@ -187,6 +193,7 @@ def parse_dividend_document(rcept_no: str, text: str) -> DividendDecision:
         record_date=record,
         pay_date=_day(_find(fields, "배당금지급 예정일자")),
         board_date=_day(_find(fields, "이사회결의일")),
+        agm_date=_optional_day(fields, "주주총회 예정일자"),
         subsidiary=subsidiary,
         correction=CORRECTION_TABLE in parser.tables,
     )

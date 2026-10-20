@@ -100,6 +100,9 @@ def main(argv: list[str] | None = None, **fetch_options: object) -> int:
             "board_date": None
             if decision.board_date is None
             else decision.board_date.isoformat(),
+            "agm_date": None
+            if decision.agm_date is None
+            else decision.agm_date.isoformat(),
             "subsidiary": decision.subsidiary,
             "correction": decision.correction,
         }
