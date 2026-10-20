@@ -21,7 +21,12 @@ Other rules, each refusing rather than guessing:
 - a late dividend whose earliest collected filing is a correction is
   refused, because its original was published before the collected range
   and may even have preceded the ex-date;
-- the ex-date needs an observed calendar confirmed through the record date.
+- the ex-date needs an observed calendar confirmed through the record date;
+- a payment date that is not a session (weekends, holidays: 1,268 of 5,030
+  actions in 2020-2024, both stated and estimated dates) is moved to the
+  next session within the observed calendar, so cash is never usable
+  earlier than paid and the ledger, which runs on sessions, receives it;
+  the original date stays in ``evidence.pay_date_unrolled``.
 
 A holding company's subsidiary filing repeats a decision the paying company
 usually files itself. When the payer's own filing (same normalized name,
@@ -90,6 +95,8 @@ def build(
     legal_names: Mapping[str, str] | None = None,
 ) -> DividendActions:
     records = list(records)
+    ordered = sorted(sessions)
+    session_set = set(ordered)
     legal = legal_names or {}
     own: dict[tuple[str, str | None, str], dict[str, Any]] = {}
     for r in records:
@@ -197,6 +204,9 @@ def build(
             unresolved.append({**base, "reason": "no payment date, AGM or board date"})
             continue
         pay_date, basis = payment
+        unrolled = pay_date
+        if ordered and pay_date <= ordered[-1] and pay_date not in session_set:
+            pay_date = next(d for d in ordered if d > pay_date)
         floor, label = (
             (ex_date, "ex-date")
             if recognized_on is None
@@ -222,6 +232,9 @@ def build(
                 "record_date": record_text,
                 "dividend_kind": kind,
                 "pay_date_basis": basis,
+                "pay_date_unrolled": None
+                if unrolled == pay_date
+                else unrolled.isoformat(),
                 "pay_date_rcept_no": latest["rcept_no"],
                 "pay_date_policy": PAY_DATE_POLICY,
                 "filings": base["filings"],
