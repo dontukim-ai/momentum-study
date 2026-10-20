@@ -308,3 +308,20 @@ def test_unconfirmed_reduction_reports_what_the_price_did(tmp_path):
     assert (
         treasury[0]["reason"] == "treasury share cancellation does not change holdings"
     )
+
+
+def test_reduction_relisted_during_a_halt_is_confirmed(tmp_path):
+    halted = [dict(a) for a in ADJUSTMENTS[:2]] + [
+        {
+            "session": "2024-05-21",
+            "symbol": "049470",
+            "factor": "0.100000",
+            "share_ratio": "0.100000",
+            "kind": "HALTED_SHARE_CHANGE",
+        }
+    ]
+    result = build(events(tmp_path), DETAILS, halted, SESSIONS, CONFIRMED)
+    (reduction,) = [
+        a for a in result.actions if a["action_type"] == "capital_reduction"
+    ]
+    assert reduction["ex_date"] == "2024-05-21"

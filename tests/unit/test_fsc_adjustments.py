@@ -7,7 +7,7 @@ from datetime import date
 from decimal import Decimal as D
 from pathlib import Path
 
-from momentum.krx.fsc_adjustments import detect
+from momentum.krx.fsc_adjustments import detect, detect_halted_share_changes
 
 
 def quote(isin, close, change, shares, *, code="086520", opening=None, volume="100"):
@@ -192,3 +192,24 @@ def test_large_merge_ratio_is_expressible(tmp_path):
     write_day(tmp_path, "2024-04-29", [quote(ECO, 9420, 100, 100)])
     hit = detect(tmp_path, date(2024, 4, 26), date(2024, 4, 29))[0]
     assert (hit.kind, hit.ratio) == ("REVERSE_SPLIT_LIKE", "1/20")
+
+
+def test_share_change_while_halted_is_reported(tmp_path):
+    # Shape of 006380, 2024-05: a 5:1 reduction relisted while still halted.
+    halted = {"opening": "0", "volume": "0"}
+    write_day(tmp_path, "2024-06-03", [quote(ECO, 732, 0, 40000000, **halted)])
+    write_day(tmp_path, "2024-06-04", [quote(ECO, 3660, 0, 8000000, **halted)])
+    write_day(tmp_path, "2024-06-05", [quote(ECO, 3660, 0, 8000000, **halted)])
+    assert detect(tmp_path, date(2024, 6, 3), date(2024, 6, 5)) == []
+    (hit,) = detect_halted_share_changes(tmp_path, date(2024, 6, 3), date(2024, 6, 5))
+    assert (hit.session, hit.previous_session) == (date(2024, 6, 4), date(2024, 6, 3))
+    assert hit.factor == D("0.200000") and hit.share_ratio == D("0.200000")
+    assert hit.kind == "HALTED_SHARE_CHANGE"
+    # A split whose shares change on the trading day stays with detect().
+    split_fixture(tmp_path / "split")
+    assert (
+        detect_halted_share_changes(
+            tmp_path / "split", date(2024, 4, 5), date(2024, 4, 11)
+        )
+        == []
+    )
