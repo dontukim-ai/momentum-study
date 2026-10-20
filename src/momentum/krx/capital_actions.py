@@ -171,6 +171,7 @@ def build(
             "record_date": record_text,
             "filings": [f[0].rcept_no for f in filings],
         }
+        result: dict[str, Any] | str | tuple[str, dict[str, Any]]
         try:
             if kind == "BONUS_ISSUE":
                 result = _bonus(base, filings, moves, sessions, confirmed_through)
@@ -178,6 +179,12 @@ def build(
                 result = _reduction(base, filings, moves, confirmed_through)
         except SpecUndefinedError as exc:
             unresolved.append({**base, "reason": str(exc)})
+            continue
+        if isinstance(result, tuple):
+            reason, observed = result
+            (skipped if reason.startswith("skip:") else unresolved).append(
+                {**base, "reason": reason.removeprefix("skip:"), **observed}
+            )
             continue
         if isinstance(result, str):
             (skipped if result.startswith("skip:") else unresolved).append(
@@ -245,27 +252,39 @@ def _reduction(
     filings: list[tuple[DisclosureEvent, dict[str, Any]]],
     moves: Mapping[tuple[str, date], Decimal],
     confirmed_through: date,
-) -> dict[str, Any] | str:
+) -> dict[str, Any] | str | tuple[str, dict[str, Any]]:
     record = date.fromisoformat(base["record_date"])
     latest = filings[-1][1]
     method = str(latest.get("cr_mth") or "")
     if "유상" in method:
         return "paid capital reduction is not supported"
+    if "소각" in method and ("자기" in method or "자사주" in method):
+        # Cancelling the company's own shares leaves every holder's count.
+        return "skip:treasury share cancellation does not change holdings"
     percent = number(latest.get("cr_rt_ostk"))
     if percent is None or not 0 < percent < 100:
         return "skip:no common-share reduction"
     remaining = 1 - percent / 100
-    candidates = sorted(
-        day
+    window = {
+        day: factor
         for (symbol, day), factor in moves.items()
-        if symbol == base["stock_code"]
-        and record <= day <= record + MAX_RELISTING_LAG
-        and _close(factor, remaining)
+        if symbol == base["stock_code"] and record <= day <= record + MAX_RELISTING_LAG
+    }
+    candidates = sorted(
+        day for day, factor in window.items() if _close(factor, remaining)
     )
     if not candidates:
+        observed = {
+            "expected_factor": str(remaining),
+            "method": method,
+            "planned_listing": latest.get("crsc_nstklstprd"),
+            "observed": {d.isoformat(): str(f) for d, f in sorted(window.items())},
+        }
+        if window:
+            return "price adjustment does not confirm the reduction", observed
         if record + MAX_RELISTING_LAG > confirmed_through:
-            return "price data does not cover the relisting window"
-        return "skip:no confirming price adjustment (e.g. share cancellation)"
+            return "price data does not cover the relisting window", observed
+        return "skip:no price adjustment observed", observed
     relisting = candidates[0]
     source = _source(filings, relisting)
     if source is None:
