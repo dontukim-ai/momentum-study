@@ -106,7 +106,12 @@ DETAILS = {
 ADJUSTMENTS = [
     {"session": "2024-04-05", "symbol": "408900", "factor": "5.993322"},
     {"session": "2024-04-05", "symbol": "100840", "factor": "2.755187"},
-    {"session": "2024-05-22", "symbol": "049470", "factor": "0.100000"},
+    {
+        "session": "2024-05-22",
+        "symbol": "049470",
+        "factor": "0.104500",
+        "share_ratio": "0.099998",
+    },
 ]
 
 
@@ -293,11 +298,11 @@ def test_answer_for_an_original_carries_its_latest_correction(tmp_path):
 
 def test_unconfirmed_reduction_reports_what_the_price_did(tmp_path):
     moved = [dict(a) for a in ADJUSTMENTS]
-    moved[2]["factor"] = "0.194000"  # relisting base set by an opening auction
+    moved[2]["share_ratio"] = "0.194000"  # shares fell by a different fraction
     result = build(events(tmp_path), DETAILS, moved, SESSIONS, CONFIRMED)
     (entry,) = [u for u in result.unresolved if u["stock_code"] == "049470"]
     assert entry["reason"] == "price adjustment does not confirm the reduction"
-    assert entry["observed"] == {"2024-05-22": "0.194000"}
+    assert entry["observed"] == {"2024-05-22": "price 0.104500, shares 0.194000"}
     assert D(entry["expected_factor"]) == D("0.1")
     treasury = [s for s in result.skipped if s["stock_code"] == "119860"]
     assert (
