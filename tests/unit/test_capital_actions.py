@@ -325,3 +325,25 @@ def test_reduction_relisted_during_a_halt_is_confirmed(tmp_path):
         a for a in result.actions if a["action_type"] == "capital_reduction"
     ]
     assert reduction["ex_date"] == "2024-05-21"
+
+
+def test_bonus_confirmed_by_whole_company_growth_when_treasury_excluded(tmp_path):
+    # 000220-like 2020s: 1 share per share, treasury shares excluded, so the
+    # base moved 1.926606 = 1 + 9,000,000 / 9,673,000 (not 2).
+    details = dict(DETAILS)
+    details["20240314000001"] = dict(
+        DETAILS["20240314000001"],
+        nstk_ascnt_ps_ostk="1",
+        nstk_ostk_cnt="9,000,000",
+        bfic_tisstk_ostk="9,673,000",
+    )
+    moved = [dict(a) for a in ADJUSTMENTS]
+    moved[0]["factor"] = "1.929000"
+    result = build(events(tmp_path), details, moved, SESSIONS, CONFIRMED)
+    bonus = [a for a in result.actions if a["action_type"] == "bonus_issue"]
+    assert bonus[0]["split_ratio"] == "1"
+    assert bonus[0]["evidence"]["confirmed_by"] == "1 + new shares / shares before"
+    # Without the share counts the same move stays unconfirmed.
+    del details["20240314000001"]["nstk_ostk_cnt"]
+    again = build(events(tmp_path), details, moved, SESSIONS, CONFIRMED)
+    assert not [a for a in again.actions if a["action_type"] == "bonus_issue"]

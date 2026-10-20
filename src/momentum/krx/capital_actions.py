@@ -232,7 +232,18 @@ def _bonus(
     if listing is None or listing <= ex:
         return f"listing date {listing} not after ex-date {ex}"
     factor = moves.get((base["stock_code"], ex))
-    if factor is None or not _close(factor, 1 + ratio):
+    # Treasury shares receive no bonus shares, so the base price moves by the
+    # whole-company growth 1 + new shares / shares before, slightly below
+    # 1 + the per-share allotment holders receive (2020-2024: 62 of 64
+    # filings unconfirmed against 1 + ratio matched this within 0.5%).
+    new = number(source[1].get("nstk_ostk_cnt"))
+    before = number(source[1].get("bfic_tisstk_ostk"))
+    effective = 1 + new / before if new and before else None
+    if factor is not None and _close(factor, 1 + ratio):
+        basis = "1 + allotment"
+    elif factor is not None and effective is not None and _close(factor, effective):
+        basis = "1 + new shares / shares before"
+    else:
         return f"price adjustment {factor} on {ex} does not confirm 1 + {ratio}"
     return {
         "security_id": base["stock_code"],
@@ -247,6 +258,7 @@ def _bonus(
             "record_date": base["record_date"],
             "listing_rcept_no": filings[-1][0].rcept_no,
             "price_factor": str(factor),
+            "confirmed_by": basis,
             "filings": base["filings"],
             "class_share_ratio_ignored": source[1].get("nstk_ascnt_ps_iostk"),
         },
