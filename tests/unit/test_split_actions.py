@@ -252,3 +252,26 @@ def test_cli_round_trip(tmp_path, capsys):
         )
         == 1
     )
+
+
+def test_preferred_class_inherits_common_split_of_same_issuer(tmp_path):
+    common, preferred, stranger = "KR7001460005", "KR7001461003", "KR7009990001"
+    write_day(tmp_path / "raw", "2024-04-08", [
+        quote(common, 489500, 0, 1000, code="001460"),
+        quote(preferred, 198900, 0, 100, code="001465"),
+        quote(stranger, 5000, 0, 10, code="009990"),
+    ])
+    write_day(tmp_path / "raw", "2024-04-09", [
+        quote(common, 49450, 500, 10000, code="001460"),
+        quote(preferred, 19990, 100, 1000, code="001465"),
+        quote(stranger, 600, 100, 100, code="009990"),
+    ])
+    found = detect(tmp_path / "raw", date(2024, 4, 8), date(2024, 4, 9))
+    result = reconcile(found, events(tmp_path, [filing("20240304000100", "001460", "주식분할결정")]))
+    by_code = {a["security_id"]: a for a in result.actions}
+    assert set(by_code) == {"001460", "001465"}
+    assert by_code["001465"]["available_at"] == by_code["001460"]["available_at"]
+    assert by_code["001465"]["evidence"]["via_share_class"] == "001460"
+    assert by_code["001465"]["evidence"]["isin"] == preferred
+    # Another issuer with no filing is not adopted.
+    assert [u["symbol"] for u in result.unresolved] == ["009990"]

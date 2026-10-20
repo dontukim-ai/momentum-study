@@ -118,4 +118,53 @@ def reconcile(
                 },
             }
         )
-    return Reconciliation(actions, unresolved)
+    return _same_issuer_classes(actions, unresolved)
+
+
+def _issuer(isin: str) -> str | None:
+    # KR ISINs: KR + 1-digit security type + 5-digit issuer code + class...
+    # (BYC 2024: common KR7001460005, preferred KR7001461003 share 00146).
+    return isin[3:8] if len(isin) == 12 and isin.startswith("KR") else None
+
+
+def _same_issuer_classes(
+    actions: list[dict[str, Any]], unresolved: list[dict[str, Any]]
+) -> Reconciliation:
+    """Extend a reconciled split to the issuer's other share classes.
+
+    Filings name only the common share's code, so a preferred share split on
+    the same day by the same detected ratio has no filing of its own. It
+    inherits the common share's action (and its availability) only when the
+    issuer code, ex-date and ratio all agree; anything else stays unresolved.
+    """
+    remaining = []
+    for item in unresolved:
+        issuer = _issuer(item["isin"])
+        match = None
+        if item["reason"] == "no matching disclosure" and issuer:
+            match = next(
+                (
+                    a
+                    for a in actions
+                    if _issuer(a["evidence"]["isin"]) == issuer
+                    and a["evidence"]["isin"] != item["isin"]
+                    and a["ex_date"] == item["session"]
+                    and Fraction(a["split_ratio"]) == Fraction(item["ratio"])
+                ),
+                None,
+            )
+        if match is None:
+            remaining.append(item)
+            continue
+        actions.append(
+            {
+                **match,
+                "security_id": item["symbol"],
+                "evidence": {
+                    **match["evidence"],
+                    "isin": item["isin"],
+                    "via_share_class": match["security_id"],
+                },
+            }
+        )
+    return Reconciliation(actions, remaining)
