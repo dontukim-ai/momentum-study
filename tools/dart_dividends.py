@@ -92,6 +92,7 @@ def main(argv: list[str] | None = None, **fetch_options: object) -> int:
         record = {
             "rcept_no": decision.rcept_no,
             "stock_code": event.stock_code,
+            "corp_code": event.corp_code,
             "corp_name": event.corp_name,
             "report_nm": event.report_nm.strip(),
             "available_at": event.available_at.isoformat(),

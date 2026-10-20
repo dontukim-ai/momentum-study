@@ -7,6 +7,8 @@ from datetime import date
 from decimal import Decimal as D
 from pathlib import Path
 
+import pytest
+
 from momentum.agent.contracts import AnnouncedAction
 from momentum.krx.dividend_actions import add_month, build
 from momentum.ledger.ledger import CorporateAction
@@ -262,4 +264,84 @@ def test_late_dividend_known_only_from_a_correction_is_refused():
     assert result.actions == []
     assert result.unresolved[0]["reason"] == (
         "original filing not collected; first publication unknown"
+    )
+
+
+def test_subsidiary_matches_payer_by_legal_name(tmp_path):
+    from momentum.krx.dart_collect import DartCompanyFetcher, legal_names
+    from momentum.krx.fsc_collect import CollectError
+
+    key = "dart-test-key-0123456789"
+    answers = {
+        "00164779": json.dumps(
+            {
+                "status": "000",
+                "corp_name": "에스케이하이닉스(주)",
+                "stock_name": "SK하이닉스",
+            }
+        ).encode(),
+        "00000001": b'{"status":"013","message":"no data"}',
+    }
+    fetcher = DartCompanyFetcher(
+        tmp_path,
+        environ={"OPENDART_API_KEY": key},
+        http=lambda url: (200, answers[url.rsplit("=", 1)[1]]),
+        sleep=lambda s: None,
+    )
+    assert fetcher.fetch("00164779") == "fetched"
+    assert fetcher.fetch("00164779") == "skipped"
+    with pytest.raises(CollectError, match="status '013'"):
+        fetcher.fetch("00000001")
+    names = legal_names(tmp_path)
+    assert names == {"00164779": "에스케이하이닉스(주)"}
+
+    payer = record(
+        "20240125000010",
+        corp_name="SK하이닉스",
+        corp_code="00164779",
+        stock_code="000660",
+    )
+    copy = record(
+        "20240125000011",
+        corp_name="SK스퀘어",
+        stock_code="402340",
+        subsidiary="에스케이하이닉스(주)",
+    )
+    without = build([payer, copy], SESSIONS, CONFIRMED)
+    assert without.duplicates == [] and len(without.unresolved) == 1
+    matched = build([payer, copy], SESSIONS, CONFIRMED, names)
+    assert matched.unresolved == []
+    assert matched.duplicates[0]["payer_stock_code"] == "000660"
+
+
+def test_dart_companies_tool_fetches_own_filers_only(tmp_path, capsys):
+    dividends = tmp_path / "dividends.jsonl"
+    rows = [
+        record(corp_code="00164779", stock_code="000660"),
+        record(corp_code="00000009", subsidiary="자회사(주)"),
+    ]
+    dividends.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    spec = importlib.util.spec_from_file_location(
+        "dart_companies_tool",
+        Path(__file__).resolve().parents[2] / "tools/dart_companies.py",
+    )
+    assert spec and spec.loader
+    tool = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = tool
+    spec.loader.exec_module(tool)
+    asked = []
+
+    def http(url):
+        asked.append(url.rsplit("=", 1)[1])
+        return 200, json.dumps({"status": "000", "corp_name": "회사(주)"}).encode()
+
+    code = tool.main(
+        ["--dividends", str(dividends), "--dart-root", str(tmp_path)],
+        environ={"OPENDART_API_KEY": "dart-test-key-0123456789"},
+        http=http,
+        sleep=lambda s: None,
+    )
+    assert code == 0 and asked == ["00164779"]
+    assert capsys.readouterr().out.strip() == (
+        "dart-companies: 1 companies, 1 fetched, 0 skipped, 0 errors"
     )
