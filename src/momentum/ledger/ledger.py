@@ -29,6 +29,16 @@ double-counting CLAUDE.md rule 4 warns about. A split multiplies the share
 count and divides the per-share cost basis (and the stored mark), leaving net
 assets unchanged.
 
+Bonus issues and capital reductions follow policy B (user decision,
+2026-10-20). A bonus issue (``split_ratio`` = new shares per old share)
+entitles the holding at the ex-date open to ``floor(qty * ratio)`` shares that
+cannot be sold until they list on ``pay_date``; until then they are pending
+shares, marked to market like the holding and counted in ``positions_value``.
+A capital reduction (``split_ratio`` = remaining shares per old share, below
+one) takes effect on ``ex_date``, the relisting session. In both, a fractional
+share is dropped at zero value (real issuers pay it in cash on rules that
+vary), so net assets fall by exactly its value and never rise.
+
 Calling contract for ``apply_corporate_actions``: a corporate-action row MUST
 be presented to the ledger on BOTH its ex-date and its pay-date (the same
 ``CorporateAction`` tuple, passed again on the later date). The ex-date branch
@@ -42,7 +52,7 @@ accrual entirely.
 from __future__ import annotations
 
 from datetime import date
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
 from typing import NamedTuple
 
 from momentum.config import ExecutionCfg, SpecUndefinedError
@@ -54,7 +64,7 @@ CENT = Decimal("0.01")
 
 class CorporateAction(NamedTuple):
     security_id: str
-    action_type: str  # "cash_dividend" | "split"
+    action_type: str  # "cash_dividend" | "split" | "bonus_issue" | "capital_reduction"
     ex_date: date
     pay_date: date | None
     split_ratio: Decimal | None
@@ -82,15 +92,28 @@ class Ledger:
         # A dividend whose amount is published after its ex-date is still owed
         # to whoever held the shares into that ex-date (see accrue_entitlement).
         self.holdings_at_open: dict[date, dict[str, int]] = {}
+        # Bonus shares owed but not yet listed (policy B): (security, listing
+        # date) -> shares, with the per-share cost basis they will carry.
+        self.pending_shares: dict[tuple[str, date], int] = {}
+        self.pending_basis: dict[tuple[str, date], Decimal] = {}
         self.fills: list[Fill] = []
         self.cfg: ExecutionCfg = cfg if cfg is not None else ExecutionCfg()
         self._nav: Decimal = self.cash
 
     # ---- state -------------------------------------------------------
+    def pending_quantity(self, security_id: str) -> int:
+        return sum(n for (sid, _), n in self.pending_shares.items() if sid == security_id)
+
+    def _valued_quantities(self) -> dict[str, int]:
+        held = {sid: qty for sid, qty in self.positions.items() if qty}
+        for (sid, _), n in self.pending_shares.items():
+            held[sid] = held.get(sid, 0) + n
+        return held
+
     @property
     def positions_value(self) -> Decimal:
         total = Decimal("0.00")
-        for sid, qty in self.positions.items():
+        for sid, qty in self._valued_quantities().items():
             if qty == 0:
                 continue
             mark = self.marks.get(sid)
@@ -116,7 +139,7 @@ class Ledger:
         stays in this set to tell the two apart; this ledger does not guess.
         """
         total = Decimal("0.00")
-        for sid, qty in self.positions.items():
+        for sid, qty in self._valued_quantities().items():
             if qty == 0:
                 continue
             if self.marks_asof.get(sid) != d:
@@ -166,8 +189,77 @@ class Ledger:
                 mark = self.marks.get(ca.security_id)
                 if mark is not None:
                     self.marks[ca.security_id] = mark / ca.split_ratio
+            elif ca.action_type == "bonus_issue":
+                self._bonus_issue(ca, d)
+            elif ca.action_type == "capital_reduction":
+                self._capital_reduction(ca, d)
             else:
                 raise SpecUndefinedError(f"unknown corporate action type {ca.action_type!r}")
+
+    def _bonus_issue(self, ca: CorporateAction, d: date) -> None:
+        ratio, listing = ca.split_ratio, ca.pay_date
+        if ratio is None or ratio <= 0 or listing is None or listing <= ca.ex_date:
+            raise SpecUndefinedError(f"bonus issue needs a ratio and a later listing date: {ca}")
+        key = (ca.security_id, listing)
+        if ca.ex_date == d:
+            qty = self.positions.get(ca.security_id, 0)
+            if qty and self.pending_quantity(ca.security_id):
+                raise SpecUndefinedError(
+                    f"bonus issue on {ca.security_id} while earlier bonus shares are unlisted"
+                )
+            if qty:
+                new = int((qty * ratio).to_integral_value(ROUND_FLOOR))
+                factor = 1 + ratio
+                mark = self.marks.get(ca.security_id)
+                if mark is not None:
+                    adjusted = mark / factor
+                    self.marks[ca.security_id] = adjusted
+                    self._nav += (qty + new) * adjusted - qty * mark
+                basis = self.cost_basis.get(ca.security_id)
+                if basis is not None:
+                    self.cost_basis[ca.security_id] = basis * qty / (qty + new)
+                if new:
+                    self.pending_shares[key] = new
+                    self.pending_basis[key] = self.cost_basis.get(ca.security_id, Decimal(0))
+        if listing == d:
+            new = self.pending_shares.pop(key, 0)
+            basis = self.pending_basis.pop(key, Decimal(0))
+            if new:
+                held = self.positions.get(ca.security_id, 0)
+                if not held:
+                    self.cost_basis[ca.security_id] = basis
+                self.positions[ca.security_id] = held + new
+
+    def _capital_reduction(self, ca: CorporateAction, d: date) -> None:
+        ratio = ca.split_ratio
+        if ratio is None or not 0 < ratio < 1:
+            raise SpecUndefinedError(f"capital reduction needs a ratio below one: {ca}")
+        if ca.ex_date != d:
+            return
+        qty = self.positions.get(ca.security_id, 0)
+        if not qty:
+            return
+        if self.pending_quantity(ca.security_id):
+            raise SpecUndefinedError(
+                f"capital reduction on {ca.security_id} while bonus shares are unlisted"
+            )
+        new = int((qty * ratio).to_integral_value(ROUND_FLOOR))
+        mark = self.marks.get(ca.security_id)
+        if mark is not None:
+            adjusted = mark / ratio
+            self._nav += new * adjusted - qty * mark
+        if new == 0:
+            self.positions[ca.security_id] = 0
+            self.cost_basis.pop(ca.security_id, None)
+            self.marks.pop(ca.security_id, None)
+            self.marks_asof.pop(ca.security_id, None)
+            return
+        self.positions[ca.security_id] = new
+        if mark is not None:
+            self.marks[ca.security_id] = adjusted
+        basis = self.cost_basis.get(ca.security_id)
+        if basis is not None:
+            self.cost_basis[ca.security_id] = basis * qty / new
 
     def accrue_entitlement(
         self, security_id: str, ex_date: date, cash_amount: Decimal, pay_date: date, d: date
@@ -222,8 +314,10 @@ class Ledger:
                 self.positions[f.security_id] = remaining
                 if remaining == 0:
                     self.cost_basis.pop(f.security_id, None)
-                    self.marks.pop(f.security_id, None)
-                    self.marks_asof.pop(f.security_id, None)
+                    if not self.pending_quantity(f.security_id):
+                        # Unlisted bonus shares still need the mark.
+                        self.marks.pop(f.security_id, None)
+                        self.marks_asof.pop(f.security_id, None)
                 self.cash = (self.cash + notional - f.cost).quantize(self.money_quantum, ROUND_HALF_UP)
             else:
                 held = self.positions.get(f.security_id, 0)
@@ -248,7 +342,7 @@ class Ledger:
         # A missing close is not filled in (rule 3): the last known mark stands,
         # which is what a delisted position with no liquidation price must do.
         for sid, px in closes.items():
-            qty = self.positions.get(sid, 0)
+            qty = self.positions.get(sid, 0) + self.pending_quantity(sid)
             if qty:
                 old_mark = self.marks.get(sid)
                 if old_mark is not None:

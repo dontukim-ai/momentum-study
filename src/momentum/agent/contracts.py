@@ -48,7 +48,22 @@ class AnnouncedAction:
         object.__setattr__(self, "available_at", aware(self.available_at))
         a = self.action
         if (
-            a.action_type not in {"split", "cash_dividend"}
+            a.action_type
+            not in {"split", "cash_dividend", "bonus_issue", "capital_reduction"}
+            or a.action_type == "bonus_issue"
+            and (
+                a.split_ratio is None
+                or not a.split_ratio.is_finite()
+                or a.split_ratio <= 0
+                or a.pay_date is None
+                or a.pay_date <= a.ex_date
+            )
+            or a.action_type == "capital_reduction"
+            and (
+                a.split_ratio is None
+                or not a.split_ratio.is_finite()
+                or not 0 < a.split_ratio < 1
+            )
             or a.action_type == "split"
             and (
                 a.split_ratio is None
