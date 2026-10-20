@@ -7,8 +7,8 @@ from datetime import date
 from pathlib import Path
 
 import pytest
-from test_fsc_states import A, B, row
 from test_fsc_adjustments import write_day
+from test_fsc_states import A, B, row
 from trading_agent.selection import read_security_history
 
 from momentum.agent.market import KRX
