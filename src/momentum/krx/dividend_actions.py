@@ -68,6 +68,10 @@ def build(
             )
         elif not record.get("stock_code"):
             unresolved.append({**base, "reason": "no stock code"})
+        elif record.get("record_date") is None:
+            unresolved.append(
+                {**base, "reason": "record date set by a separate filing"}
+            )
         else:
             key = (record["stock_code"], record["record_date"], record["dividend_kind"])
             groups.setdefault(key, []).append(record)
