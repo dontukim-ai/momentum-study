@@ -185,3 +185,9 @@ def test_cli_round_trip(tmp_path, capsys):
         capsys.readouterr().out.strip() == "dividend-actions: 1 actions, 0 unresolved"
     )
     assert json.loads((out / "actions.json").read_text())[0]["cash_amount"] == "5000"
+
+
+def test_deferred_record_date_produces_no_action():
+    result = build([record(record_date=None)], SESSIONS, CONFIRMED)
+    assert result.actions == []
+    assert result.unresolved[0]["reason"] == "record date set by a separate filing"

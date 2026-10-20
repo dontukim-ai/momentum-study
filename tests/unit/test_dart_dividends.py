@@ -117,7 +117,6 @@ def test_subsidiary_filing_names_the_payer():
     [
         ({"common": "약 100"}, "unreadable amount"),
         ({"record": "2023.12.31"}, "unreadable date"),
-        ({"record": "-"}, "record date not stated"),
     ],
 )
 def test_unreadable_values_are_refused(change, message):
@@ -206,6 +205,17 @@ def test_document_fetcher_and_tool_round_trip(tmp_path, capsys):
             "rcept_dt": "20240207",
             "rm": "",
         },
+        {
+            "corp_code": "00126383",
+            "corp_name": "첨부회사",
+            "stock_code": "000003",
+            "corp_cls": "K",
+            "report_nm": "[첨부정정]현금ㆍ현물배당결정",
+            "rcept_no": "20240207801249",
+            "flr_nm": "x",
+            "rcept_dt": "20240207",
+            "rm": "",
+        },
     ]
     (period / "page-1.json").write_text(
         json.dumps({"status": "000", "list": rows}), encoding="utf-8"
@@ -223,7 +233,10 @@ def test_document_fetcher_and_tool_round_trip(tmp_path, capsys):
         calls.append(query["rcept_no"][0])
         if query["rcept_no"][0] == "20240207801246":
             return 200, good.getvalue()
-        return 200, b'{"status":"014","message":"no file"}'
+        return (
+            200,
+            b'<?xml version="1.0" encoding="UTF-8"?><result><status>014</status></result>',
+        )
 
     spec = importlib.util.spec_from_file_location(
         "dart_dividends_tool",
@@ -242,7 +255,7 @@ def test_document_fetcher_and_tool_round_trip(tmp_path, capsys):
     )
     assert code == 1  # one document could not be fetched
     assert capsys.readouterr().out.strip() == (
-        "dart-dividends: 2 filings, 1 parsed (0 subsidiary, 1 without pay date), 1 problems"
+        "dart-dividends: 3 filings, 1 parsed (0 subsidiary, 1 without pay date), 1 skipped, 1 problems"
     )
     (record,) = [
         json.loads(line) for line in (out / "dividends.jsonl").read_text().splitlines()
@@ -251,7 +264,13 @@ def test_document_fetcher_and_tool_round_trip(tmp_path, capsys):
     assert record["available_at"].startswith("2024-02-07T18:00")
     report = json.loads((out / "dividend-report.json").read_text())
     assert report["problems"][0]["rcept_no"] == "20240207801248"
-    assert sorted(calls) == ["20240207801246", "20240207801248"]
+    assert sorted(calls) == ["20240207801246", "20240207801248", "20240207801249"]
+    assert report["skipped"] == [
+        {
+            "rcept_no": "20240207801249",
+            "reason": "attachment correction without document",
+        }
+    ]
     # Saved documents are not fetched again; errors were never saved.
     fetcher = DartDocumentFetcher(
         root, environ={"OPENDART_API_KEY": key}, http=dart, sleep=lambda s: None
@@ -260,3 +279,9 @@ def test_document_fetcher_and_tool_round_trip(tmp_path, capsys):
     assert not fetcher.path("20240207801248").exists()
     with pytest.raises(CollectError, match="invalid rcept_no"):
         fetcher.fetch("123")
+
+
+def test_deferred_record_date_is_kept_as_unknown():
+    # 2024 H1: SK, DB손해보험, 삼성화재, 삼성카드 left 배당기준일 as "-" and set it later.
+    decision = parse_dividend_document("20240207801399", page(main_table(record="-")))
+    assert decision.record_date is None

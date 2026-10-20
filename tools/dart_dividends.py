@@ -56,7 +56,7 @@ def main(argv: list[str] | None = None, **fetch_options: object) -> int:
     except (SpecUndefinedError, CollectError) as exc:
         print(f"dart-dividends: {exc}")
         return 1
-    decisions, problems = [], []
+    decisions, problems, skipped = [], [], []
     for event in events:
         path = args.dart_root / "dart_docs" / f"{event.rcept_no}.zip"
         try:
@@ -68,6 +68,16 @@ def main(argv: list[str] | None = None, **fetch_options: object) -> int:
                 event.rcept_no, read_document(path.read_bytes())
             )
         except CollectError as exc:
+            # Attachment-only corrections have no document (status 014 in all
+            # four 2024 H1 cases) and change no table value: noted, not failed.
+            if event.report_nm.startswith("[첨부정정]") and "014" in str(exc):
+                skipped.append(
+                    {
+                        "rcept_no": event.rcept_no,
+                        "reason": "attachment correction without document",
+                    }
+                )
+                continue
             problems.append(
                 {"rcept_no": event.rcept_no, "stage": "fetch", "reason": str(exc)}
             )
@@ -93,7 +103,9 @@ def main(argv: list[str] | None = None, **fetch_options: object) -> int:
             "per_share_class": None
             if decision.per_share_class is None
             else str(decision.per_share_class),
-            "record_date": decision.record_date.isoformat(),
+            "record_date": None
+            if decision.record_date is None
+            else decision.record_date.isoformat(),
             "pay_date": None
             if decision.pay_date is None
             else decision.pay_date.isoformat(),
@@ -112,14 +124,18 @@ def main(argv: list[str] | None = None, **fetch_options: object) -> int:
         for record in decisions:
             handle.write(json.dumps(record, ensure_ascii=False) + "\n")
     (args.out / "dividend-report.json").write_text(
-        json.dumps({"problems": problems}, ensure_ascii=False, indent=2) + "\n",
+        json.dumps(
+            {"problems": problems, "skipped": skipped}, ensure_ascii=False, indent=2
+        )
+        + "\n",
         encoding="utf-8",
     )
     subsidiary = sum(1 for r in decisions if r["subsidiary"])
     no_pay = sum(1 for r in decisions if r["pay_date"] is None)
     print(
         f"dart-dividends: {len(events)} filings, {len(decisions)} parsed "
-        f"({subsidiary} subsidiary, {no_pay} without pay date), {len(problems)} problems"
+        f"({subsidiary} subsidiary, {no_pay} without pay date), {len(skipped)} skipped, "
+        f"{len(problems)} problems"
     )
     return 1 if problems else 0
 

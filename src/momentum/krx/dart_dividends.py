@@ -41,7 +41,9 @@ class DividendDecision:
     payment_kind: str  # 현금배당, 현물배당 ...
     per_share_common: Decimal | None
     per_share_class: Decimal | None
-    record_date: date
+    # None when the filing defers it: since the 2023 rule change, some issuers
+    # fix the amount first and set the record date in a later filing.
+    record_date: date | None
     pay_date: date | None
     board_date: date | None
     agm_date: date | None  # 주주총회 예정일자; absent on some form versions
@@ -176,8 +178,6 @@ def parse_dividend_document(rcept_no: str, text: str) -> DividendDecision:
         raise SpecUndefinedError(f"{rcept_no}: dividend table not found")
     fields = _fields(parser.tables[MAIN_TABLE])
     record = _day(_find(fields, "배당기준일"))
-    if record is None:
-        raise SpecUndefinedError(f"{rcept_no}: record date not stated")
     subsidiary = None
     if SUBSIDIARY_TABLE in parser.tables:
         names = [t for row in parser.tables[SUBSIDIARY_TABLE] for t, v in row if v]
