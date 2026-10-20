@@ -6,7 +6,8 @@ Example:
 
 Writes actions.json (research --actions format, cash dividends, each with
 its evidence and payment-date basis) and dividend-actions-report.json
-(decisions that produced no action and why). Policy A for missing payment
+(decisions that produced no action and why, and subsidiary
+filings that repeat the payer's own filing). Policy A for missing payment
 dates is documented in momentum.krx.dividend_actions.
 """
 
@@ -52,12 +53,17 @@ def main(argv: list[str] | None = None) -> int:
         encoding="utf-8",
     )
     (args.out / "dividend-actions-report.json").write_text(
-        json.dumps({"unresolved": result.unresolved}, ensure_ascii=False, indent=2)
+        json.dumps(
+            {"unresolved": result.unresolved, "duplicates": result.duplicates},
+            ensure_ascii=False,
+            indent=2,
+        )
         + "\n",
         encoding="utf-8",
     )
     print(
-        f"dividend-actions: {len(result.actions)} actions, {len(result.unresolved)} unresolved"
+        f"dividend-actions: {len(result.actions)} actions, "
+        f"{len(result.unresolved)} unresolved, {len(result.duplicates)} duplicates"
     )
     return 0
 
