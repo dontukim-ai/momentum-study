@@ -46,7 +46,7 @@ def test_halts_gaps_delisting_and_market_moves(tmp_path):
     ]
     first = events[0]
     assert first.effective_at == KRX.open_at(date(2024, 6, 3))
-    assert first.available_at == KRX.historical_bar_at(date(2024, 6, 3))
+    assert first.available_at == KRX.observed_at(date(2024, 6, 3))
 
 
 def test_unknown_market_and_uncollected_session_are_refused(tmp_path):
