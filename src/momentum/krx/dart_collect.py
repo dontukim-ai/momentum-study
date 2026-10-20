@@ -205,3 +205,68 @@ def list_pages(root: Path, disclosure_type: str = "I") -> list[Path]:
         record = json.loads((period / "fetch.json").read_text(encoding="utf-8"))
         pages.extend(period / page["file"] for page in record["pages"])
     return pages
+
+
+DOCUMENT_URL = "https://opendart.fss.or.kr/api/document.xml"
+
+
+class DartDocumentFetcher:
+    """Saves ``document.xml`` zips as ``<root>/dart_docs/<rcept_no>.zip``.
+
+    A saved document is never fetched again. Error answers come back as a
+    small JSON or XML status instead of a zip and are refused, never saved.
+    """
+
+    def __init__(
+        self,
+        root: Path,
+        *,
+        environ: Mapping[str, str] | None = None,
+        http: Http = http_get,
+        sleep: Callable[[float], None] = time.sleep,
+        pause: float = 1.0,
+        progress: Callable[[str], None] = lambda message: None,
+    ) -> None:
+        key = (os.environ if environ is None else environ).get(KEY_ENV, "")
+        if not key:
+            raise CollectError(f"{KEY_ENV} is not set")
+        self.root, self._key = Path(root) / "dart_docs", key
+        self._forbidden = {v.encode() for v in (key, quote(key, safe=""), quote_plus(key))}
+        self.http, self.sleep, self.pause, self.progress = http, sleep, pause, progress
+        self._requested = False
+
+    def path(self, rcept_no: str) -> Path:
+        return self.root / f"{rcept_no}.zip"
+
+    def fetch(self, rcept_no: str) -> str:
+        """Returns "fetched" or "skipped"; raises CollectError otherwise."""
+        if len(rcept_no) != 14 or not rcept_no.isdigit():
+            raise CollectError(f"invalid rcept_no: {rcept_no!r}")
+        target = self.path(rcept_no)
+        if target.exists():
+            return "skipped"
+        if self._requested:
+            self.sleep(self.pause)
+        self._requested = True
+        url = DOCUMENT_URL + "?" + urlencode({"crtfc_key": self._key, "rcept_no": rcept_no})
+        for attempt in range(3):
+            try:
+                status, body = self.http(url)
+                break
+            except (URLError, OSError):
+                if attempt == 2:
+                    raise CollectError("network retries exhausted") from None
+                self.sleep(float(2 ** (attempt + 1)))
+            except Exception:  # noqa: BLE001 - transport text may contain the URL
+                raise CollectError("transport failed") from None
+        if any(secret in body for secret in self._forbidden):
+            raise CollectError("response echoes the API key; not saved")
+        self.progress(f"document {rcept_no}: HTTP {status}, {len(body)} bytes")
+        if status != 200 or body[:2] != b"PK":
+            excerpt = " ".join(body[:200].decode("utf-8", "replace").split())
+            raise CollectError(f"not a document zip (HTTP {status}): {excerpt}")
+        self.root.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_name(f".{target.name}.partial")
+        temporary.write_bytes(body)
+        os.replace(temporary, target)
+        return "fetched"
