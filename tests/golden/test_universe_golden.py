@@ -65,9 +65,23 @@ def _synth_inputs(seed: int) -> tuple[AsOfFrame, AsOfFrame, TradingCalendar, Uni
     return prices, master, cal, CFG
 
 
+# ``adv_usd`` is a float mean whose last bits depend on the summation order,
+# which differs between CPU architectures (2026-10-20: arm64 differed from
+# the fixture in the 15th-16th significant digit on 7 of 20 rows; x86
+# matched). Decisions (rank, inclusion, reason) must match exactly; the float
+# must match to a relative 1e-12, far below any money the $20M floor sees.
+ADV_REL_TOL = 1e-12
+
+
 def test_universe_for_seed7_is_unchanged():
     got = build_universe(*_synth_inputs(seed=7), effective_date=EFFECTIVE_DATE)
     want = pl.read_csv(FIX, try_parse_dates=True).with_columns(
         pl.col("included").cast(pl.Boolean)
     )
-    assert got.equals(want)
+    assert got.schema == want.schema
+    exact = [c for c in want.columns if c != "adv_usd"]
+    assert got.select(exact).equals(want.select(exact))
+    for g, w in zip(got["adv_usd"].to_list(), want["adv_usd"].to_list(), strict=True):
+        assert (g is None) == (w is None)
+        if w is not None:
+            assert abs(g - w) <= ADV_REL_TOL * abs(w)
