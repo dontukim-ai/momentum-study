@@ -345,3 +345,15 @@ def test_dart_companies_tool_fetches_own_filers_only(tmp_path, capsys):
     assert capsys.readouterr().out.strip() == (
         "dart-companies: 1 companies, 1 fetched, 0 skipped, 0 errors"
     )
+
+
+def test_payment_on_a_non_session_moves_to_the_next_session():
+    # 2023-12-30 is a Saturday; cash arrives on the next session.
+    sessions = SESSIONS + (date(2024, 1, 3),)
+    (action,) = build([record(pay="2023-12-30")], sessions, date(2024, 1, 3)).actions
+    assert action["pay_date"] == "2024-01-02"
+    assert action["evidence"]["pay_date_unrolled"] == "2023-12-30"
+    # Beyond the observed calendar the date is kept as filed.
+    (later,) = build([record(pay="2024-04-19")], SESSIONS, CONFIRMED).actions
+    assert later["pay_date"] == "2024-04-19"
+    assert later["evidence"]["pay_date_unrolled"] is None
