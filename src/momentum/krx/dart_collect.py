@@ -45,12 +45,24 @@ class PeriodResult:
     message: str = ""
 
 
+def three_months_later(day: date) -> date:
+    """The list API's last allowed end: ``day`` plus 3 calendar months,
+    clamped to the month's last day (probed: 2020-11-30 -> 2021-02-28)."""
+    month = day.month + 2  # zero-based month index three months on
+    year, month = day.year + month // 12, month % 12 + 1
+    following = date(year + month // 12, month % 12 + 1, 1)
+    return min(
+        date(year, month, 1) + timedelta(days=day.day - 1),
+        following - timedelta(days=1),
+    )
+
+
 def periods(
     start: date, end: date, days: int = MAX_PERIOD_DAYS
 ) -> Iterator[tuple[date, date]]:
     first = start
     while first <= end:
-        last = min(end, first + timedelta(days=days - 1))
+        last = min(end, first + timedelta(days=days - 1), three_months_later(first))
         yield first, last
         first = last + timedelta(days=1)
 
