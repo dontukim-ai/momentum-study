@@ -361,3 +361,84 @@ def legal_names(root: Path) -> dict[str, str]:
         payload = json.loads(path.read_text(encoding="utf-8"))
         names[path.stem] = payload["corp_name"]
     return names
+
+
+DETAIL_URL = "https://opendart.fss.or.kr/api/{api}.json"
+DETAIL_APIS = ("fricDecsn", "crDecsn")
+
+
+class DartDetailFetcher:
+    """Saves one 주요사항보고서 detail answer per filing.
+
+    The detail APIs answer by company and reception-date range, so a filing
+    is requested with its own ``rcept_dt`` as both ends and stored as
+    ``<root>/dart_detail/<api>/<rcept_no>.json``. Only status 000 answers are
+    saved; a saved answer is never fetched again.
+    """
+
+    def __init__(
+        self,
+        root: Path,
+        api: str,
+        *,
+        environ: Mapping[str, str] | None = None,
+        http: Http = http_get,
+        sleep: Callable[[float], None] = time.sleep,
+        pause: float = 1.0,
+        progress: Callable[[str], None] = lambda message: None,
+    ) -> None:
+        if api not in DETAIL_APIS:
+            raise CollectError(f"unsupported detail API: {api!r}")
+        key = (os.environ if environ is None else environ).get(KEY_ENV, "")
+        if not key:
+            raise CollectError(f"{KEY_ENV} is not set")
+        self.api, self.root, self._key = api, Path(root) / "dart_detail" / api, key
+        self._forbidden = {
+            v.encode() for v in (key, quote(key, safe=""), quote_plus(key))
+        }
+        self.http, self.sleep, self.pause, self.progress = http, sleep, pause, progress
+        self._requested = False
+
+    def path(self, rcept_no: str) -> Path:
+        return self.root / f"{rcept_no}.json"
+
+    def fetch(self, rcept_no: str, corp_code: str, rcept_date: date) -> str:
+        """Returns "fetched" or "skipped"; raises CollectError otherwise."""
+        if len(rcept_no) != 14 or not rcept_no.isdigit():
+            raise CollectError(f"invalid rcept_no: {rcept_no!r}")
+        if len(corp_code) != 8 or not corp_code.isdigit():
+            raise CollectError(f"invalid corp_code: {corp_code!r}")
+        target = self.path(rcept_no)
+        if target.exists():
+            return "skipped"
+        if self._requested:
+            self.sleep(self.pause)
+        self._requested = True
+        day = rcept_date.strftime("%Y%m%d")
+        query = {"crtfc_key": self._key, "corp_code": corp_code, "bgn_de": day, "end_de": day}
+        url = DETAIL_URL.format(api=self.api) + "?" + urlencode(query)
+        for attempt in range(3):
+            try:
+                status, body = self.http(url)
+                break
+            except (URLError, OSError):
+                if attempt == 2:
+                    raise CollectError("network retries exhausted") from None
+                self.sleep(float(2 ** (attempt + 1)))
+            except Exception:  # noqa: BLE001 - transport text may contain the URL
+                raise CollectError("transport failed") from None
+        if any(secret in body for secret in self._forbidden):
+            raise CollectError("response echoes the API key; not saved")
+        self.progress(f"{self.api} {rcept_no}: HTTP {status}, {len(body)} bytes")
+        try:
+            payload = json.loads(body)
+            code = payload["status"]
+        except (ValueError, KeyError, TypeError) as exc:
+            raise CollectError(f"{self.api} {rcept_no}: not a detail answer") from exc
+        if status != 200 or code != "000":
+            raise CollectError(f"{self.api} {rcept_no}: HTTP {status}, status {code!r}")
+        self.root.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_name(f".{target.name}.partial")
+        temporary.write_bytes(body)
+        os.replace(temporary, target)
+        return "fetched"
