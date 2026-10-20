@@ -16,8 +16,12 @@ ratio the price does not confirm stays unresolved (2024: SNT에너지 announced
   the allotment record date (T+2, as for dividends; 스튜디오미르 2024: record
   04-08, ex 04-05, factor 5.993 for 5 bonus shares); the new shares list on
   ``nstk_lstprd``, taken from the latest filing (corrections restate it);
-- capital reduction: the relisting session is where the base price moves by
-  the remaining fraction ``1 - cr_rt_ostk / 100``. Treasury-share
+- capital reduction: the relisting session is where the *listed share
+  count* falls by the remaining fraction ``1 - cr_rt_ostk / 100`` (within
+  the same 0.5%) and the base price moves down. The price is not required
+  to match the fraction: the relisting base is set by an opening procedure,
+  and 2023-10~2024-06 relistings sat 2-24% away from it (003060 expected
+  0.1, base moved 0.1045; 031860 0.10 -> 0.0762). Treasury-share
   cancellations move no price and produce nothing; paid reductions (cash
   refunds) are not supported and stay unresolved.
 
@@ -123,10 +127,12 @@ def build(
     """``details`` maps rcept_no to its detail item; ``existing`` are actions
     already made elsewhere (splits), whose day a reduction must not repeat."""
     moves: dict[tuple[str, date], Decimal] = {}
+    shares: dict[tuple[str, date], Decimal | None] = {}
     for item in adjustments:
-        moves[(str(item["symbol"]), date.fromisoformat(str(item["session"])))] = (
-            Decimal(str(item["factor"]))
-        )
+        seen = (str(item["symbol"]), date.fromisoformat(str(item["session"])))
+        moves[seen] = Decimal(str(item["factor"]))
+        ratio = item.get("share_ratio")
+        shares[seen] = None if ratio in (None, "None") else Decimal(str(ratio))
     taken = {(str(a["security_id"]), str(a["ex_date"])) for a in existing}
     actions: list[dict[str, Any]] = []
     unresolved: list[dict[str, Any]] = []
@@ -176,7 +182,7 @@ def build(
             if kind == "BONUS_ISSUE":
                 result = _bonus(base, filings, moves, sessions, confirmed_through)
             else:
-                result = _reduction(base, filings, moves, confirmed_through)
+                result = _reduction(base, filings, moves, shares, confirmed_through)
         except SpecUndefinedError as exc:
             unresolved.append({**base, "reason": str(exc)})
             continue
@@ -251,6 +257,7 @@ def _reduction(
     base: dict[str, Any],
     filings: list[tuple[DisclosureEvent, dict[str, Any]]],
     moves: Mapping[tuple[str, date], Decimal],
+    shares: Mapping[tuple[str, date], Decimal | None],
     confirmed_through: date,
 ) -> dict[str, Any] | str | tuple[str, dict[str, Any]]:
     record = date.fromisoformat(base["record_date"])
@@ -265,20 +272,27 @@ def _reduction(
     if percent is None or not 0 < percent < 100:
         return "skip:no common-share reduction"
     remaining = 1 - percent / 100
-    window = {
-        day: factor
-        for (symbol, day), factor in moves.items()
-        if symbol == base["stock_code"] and record <= day <= record + MAX_RELISTING_LAG
-    }
-    candidates = sorted(
-        day for day, factor in window.items() if _close(factor, remaining)
+    code = base["stock_code"]
+    window = sorted(
+        day
+        for (symbol, day) in moves
+        if symbol == code and record <= day <= record + MAX_RELISTING_LAG
     )
+
+    def confirms(day: date) -> bool:
+        ratio = shares.get((code, day))
+        return ratio is not None and _close(ratio, remaining) and moves[(code, day)] < 1
+
+    candidates = [day for day in window if confirms(day)]
     if not candidates:
         observed = {
             "expected_factor": str(remaining),
             "method": method,
             "planned_listing": latest.get("crsc_nstklstprd"),
-            "observed": {d.isoformat(): str(f) for d, f in sorted(window.items())},
+            "observed": {
+                d.isoformat(): f"price {moves[(code, d)]}, shares {shares.get((code, d))}"
+                for d in window
+            },
         }
         if window:
             return "price adjustment does not confirm the reduction", observed
@@ -304,7 +318,8 @@ def _reduction(
             "record_date": base["record_date"],
             "method": method,
             "planned_listing": latest.get("crsc_nstklstprd"),
-            "price_factor": str(moves[(base["stock_code"], relisting)]),
+            "price_factor": str(moves[(code, relisting)]),
+            "share_ratio": str(shares[(code, relisting)]),
             "filings": base["filings"],
         },
     }
