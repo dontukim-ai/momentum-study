@@ -632,9 +632,18 @@ class CommonEvaluator:
                 for a in actions
                 if a.action.action_type == "split" and a.action.ex_date == day
             }
+            # Bonus and reduction days change what a share is worth against the
+            # prior close while the sellable quantity lags (policy B), so an
+            # order planned before them is not rescaled but cancelled.
+            reshaped = {
+                a.action.security_id
+                for a in actions
+                if a.action.action_type in {"bonus_issue", "capital_reduction"}
+                and a.action.ex_date == day
+            }
             for symbol, side, desired, _ in desired_plan:
                 planned = capped_plan.get((symbol, side), 0)
-                uncertain_action = False
+                uncertain_action = symbol in reshaped
                 action = splits.get(symbol)
                 if action is not None:
                     ratio = action.action.split_ratio
