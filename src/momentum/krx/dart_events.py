@@ -9,7 +9,7 @@ import re
 import tempfile
 from collections.abc import Iterable, Sequence
 from dataclasses import asdict, dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -21,6 +21,7 @@ KST = ZoneInfo("Asia/Seoul")
 # list.json provides a date, never a reception time. Conservatively prevent
 # even intraday disclosures from entering that day's decision inputs.
 DISCLOSURE_AVAILABLE_TIME = KRX.disclosure_available
+MAX_RECEPTION_LAG = timedelta(days=7)
 _REPORT_KINDS = (
     ("유무상증자결정", "BONUS_AND_RIGHTS"),
     ("무상증자결정", "BONUS_ISSUE"),
@@ -70,7 +71,13 @@ def _parse_row(row: dict[str, Any], source_hash: str) -> DisclosureEvent:
     reception = _digits(_text(row, "rcept_no"), 14)
     reception_date = _digits(_text(row, "rcept_dt"), 8)
     day = date(int(reception_date[:4]), int(reception_date[4:6]), int(reception_date[6:]))
-    if reception[:8] != reception_date:
+    numbered = date(int(reception[:4]), int(reception[4:6]), int(reception[6:8]))
+    # Real lists (2024, two of 32,064 I-type rows, both corrections) carry a
+    # reception number dated one or two days before rcept_dt. Availability
+    # uses the later rcept_dt, so the filing is never seen earlier than the
+    # list says; a number dated after rcept_dt, or more than a week before
+    # it, is not a known pattern and is refused.
+    if not timedelta(0) <= day - numbered <= MAX_RECEPTION_LAG:
         raise ValueError("rcept_no date differs from rcept_dt")
     corp_code = _digits(_text(row, "corp_code"), 8)
     corp_cls = _text(row, "corp_cls")

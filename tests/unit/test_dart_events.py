@@ -121,3 +121,23 @@ def test_cli_summary(tmp_path):
     assert 'BONUS_AND_RIGHTS: 1' in first.stdout
     second = subprocess.run(command, capture_output=True, text=True, check=True)
     assert second.stdout.splitlines()[-1] == 'dart-ledger: 0 added, 7 unchanged, 7 total'
+
+
+@pytest.mark.parametrize(('rcept_no', 'accepted'), [
+    ('20240601000001', True),   # numbered two days before rcept_dt (real 2024 pattern)
+    ('20240526000001', False),  # more than a week apart
+])
+def test_reception_number_dated_before_list_date(tmp_path, rcept_no, accepted):
+    page = json.loads(PAGE.read_text())
+    page['list'] = [page['list'][0]]
+    page['list'][0]['rcept_no'] = rcept_no
+    path = tmp_path / 'late.json'
+    path.write_text(json.dumps(page))
+    if not accepted:
+        with pytest.raises(SpecUndefinedError, match='rcept_no date differs'):
+            parse_list_pages([path])
+        return
+    (event,) = parse_list_pages([path])
+    # Availability follows the later list date, never the earlier number.
+    assert event.rcept_date == date(2024, 6, 3)
+    assert event.available_at.date() == date(2024, 6, 3)
