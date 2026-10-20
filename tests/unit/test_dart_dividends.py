@@ -77,6 +77,7 @@ def test_ordinary_filing_fields():
     assert decision.record_date == date(2023, 12, 31)
     assert decision.pay_date is None and decision.board_date == date(2024, 2, 7)
     assert decision.subsidiary is None and decision.correction is False
+    assert decision.agm_date == date(2024, 3, 27)
 
 
 def test_correction_form_version_and_comma_amounts():
