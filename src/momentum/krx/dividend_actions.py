@@ -15,11 +15,17 @@ Other rules, each refusing rather than guessing:
   the ex-date open; a later filing that changes the amount is reported,
   because the evaluation could not have known it;
 - the ex-date needs an observed calendar confirmed through the record date.
+
+A holding company's subsidiary filing repeats a decision the paying company
+usually files itself. When the payer's own filing (same normalized name,
+record date and dividend kind) exists, the subsidiary copy is reported as a
+duplicate; otherwise it stays unresolved, since the payer may be unlisted.
 """
 
 from __future__ import annotations
 
 import calendar as month_calendar
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -38,6 +44,7 @@ PAY_DATE_POLICY = "A: stated date, else AGM + 1 month, else board decision + 1 m
 class DividendActions:
     actions: list[dict[str, Any]]
     unresolved: list[dict[str, Any]]
+    duplicates: list[dict[str, Any]]
 
 
 def add_month(day: date) -> date:
@@ -47,6 +54,11 @@ def add_month(day: date) -> date:
 
 def _day(value: str | None) -> date | None:
     return None if value is None else date.fromisoformat(value)
+
+
+def company_name(text: str) -> str:
+    """Name without the legal-form marks filings add or omit: (주), 주식회사."""
+    return re.sub(r"\(주\)|㈜|주식회사|\s", "", text)
 
 
 def _payment_date(source: dict[str, Any]) -> tuple[date, str] | None:
@@ -65,14 +77,40 @@ def build(
     sessions: tuple[date, ...],
     confirmed_through: date,
 ) -> DividendActions:
+    records = list(records)
+    own = {
+        (company_name(r["corp_name"]), r.get("record_date"), r["dividend_kind"]): r
+        for r in records
+        if not r.get("subsidiary") and r.get("stock_code") and r.get("corp_name")
+    }
     groups: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
     unresolved: list[dict[str, Any]] = []
+    duplicates: list[dict[str, Any]] = []
     for record in records:
         base = {"rcept_no": record["rcept_no"], "stock_code": record["stock_code"]}
         if record.get("subsidiary"):
-            unresolved.append(
-                {**base, "reason": "subsidiary filing; payer has no stock code"}
+            payer = own.get(
+                (
+                    company_name(record["subsidiary"]),
+                    record.get("record_date"),
+                    record["dividend_kind"],
+                )
             )
+            if payer is None:
+                unresolved.append(
+                    {
+                        **base,
+                        "reason": "subsidiary filing; payer's own filing not found",
+                    }
+                )
+            else:
+                duplicates.append(
+                    {
+                        **base,
+                        "payer_stock_code": payer["stock_code"],
+                        "payer_rcept_no": payer["rcept_no"],
+                    }
+                )
         elif "현금" not in record["payment_kind"]:
             unresolved.append(
                 {**base, "reason": f"non-cash payment: {record['payment_kind']}"}
@@ -169,4 +207,4 @@ def build(
         if recognized_on is not None:
             action["recognized_on"] = recognized_on.isoformat()
         actions.append(action)
-    return DividendActions(actions, unresolved)
+    return DividendActions(actions, unresolved, duplicates)

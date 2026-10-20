@@ -138,7 +138,7 @@ def test_corrections_late_filings_and_other_refusals():
     assert reasons == [
         "no common-share amount",
         "non-cash payment",
-        "subsidiary filing; payer has no stock code",
+        "subsidiary filing; payer's own filing not found",
     ]
     unconfirmed = build([record()], SESSIONS, date(2023, 12, 28))
     assert "not confirmed" in unconfirmed.unresolved[0]["reason"]
@@ -185,7 +185,8 @@ def test_cli_round_trip(tmp_path, capsys):
         == 0
     )
     assert (
-        capsys.readouterr().out.strip() == "dividend-actions: 1 actions, 0 unresolved"
+        capsys.readouterr().out.strip()
+        == "dividend-actions: 1 actions, 0 unresolved, 0 duplicates"
     )
     assert json.loads((out / "actions.json").read_text())[0]["cash_amount"] == "5000"
 
@@ -194,3 +195,34 @@ def test_deferred_record_date_produces_no_action():
     result = build([record(record_date=None)], SESSIONS, CONFIRMED)
     assert result.actions == []
     assert result.unresolved[0]["reason"] == "record date set by a separate filing"
+
+
+def test_subsidiary_copy_of_payers_own_filing_is_a_duplicate():
+    payer = record("20240207000010", corp_name="SK텔레콤", stock_code="017670")
+    copy = record(
+        "20240207000011", corp_name="SK", stock_code="034730", subsidiary="SK텔레콤(주)"
+    )
+    other_date = record(
+        "20240207000012",
+        corp_name="SK",
+        stock_code="034730",
+        subsidiary="SK텔레콤(주)",
+        record_date="2023-12-28",
+    )
+    result = build([payer, copy, other_date], SESSIONS, CONFIRMED)
+    assert [a["security_id"] for a in result.actions] == ["017670"]
+    assert result.duplicates == [
+        {
+            "rcept_no": "20240207000011",
+            "stock_code": "034730",
+            "payer_stock_code": "017670",
+            "payer_rcept_no": "20240207000010",
+        }
+    ]
+    assert result.unresolved == [
+        {
+            "rcept_no": "20240207000012",
+            "stock_code": "034730",
+            "reason": "subsidiary filing; payer's own filing not found",
+        }
+    ]
