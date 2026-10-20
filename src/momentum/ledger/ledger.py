@@ -78,6 +78,10 @@ class Ledger:
         # today" (one missing day) apart from a persistent delisting (many).
         self.marks_asof: dict[str, date] = {}
         self.receivables: dict[tuple[str, date], Decimal] = {}
+        # Holdings at the start of each processed session, before its fills.
+        # A dividend whose amount is published after its ex-date is still owed
+        # to whoever held the shares into that ex-date (see accrue_entitlement).
+        self.holdings_at_open: dict[date, dict[str, int]] = {}
         self.fills: list[Fill] = []
         self.cfg: ExecutionCfg = cfg if cfg is not None else ExecutionCfg()
         self._nav: Decimal = self.cash
@@ -123,6 +127,7 @@ class Ledger:
 
     # ---- the three phases --------------------------------------------
     def apply_corporate_actions(self, cas: list[CorporateAction], d: date) -> None:
+        self.holdings_at_open.setdefault(d, {k: v for k, v in self.positions.items() if v})
         for ca in cas:
             if ca.action_type == "cash_dividend":
                 if ca.pay_date is None:
@@ -163,6 +168,34 @@ class Ledger:
                     self.marks[ca.security_id] = mark / ca.split_ratio
             else:
                 raise SpecUndefinedError(f"unknown corporate action type {ca.action_type!r}")
+
+    def accrue_entitlement(
+        self, security_id: str, ex_date: date, cash_amount: Decimal, pay_date: date, d: date
+    ) -> None:
+        """Book a dividend announced after its ex-date, on the day it is known.
+
+        The entitlement is the holding at the ex-date open (the same quantity
+        an on-time dividend accrues on), but the receivable and NAV move only
+        on ``d``, the first session after the amount became public, so no
+        evaluation sees it earlier. Payment then follows the ordinary
+        pay-date branch of ``apply_corporate_actions``.
+        """
+        if not d > ex_date or not pay_date > d:
+            raise SpecUndefinedError(
+                f"late dividend needs ex_date < recognition < pay_date: {ex_date}, {d}, {pay_date}"
+            )
+        if ex_date in self.holdings_at_open:
+            qty = self.holdings_at_open[ex_date].get(security_id, 0)
+        elif not self.holdings_at_open or ex_date < min(self.holdings_at_open):
+            qty = 0  # the ledger did not exist on the ex-date: nothing was held
+        else:
+            raise SpecUndefinedError(f"ex-date {ex_date} was not processed; entitlement unknown")
+        if not qty:
+            return
+        accrual = (qty * cash_amount).quantize(self.money_quantum, ROUND_HALF_UP)
+        key = (security_id, pay_date)
+        self.receivables[key] = self.receivables.get(key, Decimal("0.00")) + accrual
+        self._nav += accrual
 
     def apply_fills(self, fills: list[Fill], d: date) -> None:
         for f in fills:
