@@ -87,19 +87,25 @@ def relevant(events: Iterable[DisclosureEvent]) -> list[DisclosureEvent]:
     ]
 
 
-def load_detail(root: Path, event: DisclosureEvent) -> dict[str, Any] | None:
-    path = (
-        Path(root) / "dart_detail" / KINDS[event.report_kind] / f"{event.rcept_no}.json"
-    )
-    if not path.exists():
-        return None
-    items = json.loads(path.read_text(encoding="utf-8")).get("list") or []
-    matches = [i for i in items if i.get("rcept_no") == event.rcept_no]
-    if len(matches) != 1:
-        raise SpecUndefinedError(
-            f"{path}: {len(matches)} items for rcept_no {event.rcept_no}"
-        )
-    return dict(matches[0])
+def load_details(root: Path) -> dict[str, dict[str, Any]]:
+    """Every saved detail item, keyed by the item's own rcept_no.
+
+    The detail APIs select by *first* reception date and answer with the
+    latest version of a filing under that version's own number (2024:
+    프로브잇's 2023-12-27 filing came back as its 2024-01-12 correction).
+    So an item is attributed only to the filing whose number it carries,
+    whichever request saved it; an earlier version whose values were
+    replaced never gets them.
+    """
+    found: dict[str, dict[str, Any]] = {}
+    for api in KINDS.values():
+        for path in sorted((Path(root) / "dart_detail" / api).glob("*.json")):
+            for item in json.loads(path.read_text(encoding="utf-8")).get("list") or []:
+                number_ = str(item.get("rcept_no") or "")
+                if number_ in found and found[number_] != item:
+                    raise SpecUndefinedError(f"{path}: conflicting item {number_}")
+                found[number_] = dict(item)
+    return found
 
 
 def _close(value: Decimal, target: Decimal) -> bool:
@@ -135,7 +141,12 @@ def build(
         }
         detail = details.get(event.rcept_no)
         if detail is None:
-            unresolved.append({**base, "reason": "detail answer not collected"})
+            if "정" in event.remarks or event.is_correction:
+                # A later correction replaced this version's values (rm "정"),
+                # or a correction is only answered under its original's date.
+                skipped.append({**base, "reason": "values only in another version"})
+            else:
+                unresolved.append({**base, "reason": "detail answer not collected"})
             continue
         try:
             key_day = (

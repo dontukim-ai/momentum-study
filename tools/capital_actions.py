@@ -20,7 +20,7 @@ from datetime import date
 from pathlib import Path
 
 from momentum.config import SpecUndefinedError
-from momentum.krx.capital_actions import KINDS, build, load_detail, relevant
+from momentum.krx.capital_actions import KINDS, build, load_details, relevant
 from momentum.krx.dart_collect import DartDetailFetcher, list_pages
 from momentum.krx.dart_events import parse_list_pages
 from momentum.krx.fsc_collect import CollectError
@@ -55,7 +55,9 @@ def main(argv: list[str] | None = None, **fetch_options: object) -> int:
                 )
                 for api in KINDS.values()
             }
-            for event in events:
+            # A correction is answered under its original's first reception
+            # date, through the original's request; its own date finds nothing.
+            for event in (e for e in events if not e.is_correction):
                 try:
                     fetchers[KINDS[event.report_kind]].fetch(
                         event.rcept_no, event.corp_code, event.rcept_date
@@ -64,11 +66,7 @@ def main(argv: list[str] | None = None, **fetch_options: object) -> int:
                     problems.append({"rcept_no": event.rcept_no, "reason": str(exc)})
                     if "retries exhausted" in str(exc):
                         break
-        details = {}
-        for event in events:
-            detail = load_detail(args.dart_root, event)
-            if detail is not None:
-                details[event.rcept_no] = detail
+        details = load_details(args.dart_root)
         adjustments = [
             json.loads(line)
             for line in args.adjustments.read_text(encoding="utf-8").splitlines()
