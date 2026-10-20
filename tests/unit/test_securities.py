@@ -92,11 +92,30 @@ def test_tool_writes_readable_security_history(tmp_path, capsys):
         "krx only 0 / quotes only 0, managed held 1"
     )
     history = read_security_history(out / "securities.jsonl")
-    before = history.states(KRX.historical_bar_at(date(2024, 6, 3)))
+    before = history.states(KRX.observed_at(date(2024, 6, 3)))
     assert before["000001"].managed is False and before["000001"].status == "NORMAL"
-    after = history.states(KRX.historical_bar_at(date(2024, 6, 5)))
+    after = history.states(KRX.observed_at(date(2024, 6, 5)))
     assert after["000001"].managed is True and after["000001"].status == "SUSPENDED"
     assert after["000002"].status == "DELISTED"
     assert "unverified" in after["000001"].source
     report = json.loads((out / "securities-report.json").read_text())
     assert report["halted_now_but_not_suspended_at_end"] == []
+
+
+def test_states_are_visible_at_the_first_session_observation(tmp_path):
+    # The research input's first checkpoint takes a prefix at the first
+    # session's observation time; it must already see the securities.
+    from momentum.krx.fsc_states import status_events
+    from momentum.krx.securities import build
+
+    raw = tmp_path / "raw"
+    write_day(raw, DAYS[0], [row(A, "000001")])
+    krx_files(tmp_path / "kind")
+    first = date.fromisoformat(DAYS[0])
+    events = status_events(raw, (first,))
+    records, _ = build(
+        events, read_lists((tmp_path / "kind").iterdir()), (first,), date(2026, 10, 20)
+    )
+    path = tmp_path / "s.jsonl"
+    path.write_text("".join(json.dumps(r) + "\n" for r in records))
+    assert read_security_history(path).visible(KRX.observed_at(first))

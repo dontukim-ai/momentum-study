@@ -135,7 +135,7 @@ def build(
                 {
                     "symbol": symbol,
                     "effective_at": KRX.open_at(day).isoformat(),
-                    "available_at": KRX.historical_bar_at(day).isoformat(),
+                    "available_at": KRX.observed_at(day).isoformat(),
                     "status": event.status,
                     "asset_type": "STOCK",
                     "market": event.market,
