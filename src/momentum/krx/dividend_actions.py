@@ -14,6 +14,13 @@ Other rules, each refusing rather than guessing:
 - the amount and availability come from the latest filing published before
   the ex-date open; a later filing that changes the amount is reported,
   because the evaluation could not have known it;
+- the payment date comes from the group's latest filing: a correction
+  restates the whole table (real cases: a pay date typed with last year,
+  a pay date or AGM added later), and cash lands on the actual date
+  whatever the evaluation knew;
+- a late dividend whose earliest collected filing is a correction is
+  refused, because its original was published before the collected range
+  and may even have preceded the ex-date;
 - the ex-date needs an observed calendar confirmed through the record date.
 
 A holding company's subsidiary filing repeats a decision the paying company
@@ -152,6 +159,14 @@ def build(
             # Late (pre-2023 practice): booked on the first session after the
             # earliest filing, from that filing's amount (policy A, 2026-10-20).
             source, after = filings[0], filings[1:]
+            if source.get("correction"):
+                unresolved.append(
+                    {
+                        **base,
+                        "reason": "original filing not collected; first publication unknown",
+                    }
+                )
+                continue
             published = datetime.fromisoformat(source["available_at"])
             recognized_on = next(
                 (d for d in sorted(sessions) if KRX.open_at(d) >= published), None
@@ -168,7 +183,8 @@ def build(
         if source["per_share_common"] is None:
             unresolved.append({**base, "reason": "no common-share amount"})
             continue
-        payment = _payment_date(source)
+        latest = filings[-1]
+        payment = _payment_date(latest)
         if payment is None:
             unresolved.append({**base, "reason": "no payment date, AGM or board date"})
             continue
@@ -198,6 +214,7 @@ def build(
                 "record_date": record_text,
                 "dividend_kind": kind,
                 "pay_date_basis": basis,
+                "pay_date_rcept_no": latest["rcept_no"],
                 "pay_date_policy": PAY_DATE_POLICY,
                 "filings": base["filings"],
                 # Class shares trade under their own code; not attached here.

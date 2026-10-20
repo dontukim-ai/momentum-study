@@ -226,3 +226,40 @@ def test_subsidiary_copy_of_payers_own_filing_is_a_duplicate():
             "reason": "subsidiary filing; payer's own filing not found",
         }
     ]
+
+
+def test_payment_date_comes_from_the_latest_correction():
+    # KCC건설 2024: the original typed the pay date with last year.
+    original = record(pay="2023-04-26")
+    corrected = record(
+        "20231220000002",
+        available="2023-12-20T18:00:00+09:00",
+        pay="2024-04-26",
+        correction=True,
+    )
+    (action,) = build([original, corrected], SESSIONS, CONFIRMED).actions
+    assert action["pay_date"] == "2024-04-26"
+    assert action["evidence"]["pay_date_rcept_no"] == "20231220000002"
+    assert action["evidence"]["rcept_no"] == "20231220000002"
+    # A late dividend: amount from the earliest filing, AGM from a later one.
+    first = record(available="2024-01-02T18:00:00+09:00", agm=None, board="2023-12-13")
+    later = record(
+        "20240110000003",
+        available="2024-01-10T18:00:00+09:00",
+        agm="2024-03-26",
+        board="2023-12-13",
+    )
+    sessions = SESSIONS + (date(2024, 1, 3),)
+    (late,) = build([first, later], sessions, date(2024, 1, 3)).actions
+    assert late["pay_date"] == "2024-04-26" and late["recognized_on"] == "2024-01-03"
+    assert late["evidence"]["rcept_no"] == "20231215000001"
+
+
+def test_late_dividend_known_only_from_a_correction_is_refused():
+    only_correction = record(available="2024-01-02T18:00:00+09:00", correction=True)
+    sessions = SESSIONS + (date(2024, 1, 3),)
+    result = build([only_correction], sessions, date(2024, 1, 3))
+    assert result.actions == []
+    assert result.unresolved[0]["reason"] == (
+        "original filing not collected; first publication unknown"
+    )
