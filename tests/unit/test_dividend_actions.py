@@ -118,10 +118,13 @@ def test_corrections_late_filings_and_other_refusals():
         late.actions == []
         and late.unresolved[0]["reason"] == "amount changed after the ex-date open"
     )
+    # Policy A (2026-10-20): a dividend published after its ex-date is booked late.
     only_late = build(
         [record(available="2023-12-28T18:00:00+09:00")], SESSIONS, CONFIRMED
     )
-    assert only_late.unresolved[0]["reason"] == "no filing before the ex-date open"
+    (late_action,) = only_late.actions
+    assert late_action["action_type"] == "late_cash_dividend"
+    assert late_action["recognized_on"] == "2024-01-02"
     others = build(
         [
             record(subsidiary="SK텔레콤(주)"),

@@ -26,7 +26,13 @@ from trading_agent.store import Store
 from momentum.ledger.ledger import CorporateAction
 
 from .bundle import open_bundle, publish_bundle
-from .contracts import AgentPolicy, AnnouncedAction, ResearchInput, policy_from_dict
+from .contracts import (
+    AgentPolicy,
+    AnnouncedAction,
+    LateDividend,
+    ResearchInput,
+    policy_from_dict,
+)
 from .quality import assess, screen_price_rows
 from .service import ResearchAgent
 from .worker import WorkerMonitor, worker_status
@@ -49,8 +55,21 @@ def read_input(
     calendar: Path | None = None,
 ) -> ResearchInput:
     announced = []
+    late = []
     if actions:
         for raw in json.loads(actions.read_text(encoding="utf-8")):
+            if raw["action_type"] == "late_cash_dividend":
+                late.append(
+                    LateDividend(
+                        raw["security_id"],
+                        date.fromisoformat(raw["ex_date"]),
+                        date.fromisoformat(raw["recognized_on"]),
+                        date.fromisoformat(raw["pay_date"]),
+                        D(raw["cash_amount"]),
+                        timestamp(raw["available_at"]),
+                    )
+                )
+                continue
             announced.append(
                 AnnouncedAction(
                     CorporateAction(
@@ -84,6 +103,7 @@ def read_input(
         tuple(date.fromisoformat(s) for s in json.loads(calendar.read_text()))
         if calendar
         else (),
+        tuple(late),
     )
 
 

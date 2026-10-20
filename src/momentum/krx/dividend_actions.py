@@ -49,6 +49,17 @@ def _day(value: str | None) -> date | None:
     return None if value is None else date.fromisoformat(value)
 
 
+def _payment_date(source: dict[str, Any]) -> tuple[date, str] | None:
+    stated = _day(source.get("pay_date"))
+    if stated is not None:
+        return stated, "stated"
+    if source.get("agm_date"):
+        return add_month(date.fromisoformat(source["agm_date"])), "agm+1m"
+    if source.get("board_date"):
+        return add_month(date.fromisoformat(source["board_date"])), "board+1m"
+    return None
+
+
 def build(
     records: Iterable[dict[str, Any]],
     sessions: tuple[date, ...],
@@ -95,58 +106,67 @@ def build(
         known = [
             f for f in filings if datetime.fromisoformat(f["available_at"]) <= opening
         ]
-        if not known:
-            unresolved.append({**base, "reason": "no filing before the ex-date open"})
-            continue
-        latest = known[-1]
-        if any(
-            f["per_share_common"] != latest["per_share_common"]
-            for f in filings[len(known) :]
-        ):
-            unresolved.append(
-                {**base, "reason": "amount changed after the ex-date open"}
+        if known:
+            # On time: the amount was public before the ex-date open.
+            source, recognized_on, after = known[-1], None, filings[len(known) :]
+            changed = "amount changed after the ex-date open"
+        else:
+            # Late (pre-2023 practice): booked on the first session after the
+            # earliest filing, from that filing's amount (policy A, 2026-10-20).
+            source, after = filings[0], filings[1:]
+            published = datetime.fromisoformat(source["available_at"])
+            recognized_on = next(
+                (d for d in sorted(sessions) if KRX.open_at(d) >= published), None
             )
+            if recognized_on is None or recognized_on > confirmed_through:
+                unresolved.append(
+                    {**base, "reason": "calendar does not reach the recognition day"}
+                )
+                continue
+            changed = "amount changed after recognition"
+        if any(f["per_share_common"] != source["per_share_common"] for f in after):
+            unresolved.append({**base, "reason": changed})
             continue
-        if latest["per_share_common"] is None:
+        if source["per_share_common"] is None:
             unresolved.append({**base, "reason": "no common-share amount"})
             continue
-        stated = _day(latest.get("pay_date"))
-        anchor = _day(latest.get("agm_date")) or _day(latest.get("board_date"))
-        if stated is not None:
-            pay_date, basis = stated, "stated"
-        elif anchor is not None:
-            pay_date = add_month(anchor)
-            basis = "agm+1m" if latest.get("agm_date") else "board+1m"
-        else:
+        payment = _payment_date(source)
+        if payment is None:
             unresolved.append({**base, "reason": "no payment date, AGM or board date"})
             continue
-        if pay_date <= ex_date:
+        pay_date, basis = payment
+        floor, label = (
+            (ex_date, "ex-date")
+            if recognized_on is None
+            else (recognized_on, "recognition day")
+        )
+        if pay_date <= floor:
             unresolved.append(
-                {
-                    **base,
-                    "reason": f"payment date {pay_date} not after ex-date {ex_date}",
-                }
+                {**base, "reason": f"payment date {pay_date} not after {label} {floor}"}
             )
             continue
-        actions.append(
-            {
-                "security_id": code,
-                "action_type": "cash_dividend",
-                "ex_date": ex_date.isoformat(),
-                "pay_date": pay_date.isoformat(),
-                "split_ratio": None,
-                "cash_amount": str(Decimal(latest["per_share_common"])),
-                "available_at": latest["available_at"],
-                "evidence": {
-                    "rcept_no": latest["rcept_no"],
-                    "record_date": record_text,
-                    "dividend_kind": kind,
-                    "pay_date_basis": basis,
-                    "pay_date_policy": PAY_DATE_POLICY,
-                    "filings": base["filings"],
-                    # Class shares trade under their own code; not attached here.
-                    "class_share_amount_ignored": latest["per_share_class"],
-                },
-            }
-        )
+        action: dict[str, Any] = {
+            "security_id": code,
+            "action_type": "cash_dividend"
+            if recognized_on is None
+            else "late_cash_dividend",
+            "ex_date": ex_date.isoformat(),
+            "pay_date": pay_date.isoformat(),
+            "split_ratio": None,
+            "cash_amount": str(Decimal(source["per_share_common"])),
+            "available_at": source["available_at"],
+            "evidence": {
+                "rcept_no": source["rcept_no"],
+                "record_date": record_text,
+                "dividend_kind": kind,
+                "pay_date_basis": basis,
+                "pay_date_policy": PAY_DATE_POLICY,
+                "filings": base["filings"],
+                # Class shares trade under their own code; not attached here.
+                "class_share_amount_ignored": source["per_share_class"],
+            },
+        }
+        if recognized_on is not None:
+            action["recognized_on"] = recognized_on.isoformat()
+        actions.append(action)
     return DividendActions(actions, unresolved)

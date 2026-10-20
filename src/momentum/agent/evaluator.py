@@ -29,7 +29,7 @@ from trading_agent.selection import RankedStrategy, SelectionEngine, select_cand
 from trading_agent.strategy import fit_buy_quantity, rebalance_plan
 
 from momentum.execution.engine import Fill
-from momentum.ledger.ledger import Ledger
+from momentum.ledger.ledger import CorporateAction, Ledger
 
 from .contracts import AgentPolicy, ResearchInput
 from .market import profile
@@ -601,7 +601,30 @@ class CommonEvaluator:
                 for a in data.actions
                 if a.action.ex_date == day or a.action.pay_date == day
             ]
-            ledger.apply_corporate_actions([a.action for a in actions], day)
+            # A late dividend is paid through the ordinary pay-date branch;
+            # its ex-date branch never fires because ex_date is in the past.
+            late_paid = [
+                CorporateAction(
+                    d.security_id,
+                    "cash_dividend",
+                    d.ex_date,
+                    d.pay_date,
+                    None,
+                    d.cash_amount,
+                )
+                for d in data.late_dividends
+                if d.pay_date == day
+            ]
+            ledger.apply_corporate_actions([a.action for a in actions] + late_paid, day)
+            for late in data.late_dividends:
+                if late.recognized_on == day:
+                    ledger.accrue_entitlement(
+                        late.security_id,
+                        late.ex_date,
+                        late.cash_amount,
+                        late.pay_date,
+                        day,
+                    )
             rows = data.snapshot.day(day)
             opens = {s: b.open for s, b in rows.items()}
             splits = {

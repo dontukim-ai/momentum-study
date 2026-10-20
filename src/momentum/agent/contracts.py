@@ -71,6 +71,36 @@ class AnnouncedAction:
             )
 
 
+@dataclass(frozen=True)
+class LateDividend:
+    """A cash dividend whose amount was published after its ex-date.
+
+    Under the pre-2023 Korean practice the record date (and so the ex-date)
+    comes first and the board fixes the amount weeks later. The holding at
+    the ex-date is entitled, but no evaluation may see the amount before
+    ``available_at``; the ledger books it on ``recognized_on``, the first
+    session whose open follows publication (policy A, 2026-10-20).
+    """
+
+    security_id: str
+    ex_date: date
+    recognized_on: date
+    pay_date: date
+    cash_amount: Decimal
+    available_at: datetime
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "available_at", aware(self.available_at))
+        if not self.cash_amount.is_finite() or self.cash_amount < 0:
+            raise AgentError("Late dividend needs a finite non-negative amount")
+        if not self.ex_date < self.recognized_on < self.pay_date:
+            raise AgentError("Late dividend needs ex_date < recognized_on < pay_date")
+        if self.available_at > KRX.open_at(self.recognized_on):
+            raise AgentError("Late dividend recognized before it was published")
+        if self.available_at <= KRX.open_at(self.ex_date):
+            raise AgentError("Dividend known before its ex-date is an ordinary action")
+
+
 class _ObservedCalendar(tuple[date, ...]):
     """Keep an omitted calendar implicit across dataclasses.replace(sessions=...)."""
 
@@ -83,6 +113,7 @@ class ResearchInput:
     sessions: tuple[date, ...] = ()
     corporate_action_basis: str = "raw-unadjusted; supplied-actions-complete"
     calendar: tuple[date, ...] = ()
+    late_dividends: tuple[LateDividend, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.sessions:
@@ -111,8 +142,17 @@ class ResearchInput:
             (a.action.security_id, a.action.action_type, a.action.ex_date)
             for a in self.actions
         ]
+        keys += [
+            (d.security_id, "cash_dividend", d.ex_date) for d in self.late_dividends
+        ]
         if len(keys) != len(set(keys)):
             raise AgentError("Duplicate corporate actions")
+        for late in self.late_dividends:
+            if any(
+                day <= self.sessions[-1] and day not in self.sessions
+                for day in (late.ex_date, late.recognized_on, late.pay_date)
+            ):
+                raise AgentError("Corporate action must use declared exchange sessions")
         for a in self.actions:
             if (
                 a.action.ex_date <= self.sessions[-1]
@@ -137,21 +177,25 @@ class ResearchInput:
             ()
             if isinstance(self.calendar, _ObservedCalendar)
             else tuple(d for d in self.calendar if d <= end),
+            tuple(d for d in self.late_dividends if d.available_at <= clock),
         )
 
     def fingerprint(self, end: date) -> str:
         prefix = self.prefix(end)
-        return digest(
-            {
-                "prices": prefix.snapshot.id,
-                "securities": prefix.securities.id,
-                "actions": tuple(
-                    a for a in self.actions if a.available_at <= KRX.observed_at(end)
-                ),
-                "sessions": prefix.sessions,
-                "basis": prefix.corporate_action_basis,
-            }
-        )
+        content: dict[str, Any] = {
+            "prices": prefix.snapshot.id,
+            "securities": prefix.securities.id,
+            "actions": tuple(
+                a for a in self.actions if a.available_at <= KRX.observed_at(end)
+            ),
+            "sessions": prefix.sessions,
+            "basis": prefix.corporate_action_basis,
+        }
+        # Added only when present so inputs without late dividends keep the
+        # fingerprints already stored by existing studies.
+        if prefix.late_dividends:
+            content["late_dividends"] = prefix.late_dividends
+        return digest(content)
 
 
 @dataclass(frozen=True)
