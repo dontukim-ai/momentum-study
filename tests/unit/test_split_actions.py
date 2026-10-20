@@ -80,6 +80,31 @@ def test_periods_respect_92_days():
     assert all((b - a).days < 92 for a, b in spans)
 
 
+def test_periods_respect_three_calendar_months():
+    # OpenDART probed 2026-10-20: the end may reach start + 3 months (day
+    # clamped to month end) and no further; 92 days crosses it over February.
+    spans = list(periods(date(2021, 1, 3), date(2021, 7, 31)))
+    assert spans[0] == (date(2021, 1, 3), date(2021, 4, 3))
+    assert next(periods(date(2020, 11, 30), date(2021, 3, 31))) == (
+        date(2020, 11, 30),
+        date(2021, 2, 28),
+    )
+    # The API would take 2020-10-31..2021-01-31 (93 days); 92 days is tighter.
+    assert next(periods(date(2020, 10, 31), date(2021, 3, 31))) == (
+        date(2020, 10, 31),
+        date(2021, 1, 30),
+    )
+    # Spans that already passed keep their boundaries, so saved periods
+    # are found again on rerun.
+    assert list(periods(date(2019, 10, 1), date(2021, 1, 2))) == [
+        (date(2019, 10, 1), date(2019, 12, 31)),
+        (date(2020, 1, 1), date(2020, 4, 1)),
+        (date(2020, 4, 2), date(2020, 7, 2)),
+        (date(2020, 7, 3), date(2020, 10, 2)),
+        (date(2020, 10, 3), date(2021, 1, 2)),
+    ]
+
+
 def test_collects_pages_resumably_and_handles_empty_periods(tmp_path):
     rows = [
         filing(f"20240{3 + (n % 2)}01{n:06d}", "086520", "기타") for n in range(150)
