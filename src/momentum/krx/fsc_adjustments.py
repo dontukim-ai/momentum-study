@@ -156,3 +156,48 @@ def detect(root: Path, start: date, end: date, kind: str = "stock") -> list[Adju
                     )
             last[isin] = (day, close, shares)
     return found
+
+
+def detect_halted_share_changes(
+    root: Path, start: date, end: date, kind: str = "stock"
+) -> list[Adjustment]:
+    """Listed-share changes on no-trade rows, which ``detect`` never compares.
+
+    A capital reduction can relist while trading is still halted: the row has
+    no open, volume or change, yet its share count and carried close move by
+    the reduction (2024-05-02 006380: 40,000,000 -> 8,000,000 shares, close
+    732 -> 3,660). Each such row is reported against the previous row of any
+    kind, as ``HALTED_SHARE_CHANGE`` with the close and share ratios. It is
+    evidence for reconciliation only, like every detection here.
+    """
+    last: dict[str, tuple[date, Decimal, Decimal]] = {}
+    found: list[Adjustment] = []
+    for day in weekdays(start, end):
+        rows = _rows(Path(root) / kind / day.isoformat(), day)
+        if rows is None:
+            last.clear()
+            continue
+        for row in rows:
+            isin = str(row.get("isinCd") or "")
+            close, shares = _decimal(row.get("clpr")), _decimal(row.get("lstgStCnt"))
+            if not isin or close is None or close <= 0 or not shares or shares <= 0:
+                continue
+            previous = last.get(isin)
+            halted = _decimal(row.get("trqu")) == 0 and _decimal(row.get("mkp")) == 0
+            if previous is not None and halted and shares != previous[2]:
+                prior_day, prior_close, prior_shares = previous
+                found.append(
+                    Adjustment(
+                        day,
+                        str(row.get("srtnCd") or ""),
+                        isin,
+                        prior_day,
+                        prior_close,
+                        close,
+                        (prior_close / close).quantize(Decimal("0.000001")),
+                        (shares / prior_shares).quantize(Decimal("0.000001")),
+                        "HALTED_SHARE_CHANGE",
+                    )
+                )
+            last[isin] = (day, close, shares)
+    return found

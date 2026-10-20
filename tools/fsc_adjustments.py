@@ -5,7 +5,9 @@ Example:
     --start 2024-04-01 --end 2024-05-10 --out data/krx/adjustments.jsonl
 
 Detections are evidence for reconciliation with disclosures, not corporate
-actions: they are observed on the event day, after the announcement.
+actions: they are observed on the event day, after the announcement. Listed
+share changes on no-trade rows (a reduction relisting during a halt) are
+added as HALTED_SHARE_CHANGE.
 """
 
 from __future__ import annotations
@@ -17,7 +19,7 @@ from datetime import date
 from pathlib import Path
 
 from momentum.config import SpecUndefinedError
-from momentum.krx.fsc_adjustments import detect
+from momentum.krx.fsc_adjustments import detect, detect_halted_share_changes
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -29,6 +31,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         found = detect(args.root, args.start, args.end)
+        found += detect_halted_share_changes(args.root, args.start, args.end)
     except (SpecUndefinedError, OSError, ValueError, KeyError) as exc:
         print(f"fsc-adjustments: {type(exc).__name__}: {exc}")
         return 1
