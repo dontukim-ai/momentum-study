@@ -42,7 +42,8 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"fsc-calendar: {len(result.sessions)} sessions through {result.confirmed_through}, "
         f"{len(result.closed)} closed weekdays, {len(result.pending)} pending, "
-        f"{len(result.uncollected)} uncollected"
+        f"{len(result.uncollected)} uncollected, "
+        f"{len(result.before_coverage)} before coverage"
     )
     return 0
 

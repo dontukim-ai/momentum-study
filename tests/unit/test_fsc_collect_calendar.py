@@ -167,6 +167,24 @@ def test_calendar_stops_at_gap_and_rejects_wrong_dates(tmp_path):
         build_calendar(tmp_path / "raw", date(2024, 6, 3), date(2024, 6, 5))
 
 
+def test_empty_days_before_supplier_coverage_are_not_holidays(tmp_path):
+    # FSC V2 answers 0 rows without error before its coverage starts.
+    rows = {"20240605": 5, "20240607": 5}
+    collector(tmp_path, Supplier(rows)).collect(date(2024, 6, 3), date(2024, 6, 7))
+    result = build_calendar(tmp_path / "raw", date(2024, 6, 3), date(2024, 6, 7))
+    assert [d.day for d in result.before_coverage] == [3, 4]
+    assert [d.day for d in result.sessions] == [5, 7]
+    assert [d.day for d in result.closed] == [6]
+    assert result.report()["before_coverage"] == ["2024-06-03", "2024-06-04"]
+    nothing = tmp_path / "none"
+    collector(nothing, Supplier({})).collect(date(2024, 6, 3), date(2024, 6, 4))
+    empty = build_calendar(nothing / "raw", date(2024, 6, 3), date(2024, 6, 4))
+    assert empty.sessions == () and empty.pending == (
+        date(2024, 6, 3),
+        date(2024, 6, 4),
+    )
+
+
 def load_tool(name):
     spec = importlib.util.spec_from_file_location(
         name, Path(__file__).resolve().parents[2] / f"tools/{name}.py"

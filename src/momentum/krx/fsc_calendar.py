@@ -4,6 +4,11 @@ A weekday is a session when the supplier returned rows for it. An empty answer
 is ambiguous: a holiday, or a day the supplier has not published yet (it
 publishes one business day later, after 13:00). It counts as closed only once a
 *later* day has returned rows, which proves the supplier had published past it.
+Empty days before the first day with rows are outside the supplier's coverage,
+not holidays: FSC V2 answers 0 rows without error for any date before it
+started (2020-01-02 returned rows, 2019-01-02 and earlier none; checked
+2026-10-20). They are reported as ``before_coverage`` and the calendar starts at
+the first observed session.
 The calendar stops before the first weekday that is uncollected or still
 ambiguous, so it never claims a session structure it has not observed.
 Weekends are not requested; KRX has no weekend sessions.
@@ -29,6 +34,7 @@ class CalendarResult:
     closed: tuple[date, ...]
     pending: tuple[date, ...] = ()
     uncollected: tuple[date, ...] = ()
+    before_coverage: tuple[date, ...] = ()
     counts: dict[str, int] = field(default_factory=dict)
 
     def report(self) -> dict[str, Any]:
@@ -40,6 +46,7 @@ class CalendarResult:
             "closed_weekdays": [d.isoformat() for d in self.closed],
             "pending": [d.isoformat() for d in self.pending],
             "uncollected": [d.isoformat() for d in self.uncollected],
+            "before_coverage": [d.isoformat() for d in self.before_coverage],
             "rows_per_session": self.counts,
         }
 
@@ -70,8 +77,10 @@ def build_calendar(
         day: _observed(Path(root) / kind / day.isoformat(), day)
         for day in weekdays(start, end)
     }
-    last_with_rows = max((d for d, t in totals.items() if t), default=None)
-    sessions, closed, pending, uncollected = [], [], [], []
+    with_rows = [d for d, t in totals.items() if t]
+    first_with_rows = min(with_rows, default=None)
+    last_with_rows = max(with_rows, default=None)
+    sessions, closed, pending, uncollected, before = [], [], [], [], []
     confirmed: date | None = None
     blocked = False
     for day, total in totals.items():
@@ -81,6 +90,9 @@ def build_calendar(
             continue
         if total > 0:
             state = "session"
+        elif first_with_rows is not None and day < first_with_rows and not blocked:
+            before.append(day)
+            continue
         elif last_with_rows is not None and day < last_with_rows:
             state = "closed"
         else:
@@ -101,5 +113,6 @@ def build_calendar(
         tuple(closed),
         tuple(pending),
         tuple(uncollected),
+        tuple(before),
         counts,
     )
