@@ -27,13 +27,17 @@ A holding company's subsidiary filing repeats a decision the paying company
 usually files itself. When the payer's own filing (same normalized name,
 record date and dividend kind) exists, the subsidiary copy is reported as a
 duplicate; otherwise it stays unresolved, since the payer may be unlisted.
+Subsidiary filings name the payer by its registered legal name
+(에스케이하이닉스(주)) while list rows carry the listing name (SK하이닉스),
+so own filings are indexed under both when the legal name is known
+(``legal_names``: corp_code -> 기업개황 corp_name).
 """
 
 from __future__ import annotations
 
 import calendar as month_calendar
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
@@ -83,13 +87,17 @@ def build(
     records: Iterable[dict[str, Any]],
     sessions: tuple[date, ...],
     confirmed_through: date,
+    legal_names: Mapping[str, str] | None = None,
 ) -> DividendActions:
     records = list(records)
-    own = {
-        (company_name(r["corp_name"]), r.get("record_date"), r["dividend_kind"]): r
-        for r in records
-        if not r.get("subsidiary") and r.get("stock_code") and r.get("corp_name")
-    }
+    legal = legal_names or {}
+    own: dict[tuple[str, str | None, str], dict[str, Any]] = {}
+    for r in records:
+        if r.get("subsidiary") or not r.get("stock_code"):
+            continue
+        names = {r.get("corp_name"), legal.get(r.get("corp_code") or "")}
+        for name in names - {None, ""}:
+            own[(company_name(str(name)), r.get("record_date"), r["dividend_kind"])] = r
     groups: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
     unresolved: list[dict[str, Any]] = []
     duplicates: list[dict[str, Any]] = []

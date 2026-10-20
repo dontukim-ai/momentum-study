@@ -18,6 +18,7 @@ import json
 from datetime import date
 from pathlib import Path
 
+from momentum.krx.dart_collect import legal_names
 from momentum.krx.dividend_actions import build
 
 
@@ -28,6 +29,11 @@ def main(argv: list[str] | None = None) -> int:
         "--calendar", type=Path, required=True, help="tools/fsc_calendar.py --out"
     )
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument(
+        "--dart-root",
+        type=Path,
+        help="root holding dart_company/ (tools/dart_companies.py) for legal names",
+    )
     args = parser.parse_args(argv)
     try:
         records = [
@@ -46,7 +52,8 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError, KeyError) as exc:
         print(f"dividend-actions: {type(exc).__name__}: {exc}")
         return 1
-    result = build(records, sessions, confirmed)
+    names = legal_names(args.dart_root) if args.dart_root else None
+    result = build(records, sessions, confirmed, names)
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "actions.json").write_text(
         json.dumps(result.actions, ensure_ascii=False, indent=2) + "\n",
