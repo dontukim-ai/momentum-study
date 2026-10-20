@@ -163,11 +163,20 @@ def read_document(raw: bytes) -> str:
                     f"expected one document in zip, found {len(names)}"
                 )
             raw = archive.read(names[0])
-    # The <meta> charset says euc-kr; the bytes are UTF-8 (2026-10-20 check).
+    # Documents from 2023 on say euc-kr in <meta> but are UTF-8; 2019-2022
+    # ones say euc-kr and are (4,664 of them, all readable as cp949; checked
+    # 2026-10-20). So UTF-8 first, then the declared Korean charset only.
     try:
         return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+    head = raw[:2048].lower()
+    if re.search(rb"charset\s*=\s*[\"']?(euc-kr|ks_c_5601-1987|cp949)", head) is None:
+        raise SpecUndefinedError("document is neither UTF-8 nor declared euc-kr")
+    try:
+        return raw.decode("cp949")
     except UnicodeDecodeError as exc:
-        raise SpecUndefinedError("document is not UTF-8") from exc
+        raise SpecUndefinedError("document declared euc-kr is not cp949") from exc
 
 
 def parse_dividend_document(rcept_no: str, text: str) -> DividendDecision:

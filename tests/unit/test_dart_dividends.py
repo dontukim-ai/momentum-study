@@ -135,8 +135,19 @@ def test_missing_table_and_utf8_despite_euc_kr_meta(tmp_path):
     path = tmp_path / "20240207801246.zip"
     path.write_bytes(buffer.getvalue())
     assert load_documents([path])[0].per_share_common == D(105)
-    with pytest.raises(SpecUndefinedError, match="not UTF-8"):
+    with pytest.raises(SpecUndefinedError, match="neither UTF-8 nor declared"):
         read_document("배당".encode("euc-kr"))
+
+
+def test_documents_before_2023_are_real_euc_kr():
+    # 2019-2022 filings (e.g. 20191230900191) declare euc-kr and are cp949.
+    raw = page(main_table()).encode("cp949")
+    assert raw.decode("utf-8", "replace") != raw.decode("cp949")
+    decision = parse_dividend_document("20191230900191", read_document(raw))
+    assert decision.per_share_common == D(105)
+    undeclared = page(main_table()).replace("charset=euc-kr", "").encode("cp949")
+    with pytest.raises(SpecUndefinedError, match="neither UTF-8 nor declared"):
+        read_document(undeclared)
 
 
 def test_ex_dividend_date_matches_kt_and_g_2023():
