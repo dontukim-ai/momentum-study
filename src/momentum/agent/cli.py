@@ -31,6 +31,7 @@ from .contracts import (
     AnnouncedAction,
     LateDividend,
     ResearchInput,
+    SessionConfirmedSecurities,
     policy_from_dict,
 )
 from .quality import assess, screen_price_rows
@@ -53,7 +54,10 @@ def read_input(
     sessions: Path | None = None,
     basis: str = "raw-unadjusted; supplied-actions-complete",
     calendar: Path | None = None,
+    securities_mode: str = "snapshot",
 ) -> ResearchInput:
+    if securities_mode not in ("snapshot", "session-confirmed"):
+        raise AgentError("Unknown securities mode")
     announced = []
     late = []
     if actions:
@@ -94,9 +98,15 @@ def read_input(
         if sessions
         else ()
     )
+    snapshot = read_csv(prices, require_complete=False)
+    history = read_security_history(securities)
+    if securities_mode == "session-confirmed":
+        history = SessionConfirmedSecurities(
+            list(history.records), clock or snapshot.sessions
+        )
     return ResearchInput(
-        read_csv(prices, require_complete=False),
-        read_security_history(securities),
+        snapshot,
+        history,
         tuple(announced),
         clock,
         basis,
@@ -212,6 +222,13 @@ def parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--corporate-action-basis", default="raw-unadjusted; supplied-actions-complete"
+    )
+    p.add_argument(
+        "--securities-mode",
+        choices=("snapshot", "session-confirmed"),
+        default="snapshot",
+        help="session-confirmed: the file lists status changes only, complete "
+        "through the session clock (historical FSC-derived states)",
     )
     p.add_argument("--source-db", type=Path)
     p.add_argument("--approved-by")
@@ -338,6 +355,7 @@ def quality_report(args: argparse.Namespace) -> dict[str, Any]:
             args.sessions,
             args.corporate_action_basis,
             args.calendar,
+            args.securities_mode,
         )
         source = {"csv": str(args.csv)}
     else:
@@ -472,6 +490,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                     args.sessions,
                     args.corporate_action_basis,
                     args.calendar,
+                    args.securities_mode,
                 )
 
             class BundleReporter(ResearchAgent):

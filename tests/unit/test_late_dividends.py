@@ -147,9 +147,10 @@ def test_prefix_hides_unpublished_late_dividends_and_fingerprint_is_stable():
     )
     assert plain == expected  # inputs without late dividends keep old fingerprints
     with_late = replace(data, late_dividends=(dividend,))
-    # Published at 18:00 on session 102: not in that day's 16:00 observation.
-    assert with_late.prefix(data.sessions[102]).late_dividends == ()
-    assert with_late.prefix(data.sessions[103]).late_dividends == (dividend,)
+    # Published at 18:00 on session 102: visible from that day's 18:00
+    # observation (LOOP-01b moved it from 16:00), never the day before.
+    assert with_late.prefix(data.sessions[101]).late_dividends == ()
+    assert with_late.prefix(data.sessions[102]).late_dividends == (dividend,)
     assert with_late.fingerprint(data.sessions[110]) != plain
     assert with_late.fingerprint(data.sessions[101]) == data.fingerprint(
         data.sessions[101]

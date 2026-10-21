@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import bisect
 import hashlib
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from functools import lru_cache
@@ -14,7 +15,7 @@ from typing import Any
 from trading_agent.contracts import AgentError, aware, digest
 from trading_agent.data import Snapshot
 from trading_agent.logic import LogicSettings, settings_from_dict
-from trading_agent.selection import SecurityHistory
+from trading_agent.selection import SecurityHistory, SecurityState
 
 from momentum.ledger.ledger import CorporateAction
 
@@ -116,6 +117,56 @@ class LateDividend:
             raise AgentError("Dividend known before its ex-date is an ordinary action")
 
 
+class SessionConfirmedSecurities(SecurityHistory):
+    """Event-sourced security states, reconfirmed at every observed session.
+
+    Historical status files record only changes, derived from a complete
+    daily quote scan: a state without a newer event still held on every later
+    session in ``sessions``. Selection judges freshness by ``effective_at``, so
+    a carried-forward state is shown as effective at the open of the latest
+    session whose observation has passed, exactly what a daily snapshot file
+    would contain. Nothing is reconfirmed past the last declared session.
+    """
+
+    def __init__(self, records: list[SecurityState], sessions: tuple[date, ...]):
+        super().__init__(records)
+        if not sessions or tuple(sorted(set(sessions))) != tuple(sessions):
+            raise AgentError("Session-confirmed securities need a sorted session clock")
+        self.sessions = tuple(sessions)
+        self._observed = [KRX.observed_at(d) for d in self.sessions]
+        self._confirmed_cache: dict[datetime, dict[str, SecurityState]] = {}
+        records_id: str = digest(self.records)
+        self.id = digest(
+            {
+                "records": records_id,
+                "confirmation": "event-sourced-session-confirmed-v1",
+                "through": self.sessions[-1],
+            }
+        )
+
+    def states(self, at: datetime) -> dict[str, SecurityState]:
+        at = aware(at)
+        if at in self._confirmed_cache:
+            return dict(self._confirmed_cache[at])
+        result = super().states(at)
+        index = bisect.bisect_right(self._observed, at)
+        if index:
+            confirmed = KRX.open_at(self.sessions[index - 1])
+            result = {
+                symbol: replace(state, effective_at=confirmed)
+                if state.effective_at < confirmed
+                else state
+                for symbol, state in result.items()
+            }
+        self._confirmed_cache[at] = result
+        return dict(result)
+
+    def until(self, end: date, clock: datetime) -> SessionConfirmedSecurities:
+        return SessionConfirmedSecurities(
+            list(self.visible(clock)), tuple(d for d in self.sessions if d <= end)
+        )
+
+
 class _ObservedCalendar(tuple[date, ...]):
     """Keep an omitted calendar implicit across dataclasses.replace(sessions=...)."""
 
@@ -185,7 +236,9 @@ class ResearchInput:
                 [b for b in self.snapshot.bars if b.session <= end],
                 require_complete=False,
             ),
-            SecurityHistory(list(self.securities.visible(clock))),
+            self.securities.until(end, clock)
+            if isinstance(self.securities, SessionConfirmedSecurities)
+            else SecurityHistory(list(self.securities.visible(clock))),
             tuple(a for a in self.actions if a.available_at <= clock),
             tuple(d for d in self.sessions if d <= end),
             self.corporate_action_basis,

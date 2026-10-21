@@ -84,13 +84,13 @@ def test_commitment_grades_restart_and_budget(tmp_path, monkeypatch, timing, gra
     data, p = market(), policy()
     start = p.warmup_sessions + p.development_sessions + p.embargo_sessions
     now = [
-        session_time(data.sessions[start - 1], 16)
+        session_time(data.sessions[start - 1], 18)
         if timing == "early"
         else session_time(data.sessions[start], 9)
         if timing == "execution"
         else session_time(data.sessions[start], 9, 30)
         if timing == "open"
-        else session_time(data.sessions[-1], 17)
+        else session_time(data.sessions[-1], 19)
     ]
     store = Store(tmp_path / "commit.sqlite3")
     agent = ResearchAgent(store, clock=lambda: now[0])
@@ -108,7 +108,7 @@ def test_commitment_grades_restart_and_budget(tmp_path, monkeypatch, timing, gra
         report["status"]["budget"]["reserved"],
         report["status"]["budget"]["consumed"],
     ) == (1, 0)
-    now[0] = session_time(data.sessions[-1], 17)
+    now[0] = session_time(data.sessions[-1], 19)
     agent = ResearchAgent(store, clock=lambda: now[0])
     monkeypatch.setattr(agent, "_develop", lambda *a: pytest.fail("must not reselect"))
     report = agent.tick("a", data)
@@ -130,7 +130,7 @@ def test_commitment_grades_restart_and_budget(tmp_path, monkeypatch, timing, gra
 def test_full_data_e1_preserves_promotion(tmp_path):
     data = market()
     store = Store(tmp_path / "commit.sqlite3")
-    agent = ResearchAgent(store, clock=lambda: session_time(data.sessions[-1], 17))
+    agent = ResearchAgent(store, clock=lambda: session_time(data.sessions[-1], 19))
     agent.init("a", policy())
     report = agent.tick("a", data)
     result = report["cycles"][0]
@@ -158,7 +158,7 @@ def test_calendar_contract_and_waiting(tmp_path):
     with pytest.raises(AgentError):
         replace(prefix, calendar=tuple(reversed(prefix.calendar)))
     store = Store(tmp_path / "commit.sqlite3")
-    agent = ResearchAgent(store, clock=lambda: session_time(prefix.sessions[-1], 17))
+    agent = ResearchAgent(store, clock=lambda: session_time(prefix.sessions[-1], 19))
     agent.init("a", p)
     report = agent.tick("a", replace(prefix, calendar=()))
     assert report["waiting_for_data"]
@@ -172,7 +172,7 @@ def test_committed_inputs_and_candidate_are_frozen(tmp_path, monkeypatch, change
 
     data, p = market(), policy()
     prefix = staged(data, p)
-    now = [session_time(prefix.sessions[-1], 17)]
+    now = [session_time(prefix.sessions[-1], 19)]
     store = Store(tmp_path / "commit.sqlite3")
     agent = ResearchAgent(store, clock=lambda: now[0])
     agent.init("a", p)
@@ -205,7 +205,7 @@ def test_committed_inputs_and_candidate_are_frozen(tmp_path, monkeypatch, change
                 )
             rows.append(b)
         for state, b in zip(
-            data.securities.visible(session_time(data.sessions[-1], 17)),
+            data.securities.visible(session_time(data.sessions[-1], 19)),
             rows,
             strict=True,
         ):
@@ -241,7 +241,7 @@ def test_committed_inputs_and_candidate_are_frozen(tmp_path, monkeypatch, change
                 ]
             ),
         )
-    now[0] = session_time(data.sessions[-1], 17)
+    now[0] = session_time(data.sessions[-1], 19)
     if change != "holdout":
         with pytest.raises(
             AgentError,
@@ -327,7 +327,7 @@ def test_commitment_without_challenger_and_market_reservation(tmp_path):
 
     data, p = market(cycle=False), policy()
     prefix = staged(data, p)
-    now = [session_time(prefix.sessions[-1], 17)]
+    now = [session_time(prefix.sessions[-1], 19)]
     store = Store(tmp_path / "commit.sqlite3")
     agent = ResearchAgent(store, clock=lambda: now[0])
     agent.init("a", p)
@@ -342,7 +342,7 @@ def test_commitment_without_challenger_and_market_reservation(tmp_path):
         agent.tick("b", prefix)
     assert agent.status("a")["budget"]["reserved"] == 1
     assert store.db.execute("SELECT count(*) FROM agent_commitments").fetchone()[0] == 1
-    now[0] = session_time(data.sessions[-1], 17)
+    now[0] = session_time(data.sessions[-1], 19)
     result = agent.tick("a", data)["cycles"][0]
     assert result["evidence_grade"] == "E2"
     assert result["verdict"] == "KEEP_CHAMPION"
@@ -379,12 +379,12 @@ def test_watch_waits_for_reserved_last_cycle(tmp_path):
 
 def test_interrupted_committed_cycle_status_retains_grade(tmp_path, monkeypatch):
     data, p = market(), policy()
-    now = [session_time(data.sessions[180], 17)]
+    now = [session_time(data.sessions[180], 19)]
     store = Store(tmp_path / "commit.sqlite3")
     agent = ResearchAgent(store, clock=lambda: now[0])
     agent.init("a", p)
     agent.tick("a", staged(data, p))
-    now[0] = session_time(data.sessions[-1], 17)
+    now[0] = session_time(data.sessions[-1], 19)
 
     def interrupt(*args):
         raise RuntimeError("interrupted")

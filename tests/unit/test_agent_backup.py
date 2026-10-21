@@ -80,7 +80,7 @@ def test_restore_rehearsal(tmp_path):
     from momentum.agent.cli import parser, run
 
     data, p = market(420), policy()
-    now = lambda: session_time(data.sessions[-1], 17)
+    now = lambda: session_time(data.sessions[-1], 19)
     path = tmp_path / "research.sqlite3"
     store = Store(path)
     agent = ResearchAgent(store, clock=now)
@@ -190,7 +190,7 @@ def test_backup_restore_guards(tmp_path):
     data, p = market(), policy()
     path = tmp_path / "source.sqlite3"
     store = Store(path)
-    agent = ResearchAgent(store, clock=lambda: session_time(data.sessions[-1], 17))
+    agent = ResearchAgent(store, clock=lambda: session_time(data.sessions[-1], 19))
     agent.init("a", p)
     agent.tick("a", data)
     assert agent.witness_status()["missing"] == []

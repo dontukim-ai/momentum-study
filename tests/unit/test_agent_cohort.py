@@ -81,7 +81,7 @@ def stream():
 
 def setup_agent(tmp_path, data, p=None):
     store = Store(tmp_path / "cohort.sqlite3")
-    now = [session_time(data.sessions[-1], 17)]
+    now = [session_time(data.sessions[-1], 19)]
     agent = ResearchAgent(store, clock=lambda: now[0])
     agent.init("a", p or policy())
     return store, agent, now
@@ -97,12 +97,12 @@ def test_e2_continuous_observation_and_sealed_privacy(tmp_path):
     data = market(480)
     store, agent, now = setup_agent(tmp_path, data)
     # Complete the first synthetic promotion before cycle one's development end.
-    now[0] = session_time(data.sessions[281], 17)
+    now[0] = session_time(data.sessions[281], 19)
     first = agent.tick("a", prefix(data, 281))
     assert first["cycles"][0]["research_champion_updated"]
     previous = store.db.execute("SELECT * FROM agent_cycles").fetchone()
     plan = agent._plan(data, policy(), previous)
-    now[0] = session_time(data.sessions[plan["dev_end"]], 17)
+    now[0] = session_time(data.sessions[plan["dev_end"]], 19)
     report = agent.tick("a", prefix(data, plan["dev_end"]), max_cycles=2)
     cohorts = cohort_rows(store)
     second = cohorts[1]
@@ -120,7 +120,7 @@ def test_e2_continuous_observation_and_sealed_privacy(tmp_path):
         "SELECT end FROM agent_intervals WHERE kind='observation_exposure'"
     ).fetchone()[0]
     middle = plan["holdout_start"] + 10
-    now[0] = session_time(data.sessions[middle], 17)
+    now[0] = session_time(data.sessions[middle], 19)
     report = agent.tick("a", prefix(data, middle), max_cycles=2)
     observation = report["observation"]
     assert observation["end"] == data.sessions[middle].isoformat()
@@ -135,7 +135,7 @@ def test_e2_continuous_observation_and_sealed_privacy(tmp_path):
     )
     assert agent.status("a")["cohorts"][1]["sealed"] is True
     assert all(m["source_phase"] != "observation" for m in agent.development_memory())
-    now[0] = session_time(data.sessions[plan["holdout_end"]], 17)
+    now[0] = session_time(data.sessions[plan["holdout_end"]], 19)
     report = agent.tick("a", prefix(data, plan["holdout_end"]), max_cycles=2)
     assert report["cycles"][1]["evidence_grade"] == "E2"
     assert report["status"]["cycles"][1]["status"] == "COMPLETE"
@@ -144,7 +144,7 @@ def test_e2_continuous_observation_and_sealed_privacy(tmp_path):
     assert report["observation"]["exposure_recorded"] is True
     assert cohort_rows(store) == cohorts
     # The next commitment can use released research memory, never this ledger.
-    now[0] = session_time(data.sessions[-1], 17)
+    now[0] = session_time(data.sessions[-1], 19)
     agent.tick("a", data, max_cycles=3)
     payload = json.loads(
         store.db.execute(
@@ -270,7 +270,7 @@ def test_exclusive_kinds_stay_exclusive(tmp_path, first, second):
 def test_other_study_cannot_reuse_cohort_final(tmp_path):
     data = market()
     store, agent, now = setup_agent(tmp_path, data)
-    now[0] = session_time(data.sessions[180], 17)
+    now[0] = session_time(data.sessions[180], 19)
     agent.tick("a", prefix(data, 180))
     agent.init("b", policy())
     with pytest.raises(
@@ -339,7 +339,7 @@ def test_legacy_intervals_are_not_backfilled(tmp_path):
 def test_only_registered_stream_can_observe_final(tmp_path):
     data = market()
     store, agent, now = setup_agent(tmp_path, data)
-    now[0] = session_time(data.sessions[180], 17)
+    now[0] = session_time(data.sessions[180], 19)
     agent.tick("a", prefix(data, 180))
     cohort = cohort_rows(store)[0]
     start, end = date.fromisoformat(cohort["start"]), date.fromisoformat(cohort["end"])

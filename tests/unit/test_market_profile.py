@@ -18,8 +18,10 @@ def test_krx_clock_matches_previous_constants_exactly():
     assert KRX.decision_deadline(day) == session_time(day, 10)
     assert KRX.close_at(day) == session_time(day, 15, 30)
     assert KRX.final_bar_at(day) == session_time(day, 15, 40)
-    assert KRX.observed_at(day) == session_time(day, 16)
-    assert KRX.report_deadline(day) == session_time(day, 17)
+    # LOOP-01b (2026-10-21 user decision): observe after the preregistered
+    # 18:00 historical bar publication; reports stay valid for an hour.
+    assert KRX.observed_at(day) == session_time(day, 18)
+    assert KRX.report_deadline(day) == session_time(day, 19)
     assert KRX.disclosure_at(day) == session_time(day, 18)
 
 

@@ -256,12 +256,12 @@ def test_cohort_sealed_memory_is_released_without_updating_checkpoint(
         policy(), observation_checkpoint_sessions=5, degradation_reference="cash"
     )
     store = Store(tmp_path / "sealed.sqlite3")
-    now = [session_time(data.sessions[281], 17)]
+    now = [session_time(data.sessions[281], 19)]
     agent = ResearchAgent(store, clock=lambda: now[0])
     agent.init("a", p)
 
     def tick(index, **kwargs):
-        now[0] = session_time(data.sessions[index], 17)
+        now[0] = session_time(data.sessions[index], 19)
         return agent.tick(
             "a",
             replace(data.prefix(data.sessions[index]), calendar=data.calendar),

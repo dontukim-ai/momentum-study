@@ -100,13 +100,13 @@ def test_e2_release_execution_eligibility(tmp_path, mode, eligible):
                 [replace(s, bid=None, ask=None) for s in data.securities.records]
             ),
         )
-    now = [session_time(staged(data, p).sessions[-1], 17)]
+    now = [session_time(staged(data, p).sessions[-1], 19)]
     store = Store(tmp_path / "spread.sqlite3")
     try:
         agent = ResearchAgent(store, clock=lambda: now[0])
         agent.init("spread", p)
         agent.tick("spread", staged(data, p))
-        now[0] = session_time(data.sessions[-1], 17)
+        now[0] = session_time(data.sessions[-1], 19)
         report = agent.tick("spread", data)
         assert report["cycles"][0]["research_champion_updated"]
         assert report["status"]["policy"]["logic"]["selection"]["spread_mode"] == mode
