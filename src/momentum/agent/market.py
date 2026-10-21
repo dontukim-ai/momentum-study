@@ -2,9 +2,10 @@
 
 Research code asks the profile for "the open on day D" or "the observation
 cut-off on day D" instead of writing hours, so another market needs a new
-profile rather than edits scattered through the evaluator. The KRX profile
-reproduces the previous constants exactly; changing a value here changes the
-evaluation contract and must be preregistered as a new policy.
+profile rather than edits scattered through the evaluator. Changing a value
+here changes the evaluation contract: studies evaluated under the old clock
+cannot continue and a new study must be started. LOOP-01b moved the KRX
+observation from 16:00 to 18:00 for that reason (2026-10-21 user decision).
 """
 
 from __future__ import annotations
@@ -31,7 +32,9 @@ class MarketProfile:
     session_close: time
     # When final bars are normally published by the feed.
     final_bar_available: time
-    # Decisions observe the market as of this time on the prior session.
+    # Decisions observe the market as of this time on the prior session. It is
+    # not earlier than historical_bar_available: a decision must see the prior
+    # close under the same E1 assumption that dates historical bars.
     observation_time: time
     # Validity of an end-of-day selection report.
     report_valid_until: time
@@ -85,8 +88,8 @@ KRX = MarketProfile(
     decision_valid_until=time(10, 0),
     session_close=time(15, 30),
     final_bar_available=time(15, 40),
-    observation_time=time(16, 0),
-    report_valid_until=time(17, 0),
+    observation_time=time(18, 0),
+    report_valid_until=time(19, 0),
     disclosure_available=time(18, 0),
     historical_bar_available=time(18, 0),
     daily_price_limit=Decimal("0.30"),

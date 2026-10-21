@@ -85,12 +85,12 @@ def released(tmp_path):
             policy(), observation_checkpoint_sessions=5, degradation_reference="cash"
         ),
     )
-    now = [session_time(staged(data, p).sessions[-1], 17)]
+    now = [session_time(staged(data, p).sessions[-1], 19)]
     store = Store(tmp_path / "release.sqlite3")
     agent = ResearchAgent(store, clock=lambda: now[0])
     agent.init("a", p)
     agent.tick("a", staged(data, p))
-    now[0] = session_time(data.sessions[-1], 17)
+    now[0] = session_time(data.sessions[-1], 19)
     report = agent.tick("a", data)
     assert report["cycles"][0]["research_champion_updated"]
     yield agent, store, data, p

@@ -78,7 +78,7 @@ def staged(data, p):
 
 def memory_agent(tmp_path, data, p):
     store = Store(tmp_path / "memory.sqlite3")
-    agent = ResearchAgent(store, clock=lambda: session_time(data.sessions[-1], 17))
+    agent = ResearchAgent(store, clock=lambda: session_time(data.sessions[-1], 19))
     agent.init("a", p)
     return store, agent
 

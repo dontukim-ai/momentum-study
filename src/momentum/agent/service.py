@@ -26,7 +26,7 @@ from trading_agent.contracts import (
     digest,
 )
 from trading_agent.logic import LogicProposer, ranked_spec
-from trading_agent.selection import select_candidates
+from trading_agent.selection import RankedStrategy, select_candidates
 from trading_agent.store import Store
 
 from momentum.config import SpecUndefinedError
@@ -243,6 +243,49 @@ def promotion_gates(evidence: dict[str, Any], policy: AgentPolicy) -> dict[str, 
         "activity": h["candidate_trades"] >= policy.logic.evaluation.min_holdout_trades,
         "independent_observations": h["observations"] == policy.holdout_sessions,
     }
+
+
+def _require_screenable(data: ResearchInput, policy: AgentPolicy, end: date) -> None:
+    """Refuse to reserve validation budget when nothing could ever be bought.
+
+    The probe reuses every market, quality and affordability screen with a
+    momentum floor of -1, so it only fails when the input contract itself
+    (missing quotes, invisible bars, stale states) excludes every security.
+    A final evaluation started in that state spends a holdout on a cash-only
+    result that says nothing about the strategy.
+    """
+    selection = policy.logic.selection
+    c = policy.logic.costs
+    probe = RankedStrategy(
+        lookback=2,
+        top_n=1,
+        gross_weight=min(selection.max_gross, selection.max_position),
+        min_momentum=Decimal(-1),
+    )
+    market = profile(policy.market)
+    report = select_candidates(
+        probe,
+        data.snapshot.view(market.observed_at(end), end, allow_missing=True),
+        data.securities,
+        selection,
+        MarketCosts(c.commission_bps, c.sell_tax_bps, c.slippage_bps),
+        market.report_deadline(end),
+        audit=False,
+    )
+    if not any(
+        row["status"] in {"SELECTED", "NOT_SELECTED"} for row in report["candidates"]
+    ):
+        reasons: dict[str, int] = {}
+        for row in report["candidates"]:
+            for reason in row["reasons"]:
+                reasons[reason] = reasons.get(reason, 0) + 1
+        top = ", ".join(
+            f"{k} {v}" for k, v in sorted(reasons.items(), key=lambda kv: -kv[1])[:5]
+        )
+        raise AgentError(
+            f"No security passes the selection screen at {end}; refusing to reserve "
+            f"validation budget ({len(report['candidates'])} screened: {top})"
+        )
 
 
 def _commitment_grade(committed_at: str, holdout_start: str) -> str:
@@ -1694,6 +1737,7 @@ class ResearchAgent:
                 champion = ranked_spec(json.loads(current["champion_json"]))
                 dev_end = data.calendar[plan["dev_end"]]
                 dev = data.prefix(dev_end)
+                _require_screenable(dev, policy, dev_end)
                 memories = self.development_memory(policy.market)
                 development = self._develop(
                     dev, policy, champion, plan, memories, ordinal, name

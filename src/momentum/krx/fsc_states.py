@@ -12,11 +12,10 @@ warnings, which come from manually downloaded KRX screens (data-sources §2.2):
   says the symbol was gone for the rest of what was observed.
 
 Each change becomes one event effective at that session's open and available
-at that session's observation time (16:00 KST). The research evaluator reads
-a session's bars at that observation, and whether a stock traded or was
-halted that day is exchange information public by the close; tying the state
-to the later 18:00 file publication made the first session's prefix see no
-security at all (first real run, 2026-10-20). Market comes from ``mrktCtg``.
+at that session's observation time (18:00 KST since LOOP-01b, the same moment
+the historical bar becomes public). Tying the state to anything later than
+the observation made the first session's prefix see no security at all
+(first real run, 2026-10-20). Market comes from ``mrktCtg``.
 """
 
 from __future__ import annotations

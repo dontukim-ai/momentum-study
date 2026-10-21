@@ -31,12 +31,12 @@ def build(tmp_path, *, min_sessions=5, spread_mode="quoted"):
             ),
         )
     data = market(284)
-    now = [session_time(staged(data, p).sessions[-1], 17)]
+    now = [session_time(staged(data, p).sessions[-1], 19)]
     store = Store(tmp_path / "exec.sqlite3")
     agent = ResearchAgent(store, clock=lambda: now[0])
     agent.init("a", p)
     agent.tick("a", staged(data, p))
-    now[0] = session_time(data.sessions[-1], 17)
+    now[0] = session_time(data.sessions[-1], 19)
     assert agent.tick("a", data)["cycles"][0]["research_champion_updated"]
     observation = agent.register_observation_release(approved_by="reviewer")
     return agent, store, now, observation
@@ -44,7 +44,7 @@ def build(tmp_path, *, min_sessions=5, spread_mode="quoted"):
 
 def observe_more(agent, now, count=300):
     data = market(count)
-    now[0] = session_time(data.sessions[-1], 17)
+    now[0] = session_time(data.sessions[-1], 19)
     return agent.tick("a", data, max_cycles=2)
 
 

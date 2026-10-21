@@ -497,8 +497,8 @@ class CommonEvaluator:
             currency=p.currency,
             money_quantum=p.money_quantum,
             execution_clock=(
-                "prior_session 16:00 Asia/Seoul",
-                "next_session 09:00 Asia/Seoul",
+                f"prior_session {profile(p.market).observation_time:%H:%M} Asia/Seoul",
+                f"next_session {profile(p.market).execution_open:%H:%M} Asia/Seoul",
             ),
             valuation_basis="mark_to_close_no_liquidation",
             capital=(capital, selection.capital_limit, "min(nav, capital_limit)"),
