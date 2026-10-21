@@ -1,6 +1,6 @@
-# 탐색 후보 공간 v2 (제안, 승인 대기)
+# 탐색 후보 공간 v2 (2026-10-21 사용자 승인)
 
-작성 2026-10-21. 근거는 탐색 실행 3c(`artifacts/explore-unverified-3c`, 정책 1 미검증 입력, 증거 등급 E1)다. 이 문서는 **결과를 본 뒤 후보 공간을 바꾸는 제안**이다. 그래서 새 연구로만 적용하고, 기존 연구의 사전 등록은 바꾸지 않는다. 승인 전에는 실행하지 않는다.
+작성 2026-10-21. 근거는 탐색 실행 3c(`artifacts/explore-unverified-3c`, 정책 1 미검증 입력, 증거 등급 E1)다. 이 문서는 **결과를 본 뒤 후보 공간을 바꾸는 제안**이다. 그래서 새 연구로만 적용하고, 기존 연구의 사전 등록은 바꾸지 않는다.
 
 ## 1. 실행 3c에서 확인한 것
 
@@ -56,7 +56,16 @@
 - 정책 1(관리·주의 이력 미검증)과 미모델링 기업행동(유상증자 등)의 한계는 그대로다. 투자 판단의 근거로 쓰지 않는다.
 - 독립 검증(M3, E2)은 이 탐색으로 후보 공간을 정한 뒤, 사전 등록과 새 구간으로 따로 시작한다.
 
-## 5. 결정할 것
+## 5. 결정 (2026-10-21 사용자)
 
-1. 단계 A 진행 여부와 낙폭 기준(제안 25%).
-2. 단계 B를 바로 구현할지, 단계 A 결과를 본 뒤 할지.
+1. 단계 A를 진행하고, 낙폭 기준은 **25%**로 한다.
+2. 단계 B는 단계 A 실행과 **동시에** 구현한다. `apps/kis-agent` 수정이 필요하면 구현 전에 따로 승인을 받는다.
+
+정책 파일 생성:
+
+```sh
+uv run python tools/historical_policy.py --out artifacts/explore-v2-n10/policy.json \
+  --top-n 10 --champion-lookback 20 --lookbacks 20,40,60 --max-drawdown 0.25
+uv run python tools/historical_policy.py --out artifacts/explore-v2-n20/policy.json \
+  --top-n 20 --champion-lookback 20 --lookbacks 20,40,60 --max-drawdown 0.25
+```
