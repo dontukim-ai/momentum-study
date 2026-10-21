@@ -36,6 +36,7 @@ def historical_policy(
     champion_lookback: int | None = None,
     lookbacks: tuple[int, ...] | None = None,
     max_drawdown: float | None = None,
+    decision_cadence: str = "daily",
 ) -> AgentPolicy:
     p = AgentPolicy()
     logic = replace(
@@ -58,7 +59,7 @@ def historical_policy(
         if max_drawdown is not None
         else logic.evaluation,
     )
-    return replace(p, logic=logic)
+    return replace(p, logic=logic, decision_cadence=decision_cadence)
 
 
 def main() -> None:
@@ -68,6 +69,9 @@ def main() -> None:
     parser.add_argument("--champion-lookback", type=int)
     parser.add_argument("--lookbacks", help="comma-separated, e.g. 20,40,60")
     parser.add_argument("--max-drawdown", type=float)
+    parser.add_argument(
+        "--decision-cadence", choices=("daily", "weekly", "monthly"), default="daily"
+    )
     args = parser.parse_args()
     policy = historical_policy(
         top_n=args.top_n,
@@ -76,6 +80,7 @@ def main() -> None:
         if args.lookbacks
         else None,
         max_drawdown=args.max_drawdown,
+        decision_cadence=args.decision_cadence,
     )
     raw = json.loads(canonical(policy))
     if policy_from_dict(raw) != policy:
@@ -88,7 +93,8 @@ def main() -> None:
         f"champion={policy.logic.champion.ranking}/{policy.logic.champion.lookback}"
         f"/top{policy.logic.champion.top_n}/gross{policy.logic.champion.gross_weight} "
         f"lookbacks={list(policy.logic.lookbacks)} "
-        f"max_drawdown={policy.logic.evaluation.max_drawdown}"
+        f"max_drawdown={policy.logic.evaluation.max_drawdown} "
+        f"decision_cadence={policy.decision_cadence}"
     )
 
 

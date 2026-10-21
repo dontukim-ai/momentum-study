@@ -44,11 +44,11 @@
 - 나머지(비용 25bp, 개발 120·검증 40·shadow 20세션, 통계 정책, 예산 8)는 현재 기본값을 그대로 쓴다.
 - 연구마다 새 DB(`artifacts/explore-v2-n10`, `artifacts/explore-v2-n20`), `--max-cycles 1`.
 
-### 단계 B: 리밸런싱 주기 축 (코드, LOOP-02)
+### 단계 B: 리밸런싱 주기 축 (코드, LOOP-02b)
 
-- `RankedStrategy`에 `decision_cadence`(매일·매주 첫 거래일·매월 첫 거래일)를 넣는다. 평가기는 결정일이 아닌 날 목표를 유지한다. 시가가 없거나 정지된 종목은 지금처럼 다룬다.
-- 단계 A 결과와 무관하게 필요한 축이다. 다만 후보 수 상한(12)과 통계 예산 때문에, 주기 × 기간 × 순위 전체(27개)를 한 연구에 넣지 않는다. 단계 A에서 고른 `top_n` 하나에 주기 3 × 기간 3(순위 1종)으로 둔다.
-- `apps/kis-agent`의 제안기·검증기를 바꿔야 할 수 있다. 그 경우 구현 전에 승인을 받는다.
+- 정책에 `decision_cadence`(daily·weekly·monthly)를 사전 등록한다. 연구의 모든 전략이 이 주기로 선정·주문한다. 결정일은 평가 첫 세션과, 매주 또는 매월 첫 거래일이다. 결정일이 아닌 날에는 선정도 주문도 하지 않고, 기업행동·평가·상각만 매일 처리한다. 기준 전략(현금·동일 비중)은 매일 그대로다.
+- 주기는 `top_n`처럼 **연구 단위 상수**다. 한 연구 안의 후보는 기간 × 순위로만 다르고, 주기 비교는 연구 사이에서 한다. 처음 계획한 "한 연구 안의 주기 × 기간 격자"는 전략 버전·레지스트리·승격 검증 전체를 바꿔야 해서 미뤘다. 탐색(E1) 단계에서는 연구 단위 비교로도 같은 질문에 답할 수 있다.
+- `apps/kis-agent`는 고치지 않는다.
 
 ## 4. 이 실험으로 말할 수 있는 것과 없는 것
 
@@ -70,11 +70,6 @@ uv run python tools/historical_policy.py --out artifacts/explore-v2-n20/policy.j
   --top-n 20 --champion-lookback 20 --lookbacks 20,40,60 --max-drawdown 0.25
 ```
 
-## 6. 단계 B 구현 계획 (LOOP-02 일부)
+## 6. 단계 B 실행안
 
-`apps/kis-agent`를 고치지 않고 `src/momentum/agent` 안에서 구현한다.
-
-1. `CadencedStrategy(RankedStrategy)`에 `decision_cadence`(daily·weekly·monthly)를 둔다. `version`은 새 전략 식별자(`screened-ranking-cadence-v1`)로 계산하므로 기존 전략 버전은 바뀌지 않는다. 저장된 전략을 읽는 곳은 키에 따라 두 형식을 구분한다.
-2. `AgentPolicy.decision_cadences`(비어 있으면 기존 동작)로 주기 축을 사전 등록한다. 비어 있지 않으면 챔피언의 주기는 첫 값이고, 후보는 기간 × 순위 × 주기 격자다. 후보 수 상한(`candidate_budget`)은 그대로 적용한다.
-3. 평가기는 결정일에만 선정·주문 계획을 만든다. 결정일은 평가 첫 세션과, 직전 세션과 주(ISO 주)·월이 바뀌는 세션이다. 달력에서 미리 알 수 있는 값이라 미래 정보가 아니다. 결정일이 아닌 날에도 기업행동·평가·상각은 매일 처리한다. 기준 전략(현금·동일 비중)은 매일 그대로다.
-4. 승격 검증에서 쓰는 허용 후보 집합도 같은 제안기로 만든다.
+단계 A에서 고른 `top_n`에 대해 주기만 다른 연구를 둔다. 예: `top_n` 10이면 `--top-n 10 --decision-cadence weekly`와 `--decision-cadence monthly` 두 연구. 나머지 값은 단계 A와 같다(기간 20/40/60, 낙폭 25%).
