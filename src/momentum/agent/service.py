@@ -2164,6 +2164,14 @@ class ResearchAgent:
                     }
                 )
             except AgentError as exc:
+                if spec.version == champion.version:
+                    # Candidates are compared against the champion's folds; with
+                    # none, the loop used to die later on an empty zip and hide
+                    # this reason (explore run 3, 2026-10-21).
+                    raise AgentError(
+                        "Champion development failed; evidence cannot be "
+                        f"promoted: {exc}"
+                    ) from exc
                 trials.append(
                     {
                         "spec": asdict(spec),

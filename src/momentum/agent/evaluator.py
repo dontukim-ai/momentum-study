@@ -746,9 +746,13 @@ class CommonEvaluator:
                 turnover += quantity * price
                 trade_log.append({**event, "price": str(price), "fee": str(fee)})
             closes = {s: b.close for s, b in rows.items()}
-            if any(q and s not in closes for s, q in ledger.positions.items()):
+            unmarked = sorted(
+                s for s, q in ledger.positions.items() if q and s not in closes
+            )
+            if unmarked:
                 raise AgentError(
-                    "Missing held close; evaluation fails rather than inventing a mark"
+                    "Missing held close; evaluation fails rather than inventing a "
+                    f"mark ({day}: {', '.join(unmarked[:5])})"
                 )
             ledger.mark_to_market(closes, day)
             independent_nav = (
@@ -768,7 +772,11 @@ class CommonEvaluator:
             # cash, close-valued holdings and entitlements remain exact won.
             equity = ledger.nav.quantize(quantum, ROUND_HALF_UP)
             if equity != independent_nav or ledger.cash < 0:
-                raise AgentError("Independent ledger reconciliation failed")
+                raise AgentError(
+                    f"Independent ledger reconciliation failed ({day}: "
+                    f"equity {equity}, independent {independent_nav}, "
+                    f"cash {ledger.cash})"
+                )
             daily.append(float(equity / prior - 1))
             peak = max(peak, equity)
             drawdown = max(drawdown, 1 - equity / peak)
