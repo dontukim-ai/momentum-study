@@ -165,3 +165,28 @@ def test_read_input_declares_session_confirmed_securities(tmp_path):
     )
     with pytest.raises(AgentError, match="Unknown securities mode"):
         read_input(prices, securities, securities_mode="daily")
+
+
+def test_champion_development_failure_reports_its_reason(tmp_path):
+    # Explore run 3 stopped on "zip() argument 2 is longer than argument 1":
+    # the champion's folds failed while a candidate's succeeded, so the
+    # candidate had nothing to compare with. The champion's own reason must
+    # stop development before any candidate or budget is touched.
+    data = historical()
+    bars = [
+        replace(b, open=b.open + D(".5"), high=b.high + D(".5"))
+        if b.session == data.sessions[80]
+        else b
+        for b in data.snapshot.bars
+    ]
+    broken = replace(data, snapshot=Snapshot(bars))
+    store = Store(tmp_path / "agent.sqlite3")
+    agent = ResearchAgent(store)
+    agent.init("hist", historical_policy())
+    with pytest.raises(
+        AgentError, match="Champion development failed.*whole-won precision"
+    ):
+        agent.tick("hist", broken)
+    for table in ("agent_commitments", "agent_budget_entries", "agent_cycles"):
+        assert store.db.execute(f"SELECT count(*) FROM {table}").fetchone()[0] == 0
+    store.close()
