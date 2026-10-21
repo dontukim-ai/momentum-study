@@ -69,3 +69,12 @@ uv run python tools/historical_policy.py --out artifacts/explore-v2-n10/policy.j
 uv run python tools/historical_policy.py --out artifacts/explore-v2-n20/policy.json \
   --top-n 20 --champion-lookback 20 --lookbacks 20,40,60 --max-drawdown 0.25
 ```
+
+## 6. 단계 B 구현 계획 (LOOP-02 일부)
+
+`apps/kis-agent`를 고치지 않고 `src/momentum/agent` 안에서 구현한다.
+
+1. `CadencedStrategy(RankedStrategy)`에 `decision_cadence`(daily·weekly·monthly)를 둔다. `version`은 새 전략 식별자(`screened-ranking-cadence-v1`)로 계산하므로 기존 전략 버전은 바뀌지 않는다. 저장된 전략을 읽는 곳은 키에 따라 두 형식을 구분한다.
+2. `AgentPolicy.decision_cadences`(비어 있으면 기존 동작)로 주기 축을 사전 등록한다. 비어 있지 않으면 챔피언의 주기는 첫 값이고, 후보는 기간 × 순위 × 주기 격자다. 후보 수 상한(`candidate_budget`)은 그대로 적용한다.
+3. 평가기는 결정일에만 선정·주문 계획을 만든다. 결정일은 평가 첫 세션과, 직전 세션과 주(ISO 주)·월이 바뀌는 세션이다. 달력에서 미리 알 수 있는 값이라 미래 정보가 아니다. 결정일이 아닌 날에도 기업행동·평가·상각은 매일 처리한다. 기준 전략(현금·동일 비중)은 매일 그대로다.
+4. 승격 검증에서 쓰는 허용 후보 집합도 같은 제안기로 만든다.
