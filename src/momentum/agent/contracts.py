@@ -25,6 +25,23 @@ from .market import KRX, PROFILES
 # tick near the 1,000-KRW price floor and the gap above the default 5 bps.
 HISTORICAL_SPREAD_MIN_SLIPPAGE_BPS = Decimal("25")  # noqa: FURB157
 
+DECISION_CADENCES = ("daily", "weekly", "monthly")
+
+
+def is_decision_session(cadence: str, day: date, previous: date | None) -> bool:
+    """First evaluated session, then the first session of each ISO week/month.
+
+    Both come from the declared exchange calendar, so a decision day is known
+    before the decision; nothing about the day's prices is used.
+    """
+    if cadence == "daily" or previous is None:
+        return True
+    if cadence == "weekly":
+        return day.isocalendar()[:2] != previous.isocalendar()[:2]
+    if cadence == "monthly":
+        return (day.year, day.month) != (previous.year, previous.month)
+    raise AgentError("Invalid preregistered decision cadence")
+
 
 @lru_cache(maxsize=1)
 def build_id() -> str:
@@ -293,8 +310,14 @@ class AgentPolicy:
     degradation_drawdown: float | None = None
     demotion_checkpoints: int = 3
     execution_min_observation_sessions: int = 60
+    # How often every strategy of the study re-selects and rebalances (LOOP-02b,
+    # 2026-10-21). A study-level constant like the champion's holding count:
+    # candidates differ only in lookback and ranking within one cadence.
+    decision_cadence: str = "daily"
 
     def __post_init__(self) -> None:
+        if self.decision_cadence not in DECISION_CADENCES:
+            raise AgentError("Invalid preregistered decision cadence")
         if self.memory_policy not in ("none", "suppress_failed_final_v1"):
             raise AgentError("Invalid preregistered memory policy")
         if (

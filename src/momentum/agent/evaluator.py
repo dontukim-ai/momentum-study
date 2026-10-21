@@ -31,7 +31,7 @@ from trading_agent.strategy import fit_buy_quantity, rebalance_plan
 from momentum.execution.engine import Fill
 from momentum.ledger.ledger import CorporateAction, Ledger
 
-from .contracts import AgentPolicy, ResearchInput
+from .contracts import AgentPolicy, ResearchInput, is_decision_session
 from .market import profile
 
 BENCHMARKS = ("cash", "equal_weight_eligible")
@@ -232,6 +232,8 @@ class EvaluationContract:
     selection_policy_id: str
     nav_residual_absolute_tolerance: D
     benchmark_definitions: tuple[tuple[str, str], ...]
+    # Strategies only; benchmarks keep their daily definitions.
+    decision_cadence: str
 
     def to_dict(self) -> dict[str, Any]:
         result = asdict(self)
@@ -533,6 +535,7 @@ class CommonEvaluator:
             metrics_spec_version="reference-notional-tradability-v1;turnover-dual-v1;portfolio-diagnostics-v1;nav-residual-v1",
             selection_policy_id=digest(selection),
             nav_residual_absolute_tolerance=NAV_RESIDUAL_ABSOLUTE_TOLERANCE,
+            decision_cadence=p.decision_cadence,
             benchmark_definitions=tuple(
                 (kind, benchmark_version(kind, p.market_etf_symbol))
                 for kind in enabled_benchmarks(p)
@@ -586,27 +589,40 @@ class CommonEvaluator:
             }
             wallet = LedgerWallet(ledger)
             screening: dict[str, int] = {}
-            decision = (
-                benchmark_decision(
-                    benchmark,
-                    selector,
-                    view,
-                    market.decision_deadline(day),
-                    wallet,
-                    screening,
-                    etf_symbol=p.market_etf_symbol,
+            # Between decision sessions a strategy holds what it has: no
+            # selection, no orders. Corporate actions, marks and write-offs
+            # below still run every session.
+            decide = (
+                benchmark is not None
+                or changed
+                or is_decision_session(
+                    p.decision_cadence, day, None if i == selected[0] else prior_day
                 )
-                if benchmark
-                else selector(spec, view, market.decision_deadline(day), wallet)
             )
-            caps = {
-                s: int(h[-1].volume * market.max_volume_participation)
-                for s, h in view.histories.items()
-                if h and h[-1].session == prior_day
-            }
-            # No opening price is supplied to the original planning step.
-            plan = rebalance_plan(wallet, decision, marks, costs, caps)
-            desired_plan = rebalance_plan(wallet, decision, marks, costs, None)
+            plan: list[Any] = []
+            desired_plan: list[Any] = []
+            if decide:
+                decision = (
+                    benchmark_decision(
+                        benchmark,
+                        selector,
+                        view,
+                        market.decision_deadline(day),
+                        wallet,
+                        screening,
+                        etf_symbol=p.market_etf_symbol,
+                    )
+                    if benchmark
+                    else selector(spec, view, market.decision_deadline(day), wallet)
+                )
+                caps = {
+                    s: int(h[-1].volume * market.max_volume_participation)
+                    for s, h in view.histories.items()
+                    if h and h[-1].session == prior_day
+                }
+                # No opening price is supplied to the original planning step.
+                plan = rebalance_plan(wallet, decision, marks, costs, caps)
+                desired_plan = rebalance_plan(wallet, decision, marks, costs, None)
             capped_plan = {(s, side): q for s, side, q, _ in plan}
             actions = [
                 a
