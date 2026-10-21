@@ -96,6 +96,9 @@ class Ledger:
         # date) -> shares, with the per-share cost basis they will carry.
         self.pending_shares: dict[tuple[str, date], int] = {}
         self.pending_basis: dict[tuple[str, date], Decimal] = {}
+        # Positions written off at zero after a delisting: (security, date,
+        # shares including pending bonus shares, last mark carried until then).
+        self.written_off: list[tuple[str, date, int, Decimal]] = []
         self.fills: list[Fill] = []
         self.cfg: ExecutionCfg = cfg if cfg is not None else ExecutionCfg()
         self._nav: Decimal = self.cash
@@ -349,6 +352,28 @@ class Ledger:
                     self._nav += qty * (px - old_mark)
                 self.marks_asof[sid] = d
             self.marks[sid] = px
+
+    def write_off(self, security_id: str, d: date) -> tuple[int, Decimal] | None:
+        """Value a delisted holding at zero; there is no price to sell it at.
+
+        The last mark otherwise stands forever (mark_to_market), which would
+        keep a delisted company at its final traded price. Pending bonus shares
+        of the same security go with it. Returns (shares, last mark) or None.
+        """
+        shares = self.positions.get(security_id, 0) + self.pending_quantity(security_id)
+        if not shares:
+            return None
+        mark = self.marks.get(security_id)
+        if mark is None:
+            raise SpecUndefinedError(f"no mark price ever seen for held security {security_id}")
+        self._nav -= shares * mark
+        self.positions[security_id] = 0
+        for key in [k for k in self.pending_shares if k[0] == security_id]:
+            del self.pending_shares[key]
+            self.pending_basis.pop(key, None)
+        self.marks[security_id] = Decimal(0)
+        self.written_off.append((security_id, d, shares, mark))
+        return shares, mark
 
     # ---- one session --------------------------------------------------
     def step_session(

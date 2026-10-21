@@ -198,9 +198,18 @@ class LedgerWallet(Wallet):
     def __init__(self, ledger: Ledger):
         super().__init__(ledger.cash, {s: q for s, q in ledger.positions.items() if q})
         self.receivables = ledger.dividend_receivable
+        self.carried = carried_marks(ledger)
 
     def equity(self, marks: dict[str, D]) -> D:
-        return super().equity(marks) + self.receivables
+        # A holding without a bar today (halt, quarantined row) is valued at
+        # the ledger's last close, never at an invented price; it cannot trade
+        # either way because it has no open.
+        return super().equity({**self.carried, **marks}) + self.receivables
+
+
+def carried_marks(ledger: Ledger) -> dict[str, D]:
+    """Last known close of every held security (zero once written off)."""
+    return {s: ledger.marks[s] for s, q in ledger.positions.items() if q}
 
 
 @dataclass(frozen=True)
@@ -500,7 +509,7 @@ class CommonEvaluator:
                 f"prior_session {profile(p.market).observation_time:%H:%M} Asia/Seoul",
                 f"next_session {profile(p.market).execution_open:%H:%M} Asia/Seoul",
             ),
-            valuation_basis="mark_to_close_no_liquidation",
+            valuation_basis="mark_to_close_carry_last_delisted_zero",
             capital=(capital, selection.capital_limit, "min(nav, capital_limit)"),
             risk_limits=(
                 selection.max_gross,
@@ -568,9 +577,12 @@ class CommonEvaluator:
                 )
             view = replace(view, histories=histories)
             marks = {
-                s: h[-1].close
-                for s, h in view.histories.items()
-                if h and h[-1].session == prior_day
+                **carried_marks(ledger),
+                **{
+                    s: h[-1].close
+                    for s, h in view.histories.items()
+                    if h and h[-1].session == prior_day
+                },
             }
             wallet = LedgerWallet(ledger)
             screening: dict[str, int] = {}
@@ -708,7 +720,7 @@ class CommonEvaluator:
                         symbol,
                         quantity,
                         price,
-                        opens,
+                        {**carried_marks(ledger), **opens},
                         costs,
                         selection.max_gross,
                         selection.max_position,
@@ -746,15 +758,24 @@ class CommonEvaluator:
                 turnover += quantity * price
                 trade_log.append({**event, "price": str(price), "fee": str(fee)})
             closes = {s: b.close for s, b in rows.items()}
-            unmarked = sorted(
-                s for s, q in ledger.positions.items() if q and s not in closes
-            )
-            if unmarked:
-                raise AgentError(
-                    "Missing held close; evaluation fails rather than inventing a "
-                    f"mark ({day}: {', '.join(unmarked[:5])})"
-                )
             ledger.mark_to_market(closes, day)
+            # A held security that is delisted by this observation has no price
+            # left to sell at: write it off rather than carry its last close.
+            delisted = selector.securities.states(market.observed_at(day))
+            written_off = []
+            for symbol in sorted(s for s, q in ledger.positions.items() if q):
+                state = delisted.get(symbol)
+                if state is not None and state.status == "DELISTED":
+                    result = ledger.write_off(symbol, day)
+                    if result is not None:
+                        written_off.append(
+                            {
+                                "symbol": symbol,
+                                "shares": result[0],
+                                "last_mark": str(result[1]),
+                            }
+                        )
+            stale_value = ledger.stale_positions_value(day)
             independent_nav = (
                 ledger.cash + ledger.positions_value + ledger.dividend_receivable
             )
@@ -788,6 +809,8 @@ class CommonEvaluator:
                     "positions_value": str(ledger.positions_value),
                     "receivable": str(ledger.dividend_receivable),
                     "positions": dict(ledger.positions),
+                    "stale_value": str(stale_value),
+                    "written_off": written_off,
                     "nav_residual": str(residual),
                     "budget_candidates": screening.get("budget_candidates", 0),
                     "unaffordable_candidates": screening.get(
