@@ -541,7 +541,7 @@ class CommonEvaluator:
                 for kind in enabled_benchmarks(p)
             ),
         )
-        ledger = Ledger(capital, money_quantum=quantum)
+        ledger = Ledger(capital, money_quantum=quantum, fractional_split="drop")
         market = profile(p.market)
         selector = SelectionEngine(data.securities, p.logic.selection, costs)
         curve: list[dict[str, Any]] = []
@@ -827,6 +827,11 @@ class CommonEvaluator:
                     "positions": dict(ledger.positions),
                     "stale_value": str(stale_value),
                     "written_off": written_off,
+                    "fractions_dropped": [
+                        {"symbol": s, "shares_before": q, "fraction": str(f)}
+                        for s, d, q, f in ledger.fractions_dropped
+                        if d == day
+                    ],
                     "nav_residual": str(residual),
                     "budget_candidates": screening.get("budget_candidates", 0),
                     "unaffordable_candidates": screening.get(

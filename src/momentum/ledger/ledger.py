@@ -73,12 +73,21 @@ class CorporateAction(NamedTuple):
 
 class Ledger:
     def __init__(self, starting_cash: Decimal, cfg: ExecutionCfg | None = None,
-                 *, money_quantum: Decimal = CENT) -> None:
+                 *, money_quantum: Decimal = CENT, fractional_split: str = "raise") -> None:
         # Existing USD callers retain cent-exact behavior. Other research
         # currencies must explicitly select a decimal power, never a tick size.
         if not money_quantum.is_finite() or money_quantum <= 0 or money_quantum.normalize().as_tuple().digits != (1,):
             raise ValueError("money_quantum must be a positive decimal power of ten")
         self.money_quantum = money_quantum.normalize()
+        # A split that leaves a fraction of a share is undefined by default
+        # (rule: never guess). KRX research opts into "drop": round down and
+        # value the fraction at zero, the same rule as capital reductions
+        # (policy B, 2026-10-21 user decision for reverse splits).
+        if fractional_split not in ("raise", "drop"):
+            raise ValueError("fractional_split must be 'raise' or 'drop'")
+        self.fractional_split = fractional_split
+        # (security, date, shares before, fraction of a share dropped at zero)
+        self.fractions_dropped: list[tuple[str, date, int, Decimal]] = []
         self.cash: Decimal = Decimal(starting_cash).quantize(self.money_quantum, ROUND_HALF_UP)
         self.positions: dict[str, int] = {}
         self.cost_basis: dict[str, Decimal] = {}  # per share, includes trading cost
@@ -181,10 +190,25 @@ class Ledger:
                     continue
                 new_qty = qty * ca.split_ratio
                 if new_qty != new_qty.to_integral_value():
-                    raise SpecUndefinedError(
-                        f"split of {qty} shares by {ca.split_ratio} is not a whole "
-                        f"number of shares for {ca.security_id}"
-                    )
+                    if self.fractional_split != "drop":
+                        raise SpecUndefinedError(
+                            f"split of {qty} shares by {ca.split_ratio} is not a whole "
+                            f"number of shares for {ca.security_id}"
+                        )
+                    whole = new_qty.to_integral_value(ROUND_FLOOR)
+                    fraction = new_qty - whole
+                    mark = self.marks.get(ca.security_id)
+                    if mark is not None:
+                        # Marks rescale below; only the dropped fraction loses value.
+                        self._nav -= fraction * mark / ca.split_ratio
+                    self.fractions_dropped.append((ca.security_id, d, qty, fraction))
+                    new_qty = whole
+                    if not new_qty:
+                        self.positions[ca.security_id] = 0
+                        self.cost_basis.pop(ca.security_id, None)
+                        self.marks.pop(ca.security_id, None)
+                        self.marks_asof.pop(ca.security_id, None)
+                        continue
                 self.positions[ca.security_id] = int(new_qty)
                 basis = self.cost_basis.get(ca.security_id)
                 if basis is not None:

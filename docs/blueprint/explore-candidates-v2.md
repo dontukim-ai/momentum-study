@@ -73,3 +73,10 @@ uv run python tools/historical_policy.py --out artifacts/explore-v2-n20/policy.j
 ## 6. 단계 B 실행안
 
 단계 A에서 고른 `top_n`에 대해 주기만 다른 연구를 둔다. 예: `top_n` 10이면 `--top-n 10 --decision-cadence weekly`와 `--decision-cadence monthly` 두 연구. 나머지 값은 단계 A와 같다(기간 20/40/60, 낙폭 25%).
+
+## 7. 단계 A 결과 기록 (E1, 참고용)
+
+| 연구 | 결과 |
+| --- | --- |
+| n10 (`explore-v2-n10`) | 완료. 기존 전략 유지. 신뢰도 게이트 하나만 실패. 개발 낙폭 10~24%, 9개 후보 모두 개발 점수 양수. 도전자 risk_adjusted/20 선택. 검증 구간: 도전자 +2.6%, 챔피언 +0.2%. 전진 관찰(2020-12): 챔피언 −17.3%(원인 미확인) |
+| n20 (`explore-v2-n20`) | **무효.** 검증 구간 평가 중 주식병합 단주로 원장이 멈췄다(data-sources §4.3). 예산 1회 소비, 결과 없음. FIN-02n 반영 후 새 DB로 다시 실행한다 |
