@@ -12,6 +12,10 @@ fixes the champion's holding count and the grid before results:
 
     uv run python tools/historical_policy.py --out ... --top-n 10 \
         --champion-lookback 20 --lookbacks 20,40,60 --max-drawdown 0.25
+
+RES-01b adds a preregistered market ETF benchmark to a stock-only universe:
+
+    ... --market-etf 069500 --allowed-types STOCK
 """
 
 from __future__ import annotations
@@ -37,12 +41,18 @@ def historical_policy(
     lookbacks: tuple[int, ...] | None = None,
     max_drawdown: float | None = None,
     decision_cadence: str = "daily",
+    market_etf_symbol: str | None = None,
+    allowed_types: tuple[str, ...] | None = None,
 ) -> AgentPolicy:
     p = AgentPolicy()
     logic = replace(
         p.logic,
         costs=replace(p.logic.costs, slippage_bps=HISTORICAL_SPREAD_MIN_SLIPPAGE_BPS),
-        selection=replace(p.logic.selection, spread_mode="historical_unavailable"),
+        selection=replace(
+            p.logic.selection,
+            spread_mode="historical_unavailable",
+            allowed_types=allowed_types or p.logic.selection.allowed_types,
+        ),
     )
     champion = logic.champion
     if top_n is not None:
@@ -59,7 +69,12 @@ def historical_policy(
         if max_drawdown is not None
         else logic.evaluation,
     )
-    return replace(p, logic=logic, decision_cadence=decision_cadence)
+    return replace(
+        p,
+        logic=logic,
+        decision_cadence=decision_cadence,
+        market_etf_symbol=market_etf_symbol,
+    )
 
 
 def main() -> None:
@@ -72,6 +87,8 @@ def main() -> None:
     parser.add_argument(
         "--decision-cadence", choices=("daily", "weekly", "monthly"), default="daily"
     )
+    parser.add_argument("--market-etf", help="preregistered benchmark ETF, e.g. 069500")
+    parser.add_argument("--allowed-types", help="strategy universe, e.g. STOCK")
     args = parser.parse_args()
     policy = historical_policy(
         top_n=args.top_n,
@@ -81,6 +98,10 @@ def main() -> None:
         else None,
         max_drawdown=args.max_drawdown,
         decision_cadence=args.decision_cadence,
+        market_etf_symbol=args.market_etf,
+        allowed_types=tuple(args.allowed_types.split(","))
+        if args.allowed_types
+        else None,
     )
     raw = json.loads(canonical(policy))
     if policy_from_dict(raw) != policy:
@@ -94,7 +115,9 @@ def main() -> None:
         f"/top{policy.logic.champion.top_n}/gross{policy.logic.champion.gross_weight} "
         f"lookbacks={list(policy.logic.lookbacks)} "
         f"max_drawdown={policy.logic.evaluation.max_drawdown} "
-        f"decision_cadence={policy.decision_cadence}"
+        f"decision_cadence={policy.decision_cadence} "
+        f"market_etf={policy.market_etf_symbol} "
+        f"allowed_types={list(policy.logic.selection.allowed_types)}"
     )
 
 

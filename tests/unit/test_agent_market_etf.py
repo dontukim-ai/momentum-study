@@ -233,3 +233,23 @@ def test_missing_etf_is_unavailable_in_report_instead_of_a_zero_return(tmp_path)
         assert report["status"]["revision"] == 0
     finally:
         store.close()
+
+
+def test_stock_only_universe_keeps_its_etf_benchmark_and_skips_the_etf():
+    # RES-01b: the strategy universe is preregistered as stocks only so adding
+    # the benchmark ETF to the input cannot change what the strategy buys.
+    data, p, spec = etf_market()
+    stock_only = replace(
+        p,
+        logic=replace(
+            p.logic,
+            selection=replace(p.logic.selection, allowed_types=("STOCK",)),
+        ),
+    )
+    reference = CommonEvaluator(stock_only).evaluate_benchmark(
+        data, "market_etf", data.sessions[70], data.sessions[71]
+    )
+    assert {t["symbol"] for t in reference.trade_log} == {"FUND"}
+    strategy = evaluate(data, stock_only, spec)
+    assert "FUND" not in {t["symbol"] for t in strategy.trade_log}
+    require_same_contract(strategy, reference)

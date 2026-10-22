@@ -50,9 +50,20 @@ class StatusEvent:
 
 
 def status_events(
-    root: Path, sessions: tuple[date, ...], kind: str = "stock"
+    root: Path,
+    sessions: tuple[date, ...],
+    kind: str = "stock",
+    *,
+    market: str | None = None,
+    symbols: frozenset[str] | None = None,
 ) -> list[StatusEvent]:
-    """``sessions`` are confirmed observed sessions (tools/fsc_calendar.py)."""
+    """``sessions`` are confirmed observed sessions (tools/fsc_calendar.py).
+
+    ETF quotes carry no ``mrktCtg``; their caller declares the market (every
+    KRX ETF is listed on the KOSPI market) and limits the symbols it vouches for.
+    """
+    if market is not None and market not in MARKETS:
+        raise SpecUndefinedError(f"unknown market {market!r}")
     daily: dict[str, dict[date, tuple[str, str]]] = {}
     for day in sorted(sessions):
         rows = _rows(Path(root) / kind / day.isoformat(), day)
@@ -60,34 +71,34 @@ def status_events(
             raise SpecUndefinedError(f"session {day} is not collected")
         for row in rows:
             symbol = str(row.get("srtnCd") or "")
-            if not symbol:
+            if not symbol or symbols is not None and symbol not in symbols:
                 continue
-            market = str(row.get("mrktCtg") or "")
-            if market not in MARKETS:
-                raise SpecUndefinedError(f"{day} {symbol}: unknown market {market!r}")
+            listed = market or str(row.get("mrktCtg") or "")
+            if listed not in MARKETS:
+                raise SpecUndefinedError(f"{day} {symbol}: unknown market {listed!r}")
             halted = _decimal(row.get("mkp")) == Decimal(0) and _decimal(
                 row.get("trqu")
             ) == Decimal(0)
             daily.setdefault(symbol, {})[day] = (
                 "SUSPENDED" if halted else "NORMAL",
-                market,
+                listed,
             )
     ordered = sorted(sessions)
     events: list[StatusEvent] = []
     for symbol, seen in sorted(daily.items()):
         first, last = min(seen), max(seen)
         previous: tuple[str, str] | None = None
-        market = seen[first][1]
+        current = seen[first][1]
         for day in ordered:
             if day < first:
                 continue
             if day in seen:
                 state = seen[day]
-                market = state[1]
+                current = state[1]
             elif day > last:
-                state = ("DELISTED", market)
+                state = ("DELISTED", current)
             else:
-                state = ("SUSPENDED", market)
+                state = ("SUSPENDED", current)
             if state != previous:
                 events.append(StatusEvent(symbol, day, state[0], state[1]))
                 previous = state
