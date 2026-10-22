@@ -143,6 +143,9 @@ uv run python tools/historical_policy.py --out artifacts/explore-v2-n20/policy.j
 
 ### 10.1 실행 관찰: 예산 소진 뒤 관찰 장부 계산이 길다
 
-마지막 사이클이 끝난 뒤(23:39 KST) 프로세스가 30분 넘게 결과 파일을 쓰지 않고 계산했다. 예산이 남아 있으면 관찰 장부는 다음 검증 구간 직전에서 끝나지만, 예산을 다 쓰면 첫 검증 구간 다음 날부터 데이터 끝(2024-06-28)까지 이어진다. `_isolated_checkpoints`는 20세션 점검 창마다 관찰 시작점부터 다시 평가하므로 계산량이 기간의 제곱에 비례한다. 연구 판정(사이클 결과)은 이미 DB에 확정돼 있어 영향이 없다. 사용자 결정으로 이 프로세스는 SIGINT로 멈추기로 했다(관찰 장부 미완료). 실제 종료 여부는 맥 세션 보고로 확인한다.
+마지막 사이클이 끝난 뒤(23:39 KST) 프로세스가 30분 넘게 결과 파일을 쓰지 않고 계산했다. 예산이 남아 있으면 관찰 장부는 다음 검증 구간 직전에서 끝나지만, 예산을 다 쓰면 첫 검증 구간 다음 날부터 데이터 끝(2024-06-28)까지 이어진다. `_isolated_checkpoints`는 20세션 점검 창마다 관찰 시작점부터 다시 평가하므로 계산량이 기간의 제곱에 비례한다. 연구 판정(사이클 결과)은 이미 DB에 확정돼 있어 영향이 없다. 사용자 결정으로 2026-10-23 00:53 KST에 `kill -INT`를 보냈으나 멈추지 않았고, 00:54:51 `kill -TERM`으로 종료했다(exit 143, 경과 8시간 46분, 최대 RSS 5.5GB). 관찰 checkpoint는 8행까지 저장됐고 8사이클 판정은 COMPLETE 그대로다.
+
+- SIGINT가 듣지 않은 이유: `nohup ... &`로 띄운 비대화형 백그라운드 작업은 SIGINT가 무시 상태로 시작하고, 파이썬은 그 경우 KeyboardInterrupt 처리기를 설치하지 않는다. 그래서 `STOPPED_BY_OPERATOR` 기록과 lease 해제가 없었다.
+- 함께 드러난 결함(OPS-01): `worker.json`의 heartbeat가 시작 시각(16:08)에서 바뀌지 않았다. heartbeat는 tick이 끝나야 갱신되는데 이번 tick이 8시간을 넘었다. lease는 2분 뒤 만료로 보이므로, 그동안 다른 worker가 같은 연구를 가져갈 수 있었다(이번에는 다른 worker가 없었다).
 
 원인은 세 겹이었다. (1) checkpoint 창마다 원점부터 재평가, (2) `trading_agent.data.Snapshot`이 생성 때 종목 수 × 전체 행을 훑고 prefix·fingerprint마다 전체 행을 다시 해시, (3) 평가기가 매 세션 종목별 전체 이력을 집합으로 만듦. LOOP-05c가 셋을 결과·해시 동일 조건으로 고쳤다(`src/momentum/agent/snapshot.py`, `_isolated_checkpoints`, 평가기). 합성 300종목×300세션에서 같은 결과로 평가 약 10배, fingerprint 약 4배 빨라졌다. 가격 CSV를 처음 읽을 때 한 번 만드는 공용 Snapshot 비용은 그대로다(`apps/kis-agent`는 전략 버전 해시에 들어가므로 바꾸지 않았다).
