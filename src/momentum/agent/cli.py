@@ -36,6 +36,7 @@ from .contracts import (
 )
 from .quality import assess, screen_price_rows
 from .service import ResearchAgent
+from .snapshot import IndexedSnapshot
 from .worker import WorkerMonitor, worker_status
 
 
@@ -98,7 +99,7 @@ def read_input(
         if sessions
         else ()
     )
-    snapshot = read_csv(prices, require_complete=False)
+    snapshot = IndexedSnapshot.of(read_csv(prices, require_complete=False))
     history = read_security_history(securities)
     if securities_mode == "session-confirmed":
         history = SessionConfirmedSecurities(

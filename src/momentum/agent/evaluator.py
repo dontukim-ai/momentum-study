@@ -6,6 +6,7 @@ money, positions, corporate actions and independently reconciled NAV.
 
 from __future__ import annotations
 
+import bisect
 import hashlib
 import math
 from dataclasses import asdict, dataclass, replace
@@ -33,6 +34,7 @@ from momentum.ledger.ledger import CorporateAction, Ledger
 
 from .contracts import AgentPolicy, ResearchInput, is_decision_session
 from .market import profile
+from .snapshot import IndexedSnapshot
 
 BENCHMARKS = ("cash", "equal_weight_eligible")
 NAV_RESIDUAL_ABSOLUTE_TOLERANCE = D("1e-9")
@@ -490,10 +492,15 @@ class CommonEvaluator:
             )
         # Fractional KRW price inputs need an explicit tick/price model, never
         # silent rounding of the underlying history into a convenient fixture.
-        if any(
-            v != v.quantize(quantum)
-            for b in data.snapshot.bars
-            for v in (b.open, b.close, b.high, b.low)
+        snapshot = data.snapshot
+        if (
+            not snapshot.whole_prices(quantum)
+            if isinstance(snapshot, IndexedSnapshot)
+            else any(
+                v != v.quantize(quantum)
+                for b in snapshot.bars
+                for v in (b.open, b.close, b.high, b.low)
+            )
         ):
             raise AgentError(
                 "KRW raw prices must match the declared whole-won precision"
@@ -569,12 +576,19 @@ class CommonEvaluator:
             expected = set(data.sessions[max(0, i - required) : i])
             histories = {}
             for symbol, history in view.histories.items():
-                missing = expected - {b.session for b in history}
+                # Expected sessions are the latest ones up to prior_day, so only
+                # the last len(expected) bars can cover them; scanning the whole
+                # history every session made long evaluations quadratic.
+                missing = expected - {b.session for b in history[-len(expected) :]}
                 # Keep the actual contiguous tail, including a current mark
                 # for a holding. An absent exchange session cannot disappear
                 # from the observation window just because every feed missed it.
                 histories[symbol] = (
-                    tuple(b for b in history if b.session > max(missing))
+                    history[
+                        bisect.bisect_right(
+                            history, max(missing), key=lambda b: b.session
+                        ) :
+                    ]
                     if missing
                     else history
                 )

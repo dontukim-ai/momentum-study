@@ -20,6 +20,7 @@ from trading_agent.selection import SecurityHistory, SecurityState
 from momentum.ledger.ledger import CorporateAction
 
 from .market import KRX, PROFILES
+from .snapshot import IndexedSnapshot
 
 # Preregistered before results: conservatively covers at least half a 1-KRW
 # tick near the 1,000-KRW price floor and the gap above the default 5 bps.
@@ -260,7 +261,9 @@ class ResearchInput:
     def prefix(self, end: date) -> ResearchInput:
         clock = KRX.observed_at(end)
         return ResearchInput(
-            Snapshot(
+            self.snapshot.until(end)
+            if isinstance(self.snapshot, IndexedSnapshot)
+            else Snapshot(
                 [b for b in self.snapshot.bars if b.session <= end],
                 require_complete=False,
             ),
@@ -277,6 +280,14 @@ class ResearchInput:
         )
 
     def fingerprint(self, end: date) -> str:
+        # Every evaluation and checkpoint asks for the same few ends; the
+        # input is immutable, so each fingerprint is computed once.
+        cache: dict[date, str] = self.__dict__.setdefault("_fingerprints", {})
+        if end not in cache:
+            cache[end] = self._fingerprint(end)
+        return cache[end]
+
+    def _fingerprint(self, end: date) -> str:
         prefix = self.prefix(end)
         content: dict[str, Any] = {
             "prices": prefix.snapshot.id,
