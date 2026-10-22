@@ -5,6 +5,11 @@ probing a PID is not portable (on Windows ``os.kill(pid, 0)`` sends CTRL_C).
 A worker that stops renewing is presumed dead after three intervals (minimum
 two minutes); a new worker may then take over and records whom it replaced.
 
+A tick can run for hours (the 8-cycle explore run spent 8.7 h in one tick), so
+while it runs a separate connection renews the lease every interval (OPS-01b);
+otherwise the lease looked expired after two minutes and a second worker could
+have taken over a study that was still being written.
+
 Failures are never retried here. An interrupted final evaluation needs an
 operator decision (``recover`` or ``abandon``), and any other error stops the
 worker with its reason recorded, so a restart is always a deliberate act.
@@ -14,8 +19,11 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
+import threading
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -59,6 +67,8 @@ class WorkerMonitor:
         self.owner = uuid.uuid4().hex
         self.db.executescript(LEASE_SCHEMA)
         self.state: dict[str, Any] = {}
+        # The renewal thread and the main thread both rewrite the state file.
+        self._lock = threading.Lock()
 
     def _now(self) -> datetime:
         return aware(self.clock())
@@ -100,7 +110,8 @@ class WorkerMonitor:
             "operator_action": None,
             "orders_submitted": 0,
         }
-        _write(self.path, self.state)
+        with self._lock:
+            _write(self.path, self.state)
 
     def _renew(self, now: datetime) -> None:
         with self.store.transaction():
@@ -128,6 +139,12 @@ class WorkerMonitor:
             }
             if result.get("input_bundle"):
                 last_input["bundle_id"] = result["input_bundle"].get("bundle_id")
+        with self._lock:
+            self._after_tick(now, result, last_input)
+
+    def _after_tick(
+        self, now: datetime, result: dict[str, Any], last_input: dict[str, Any] | None
+    ) -> None:
         waiting = bool(result.get("waiting_for_data"))
         self.state.update(
             heartbeat_at=now.isoformat(),
@@ -144,6 +161,50 @@ class WorkerMonitor:
         )
         _write(self.path, self.state)
 
+    @contextmanager
+    def beating(self) -> Iterator[None]:
+        """Keep the lease alive while long work runs in this thread."""
+        if self.store.path == ":memory:":
+            yield
+            return
+        stop = threading.Event()
+        thread = threading.Thread(
+            target=self._beat, args=(stop,), name="worker-heartbeat", daemon=True
+        )
+        thread.start()
+        try:
+            yield
+        finally:
+            stop.set()
+            thread.join()
+
+    def _beat(self, stop: threading.Event) -> None:
+        # sqlite3 connections belong to one thread; WAL lets this short update
+        # interleave with the main connection's transactions.
+        db = sqlite3.connect(self.store.path, isolation_level=None, timeout=10)
+        try:
+            while not stop.wait(self.interval):
+                now = self._now()
+                try:
+                    renewed = db.execute(
+                        "UPDATE agent_worker_leases SET heartbeat_at=? WHERE study=? AND owner=?",
+                        (now.isoformat(), self.study, self.owner),
+                    ).rowcount
+                except sqlite3.Error:
+                    continue  # Busy: the next pulse retries well within the lease.
+                if renewed != 1:
+                    return  # Taken over; the main thread's next renewal stops it.
+                with self._lock:
+                    self.state.update(
+                        heartbeat_at=now.isoformat(),
+                        state="RUNNING"
+                        if self.state.get("state") == "STARTING"
+                        else self.state.get("state"),
+                    )
+                    _write(self.path, self.state)
+        finally:
+            db.close()
+
     def _release(self) -> None:
         with self.store.transaction():
             self.db.execute(
@@ -153,8 +214,9 @@ class WorkerMonitor:
 
     def stopped(self, state: str) -> None:
         self._release()
-        self.state.update(state=state, heartbeat_at=self._now().isoformat())
-        _write(self.path, self.state)
+        with self._lock:
+            self.state.update(state=state, heartbeat_at=self._now().isoformat())
+            _write(self.path, self.state)
 
     def failed(self, error: BaseException) -> None:
         if isinstance(error, KeyboardInterrupt):
@@ -164,24 +226,25 @@ class WorkerMonitor:
         try:
             self._release()
         finally:
-            self.state.update(
-                state="NEEDS_OPERATOR" if interrupted else "STOPPED_ERROR",
-                heartbeat_at=self._now().isoformat(),
-                last_error={
-                    "type": type(error).__name__,
-                    "message": str(error),
-                    "at": self._now().isoformat(),
-                },
-                operator_action=(
-                    "An interrupted final evaluation must not be re-run blindly: "
-                    "run `momentum-agent recover --cycle-id ID` if its evidence is "
-                    "complete, or `momentum-agent abandon --cycle-id ID --reason ...` "
-                    "after stopping the worker."
-                    if interrupted
-                    else None
-                ),
-            )
-            _write(self.path, self.state)
+            with self._lock:
+                self.state.update(
+                    state="NEEDS_OPERATOR" if interrupted else "STOPPED_ERROR",
+                    heartbeat_at=self._now().isoformat(),
+                    last_error={
+                        "type": type(error).__name__,
+                        "message": str(error),
+                        "at": self._now().isoformat(),
+                    },
+                    operator_action=(
+                        "An interrupted final evaluation must not be re-run blindly: "
+                        "run `momentum-agent recover --cycle-id ID` if its evidence is "
+                        "complete, or `momentum-agent abandon --cycle-id ID --reason ...` "
+                        "after stopping the worker."
+                        if interrupted
+                        else None
+                    ),
+                )
+                _write(self.path, self.state)
 
 
 def worker_status(

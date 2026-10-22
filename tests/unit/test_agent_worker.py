@@ -248,3 +248,66 @@ def test_operator_interrupt_is_a_clean_stop(tmp_path):
     state = read(tmp_path)
     assert state["state"] == "STOPPED_BY_OPERATOR" and state["last_error"] is None
     assert worker_status(store, "s", tmp_path / "out" / "worker.json")["lease"] is None
+
+
+def test_lease_is_renewed_while_a_long_tick_runs(tmp_path):
+    # OPS-01b: the 8-cycle explore worker spent 8.7 h in one tick with its
+    # heartbeat frozen at start, so its lease looked expired after 2 minutes.
+    import time
+
+    store, clock = Store(tmp_path / "db.sqlite3"), Clock()
+    first = WorkerMonitor(
+        store, "s", tmp_path / "out" / "worker.json", clock=clock, interval=0.05
+    )
+    seen = {}
+
+    class SlowAgent:
+        def tick(self, study, data, *, max_cycles):
+            clock.now += timedelta(minutes=3)
+            time.sleep(0.4)
+            other = Store(tmp_path / "db.sqlite3")
+            try:
+                with pytest.raises(AgentError, match="Another worker holds"):
+                    WorkerMonitor(
+                        other, "s", tmp_path / "other.json", clock=clock, interval=0.05
+                    ).start()
+            finally:
+                other.close()
+            seen["state"] = read(tmp_path)
+            return result()
+
+    watch(
+        SlowAgent(),
+        "s",
+        lambda: Data(date(2026, 3, 2)),
+        tmp_path / "out",
+        max_cycles=1,
+        max_ticks=1,
+        pause=lambda s: None,
+        monitor=first,
+    )
+    assert seen["state"]["state"] == "RUNNING"
+    assert seen["state"]["heartbeat_at"] == clock.now.isoformat()
+    assert read(tmp_path)["state"] == "STOPPED"
+    assert worker_status(store, "s", tmp_path / "out" / "worker.json")["lease"] is None
+
+
+@pytest.mark.parametrize("name", ["SIGTERM", "SIGINT"])
+def test_stop_signals_mean_operator_stop_even_when_ignored(name):
+    import signal
+
+    from momentum.agent.cli import install_stop_signals
+
+    number = getattr(signal, name)
+    saved = {s: signal.getsignal(s) for s in (signal.SIGTERM, signal.SIGINT)}
+    try:
+        # `nohup ... &` starts the worker with SIGINT ignored.
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        install_stop_signals()
+        with pytest.raises(KeyboardInterrupt):
+            os.kill(os.getpid(), number)
+            for _ in range(100):  # Delivery happens between bytecodes.
+                pass
+    finally:
+        for s, handler in saved.items():
+            signal.signal(s, handler)
