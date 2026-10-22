@@ -149,3 +149,17 @@ uv run python tools/historical_policy.py --out artifacts/explore-v2-n20/policy.j
 - 함께 드러난 결함(OPS-01): `worker.json`의 heartbeat가 시작 시각(16:08)에서 바뀌지 않았다. heartbeat는 tick이 끝나야 갱신되는데 이번 tick이 8시간을 넘었다. lease는 2분 뒤 만료로 보이므로, 그동안 다른 worker가 같은 연구를 가져갈 수 있었다(이번에는 다른 worker가 없었다).
 
 원인은 세 겹이었다. (1) checkpoint 창마다 원점부터 재평가, (2) `trading_agent.data.Snapshot`이 생성 때 종목 수 × 전체 행을 훑고 prefix·fingerprint마다 전체 행을 다시 해시, (3) 평가기가 매 세션 종목별 전체 이력을 집합으로 만듦. LOOP-05c가 셋을 결과·해시 동일 조건으로 고쳤다(`src/momentum/agent/snapshot.py`, `_isolated_checkpoints`, 평가기). 합성 300종목×300세션에서 같은 결과로 평가 약 10배, fingerprint 약 4배 빨라졌다. 가격 CSV를 처음 읽을 때 한 번 만드는 공용 Snapshot 비용은 그대로다(`apps/kis-agent`는 전략 버전 해시에 들어가므로 바꾸지 않았다).
+
+### 10.2 LOOP-05c·OPS-01b 실데이터 확인 (`explore-v2d-speed-monthly`, 2026-10-23)
+
+같은 정책(정책 파일 diff 동일)으로 새 연구 DB를 만들어 1사이클을 돌렸다(빌드 34f7245).
+
+| 항목 | v2c 매월 1사이클 (이전) | v2d 1사이클 (이후) |
+| --- | --- | --- |
+| 실행 시간 | 2,286s | 211s |
+| 최대 메모리 | 4.64GB | 4.22GB |
+| 사이클 0 결과 | 챔피언 −1.2% / 8.6% / 2.478998, risk_adjusted/40 +2.2% / 6.1% / 2.15759, 신뢰도 실패, 유지 | 같음 |
+
+- 결과는 개발·검증 구간, 선택 후보, 실패 게이트, 수익률·낙폭·회전율까지 모두 같았다.
+- heartbeat는 계산 중에도 약 30초 간격으로 갱신됐고 `worker.json`과 lease 값이 매번 일치했다. 종료 뒤 lease는 해제됐다.
+- 운영 메모: WAL DB는 프로세스 종료 뒤 `-wal/-shm`이 정리되면 `sqlite3 -readonly`·`mode=ro` 읽기가 `unable to open database file`로 실패할 수 있다. 원본을 건드리지 않으려면 `immutable=1` URI로 읽거나 복사본을 읽는다.
