@@ -141,8 +141,9 @@ class SessionConfirmedSecurities(SecurityHistory):
     daily quote scan: a state without a newer event still held on every later
     session in ``sessions``. Selection judges freshness by ``effective_at``, so
     a carried-forward state is shown as effective at the open of the latest
-    session whose observation has passed, exactly what a daily snapshot file
-    would contain. Nothing is reconfirmed past the last declared session.
+    session whose observation has passed, or of the next session once its open
+    has come, exactly what a daily pre-open snapshot would contain. Nothing is
+    reconfirmed past the last declared session.
     """
 
     def __init__(self, records: list[SecurityState], sessions: tuple[date, ...]):
@@ -169,6 +170,16 @@ class SessionConfirmedSecurities(SecurityHistory):
         index = bisect.bisect_right(self._observed, at)
         if index:
             confirmed = KRX.open_at(self.sessions[index - 1])
+            # The last observed state carries to the next session's open, as a
+            # pre-open status list would; otherwise a Monday open looked 72 h
+            # stale after Friday and every order was cancelled (explore v2
+            # weekly run, 2026-10-22). Only the confirmation time moves: the
+            # content is still what was published by ``at``, and a stock that
+            # halts that day has no open, so nothing can fill.
+            if index < len(self.sessions):
+                upcoming = KRX.open_at(self.sessions[index])
+                if at >= upcoming:
+                    confirmed = upcoming
             result = {
                 symbol: replace(state, effective_at=confirmed)
                 if state.effective_at < confirmed
