@@ -102,9 +102,12 @@ def test_change_only_states_are_reconfirmed_each_observed_session():
     sessions = data.sessions
     states = data.securities.states(KRX.observed_at(sessions[10]))
     assert states["HIST"].effective_at == KRX.open_at(sessions[10])
-    # Before that session's observation only the previous session is confirmed.
+    # At that session's open the previous observation carries to this open
+    # (LOOP-01d); before the open only the previous session is confirmed.
     early = data.securities.states(KRX.open_at(sessions[10]))
-    assert early["HIST"].effective_at == KRX.open_at(sessions[9])
+    assert early["HIST"].effective_at == KRX.open_at(sessions[10])
+    before = data.securities.states(KRX.observed_at(sessions[9]))
+    assert before["HIST"].effective_at == KRX.open_at(sessions[9])
     prefix = data.prefix(sessions[5])
     assert isinstance(prefix.securities, SessionConfirmedSecurities)
     late = prefix.securities.states(KRX.observed_at(sessions[20]))
@@ -190,3 +193,23 @@ def test_champion_development_failure_reports_its_reason(tmp_path):
     for table in ("agent_commitments", "agent_budget_entries", "agent_cycles"):
         assert store.db.execute(f"SELECT count(*) FROM {table}").fetchone()[0] == 0
     store.close()
+
+
+def test_monday_open_after_friday_is_tradable():
+    # Explore v2 weekly (2026-10-22): every order on the first session of a
+    # week was cancelled as a 72-hour-old security state.
+    from trading_agent.selection import SelectionEngine
+
+    data = historical(30)
+    sessions = data.sessions
+    monday = next(
+        d
+        for k, d in enumerate(sessions)
+        if k and d.weekday() == 0 and sessions[k - 1].weekday() == 4
+    )
+    p = historical_policy()
+    engine = SelectionEngine(data.securities, p.logic.selection, p.logic.costs)
+    assert engine.execution_allowed("HIST", "BUY", KRX.open_at(monday))
+    plain = historical(30, confirmed=False)
+    stale = SelectionEngine(plain.securities, p.logic.selection, p.logic.costs)
+    assert not stale.execution_allowed("HIST", "BUY", KRX.open_at(monday))

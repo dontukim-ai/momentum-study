@@ -60,6 +60,11 @@ def test_strategy_trades_only_on_decision_sessions(cadence):
     }
     planned = {e["session"] for e in result.execution_events}
     assert result.trade_log
+    # Decisions on the first session of a week (mostly Mondays) must fill.
+    assert not any(
+        e["status"] == "cancelled_security_state" for e in result.execution_events
+    )
+    assert {t["session"] for t in result.trade_log} - {evaluated[0].isoformat()}
     assert planned <= allowed
     assert {t["session"] for t in result.trade_log} <= allowed
     # Holdings are still valued every session.
