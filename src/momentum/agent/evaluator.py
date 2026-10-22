@@ -550,7 +550,15 @@ class CommonEvaluator:
         )
         ledger = Ledger(capital, money_quantum=quantum, fractional_split="drop")
         market = profile(p.market)
-        selector = SelectionEngine(data.securities, p.logic.selection, costs)
+        selection_policy = p.logic.selection
+        if benchmark == "market_etf" and "ETF" not in selection_policy.allowed_types:
+            # A stock-only strategy universe must not hide its own benchmark from
+            # screening or execution; every other filter still applies (RES-01b).
+            selection_policy = replace(
+                selection_policy,
+                allowed_types=(*selection_policy.allowed_types, "ETF"),
+            )
+        selector = SelectionEngine(data.securities, selection_policy, costs)
         curve: list[dict[str, Any]] = []
         trade_log: list[dict[str, Any]] = []
         events: list[dict[str, Any]] = []
