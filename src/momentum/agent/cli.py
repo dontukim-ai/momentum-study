@@ -8,11 +8,13 @@ import hashlib
 import json
 import os
 import shutil
+import signal
 import sqlite3
 import sys
 import tempfile
 import time
 from collections.abc import Callable
+from contextlib import nullcontext
 from datetime import UTC, date, datetime
 from decimal import Decimal as D
 from pathlib import Path
@@ -146,8 +148,9 @@ def watch(
         while max_ticks is None or tick < max_ticks:
             # Errors stop the worker; an interrupted final evaluation is never
             # blindly retried. Complete evaluation evidence has an explicit recover.
-            data = provider()
-            result = agent.tick(study, data, max_cycles=max_cycles)
+            with monitor.beating() if monitor is not None else nullcontext():
+                data = provider()
+                result = agent.tick(study, data, max_cycles=max_cycles)
             save_json(output / "agent.json", result)
             tick += 1
             if monitor is not None:
@@ -524,7 +527,23 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         store.close()
 
 
+def _operator_stop(signum: int, frame: Any) -> None:
+    raise KeyboardInterrupt
+
+
+def install_stop_signals() -> None:
+    """SIGTERM and SIGINT both mean an operator stop (OPS-01b).
+
+    A shell starts `nohup ... &` jobs with SIGINT ignored, and Python then never
+    installs its KeyboardInterrupt handler: `kill -INT` did nothing to the
+    8-cycle explore worker and SIGTERM ended it without releasing its lease.
+    """
+    signal.signal(signal.SIGTERM, _operator_stop)
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+
+
 def main() -> int:
+    install_stop_signals()
     try:
         args = parser().parse_args()
         result = run(args)
