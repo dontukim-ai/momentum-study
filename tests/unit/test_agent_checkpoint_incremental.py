@@ -220,7 +220,9 @@ def test_only_new_checkpoint_is_evaluated(setup_agent, monkeypatch):
     agent, store, _ = setup_agent
     calls = checkpoint_calls(monkeypatch, agent)
     agent.tick("a", market(281))
-    assert len(rows(store)) == len(calls) == 3
+    # LOOP-05c: one replay through the last window serves all three.
+    assert len(rows(store)) == 3
+    assert calls == [date.fromisoformat(rows(store)[-1]["window_end"])]
     assert all(
         json.loads(r["payload_json"])["build"] == build_id() for r in rows(store)
     )
@@ -231,10 +233,8 @@ def test_only_new_checkpoint_is_evaluated(setup_agent, monkeypatch):
     assert rows(store) == saved
     calls.clear()
     report = agent.tick("a", market(286))
-    assert calls == [
-        date.fromisoformat(saved[-1]["window_end"]),
-        market(286).sessions[-1],
-    ]
+    # The safety replay of the latest stored window rides the new window's run.
+    assert calls == [market(286).sessions[-1]]
     assert report["observation_checkpoints"]["stored"] == 1
 
 
@@ -267,7 +267,7 @@ def test_breach_continues_from_sealed_payload(setup_agent, monkeypatch):
     assert [r["state"] for r in rows(store)] == ["WARNING", "WARNING"]
     calls = checkpoint_calls(monkeypatch, agent)
     report = agent.tick("a", market(281))
-    assert len(calls) == 2
+    assert len(calls) == 1
     latest = report["observation_checkpoints"]["latest"]
     assert latest["state"] == "DEMOTION_CANDIDATE"
     assert "consecutive_breaches" not in latest
@@ -314,7 +314,7 @@ def test_other_or_missing_build_revalidates_all(setup_agent, monkeypatch, legacy
     # directly so that this tests checkpoint compatibility, not study recovery.
     result = agent._isolated_checkpoints("a", data, p, observation)
     assert "error" not in result
-    assert len(calls) == 3
+    assert calls == [date.fromisoformat(saved[-1]["window_end"])]
     assert rows(store) == saved
 
 

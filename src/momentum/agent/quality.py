@@ -22,10 +22,11 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from trading_agent.contracts import AgentError, timestamp
-from trading_agent.data import CSV_FIELDS, Snapshot
+from trading_agent.data import CSV_FIELDS
 
 from .contracts import ResearchInput
 from .market import KRX
+from .snapshot import IndexedSnapshot
 
 # KRX daily price limit is +/-30%. A move beyond it on consecutive bars cannot
 # be a normal trading day, so it is quarantined unless a corporate action on
@@ -251,4 +252,4 @@ def quarantine(data: ResearchInput, report: QualityReport) -> ResearchInput:
     """Exclude flagged bars; everything else, including the clock, is kept."""
     held = report.quarantined
     bars = [b for b in data.snapshot.bars if (b.symbol, b.session) not in held]
-    return replace(data, snapshot=Snapshot(bars, require_complete=False))
+    return replace(data, snapshot=IndexedSnapshot(bars, require_complete=False))

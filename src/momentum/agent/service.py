@@ -245,6 +245,41 @@ def promotion_gates(evidence: dict[str, Any], policy: AgentPolicy) -> dict[str, 
     }
 
 
+def checkpoint_groups(data: ResearchInput, ends: list[date]) -> list[list[int]]:
+    """Split checkpoint window ends into runs that one evaluation can serve.
+
+    A checkpoint replays the observation from its origin on ``data.prefix(end)``.
+    The evaluator reads only point-in-time views up to each session, so one
+    evaluation through a later end yields the same rows up to an earlier end,
+    unless the later prefix adds a corporate action or late dividend published
+    after the earlier end that already acts on or before it. Such an item
+    starts a new run (LOOP-05c). ``AnnouncedAction`` and ``LateDividend``
+    already reject items that act before publication, so valid inputs give a
+    single run; the check keeps the equivalence explicit if those rules change.
+    """
+    late = [
+        (min(a.action.ex_date, a.action.pay_date or a.action.ex_date), a.available_at)
+        for a in data.actions
+    ] + [
+        (min(d.pay_date, d.recognized_on), d.available_at) for d in data.late_dividends
+    ]
+    groups: list[list[int]] = []
+    current: list[int] = []
+    for position, end in enumerate(ends):
+        horizon = KRX.observed_at(end)
+        if current and any(
+            acts <= ends[m] and KRX.observed_at(ends[m]) < published <= horizon
+            for m in current
+            for acts, published in late
+        ):
+            groups.append(current)
+            current = []
+        current.append(position)
+    if current:
+        groups.append(current)
+    return groups
+
+
 def _require_screenable(data: ResearchInput, policy: AgentPolicy, end: date) -> None:
     """Refuse to reserve validation budget when nothing could ever be bought.
 
@@ -2629,6 +2664,50 @@ class ResearchAgent:
                 "SELECT MAX(seq) FROM agent_observation_checkpoints WHERE stream=?",
                 (stream,),
             ).fetchone()[0]
+            stored_builds = {
+                row["seq"]: json.loads(row["payload_json"]).get("build")
+                for row in self.db.execute(
+                    "SELECT seq,payload_json FROM agent_observation_checkpoints WHERE stream=?",
+                    (stream,),
+                )
+            }
+            # Same rule as the loop below: new, other-build and latest windows.
+            needed = [
+                seq
+                for seq in range(len(days) // size)
+                if stored_builds.get(seq) != current_build or seq == latest_stored_seq
+            ]
+            ends = [days[seq * size + size - 1] for seq in needed]
+            group_of = {
+                needed[position]: members
+                for members in checkpoint_groups(data, ends)
+                for position in members
+            }
+            runs: dict[int, tuple[EvaluationResult, EvaluationResult] | None] = {}
+
+            def replay(through: date) -> tuple[EvaluationResult, EvaluationResult]:
+                # Restart from the observation origin, not from a fresh wallet
+                # at each window: holdings and revision-switch costs carry over.
+                frozen = data.prefix(through)
+                result = evaluator.evaluate_schedule(frozen, schedule, start, through)
+                reference = evaluator.evaluate_benchmark(
+                    frozen, policy.degradation_reference, start, through
+                )
+                require_same_contract(result, reference)
+                return result, reference
+
+            def evaluated(seq: int) -> tuple[EvaluationResult, EvaluationResult]:
+                last = group_of[seq][-1]
+                if last not in runs:
+                    try:
+                        runs[last] = replay(ends[last])
+                    except (AgentError, SpecUndefinedError):
+                        # A defect after this window must fail exactly the
+                        # windows whose own prefix contains it, as before.
+                        runs[last] = None
+                pair = runs[last]
+                return pair if pair is not None else replay(days[seq * size + size - 1])
+
             for seq in range(len(days) // size):
                 offset = seq * size
                 window_start, end = days[offset], days[offset + size - 1]
@@ -2650,14 +2729,7 @@ class ResearchAgent:
                     or saved_payload.get("build") != current_build
                     or seq == latest_stored_seq
                 ):
-                    # Restart from the observation origin, not from a fresh wallet
-                    # at each window: holdings and revision-switch costs carry over.
-                    frozen = data.prefix(end)
-                    result = evaluator.evaluate_schedule(frozen, schedule, start, end)
-                    reference = evaluator.evaluate_benchmark(
-                        frozen, policy.degradation_reference, start, end
-                    )
-                    require_same_contract(result, reference)
+                    result, reference = evaluated(seq)
                     capital = policy.logic.selection.capital_limit
                     net, drawdown = self._checkpoint_window(
                         result, offset, size, capital
