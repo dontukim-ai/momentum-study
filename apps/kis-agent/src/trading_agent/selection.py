@@ -139,6 +139,9 @@ def write_security_history(history: SecurityHistory, path: Path):
     path.write_text("".join(canonical(record) + "\n" for record in history.records), encoding="utf-8")
 
 
+RESEARCH_CAPITAL_LIMIT = D("100000000")
+
+
 @dataclass(frozen=True)
 class SelectionPolicy:
     capital_limit: D = D("1000000")
@@ -170,8 +173,10 @@ class SelectionPolicy:
             object.__setattr__(self, name, value)
         if set(self.allowed_types) - {"STOCK", "ETF"} or set(self.allowed_markets) - {"KOSPI", "KOSDAQ", "KONEX"}:
             raise AgentError("Unsupported selection universe")
-        if not D(0) < self.capital_limit <= D("1000000") or self.min_price <= 0:
-            raise AgentError("Research capital must be positive and at most the requested 1000000 KRW")
+        # Research-only ceiling (user decision 2026-10-23). Real orders keep their
+        # own REAL_CAPITAL_LIMIT in kis_real.py; this default stays 1,000,000.
+        if not D(0) < self.capital_limit <= RESEARCH_CAPITAL_LIMIT or self.min_price <= 0:
+            raise AgentError("Research capital must be positive and at most 100000000 KRW")
         if any(getattr(self, n) < 0 for n in ("min_average_turnover", "min_average_volume")):
             raise AgentError("Negative liquidity thresholds are invalid")
         if not D(0) < self.max_daily_volatility <= D(1) or self.max_spread_bps <= 0:
