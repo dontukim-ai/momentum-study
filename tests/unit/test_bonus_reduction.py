@@ -147,3 +147,24 @@ def test_orders_planned_before_a_bonus_day_are_cancelled():
     )
     e = evaluate(replace(data, actions=(action,)), p, spec).execution_events[0]
     assert e["status"] == "cancelled_action_uncertainty" and e["quantity"] == 0
+
+
+def test_buying_more_while_bonus_shares_are_pending_keeps_net_assets():
+    # Explore v3 (2026-10-23): 075580 held 24 shares into a 0.5 bonus ex-date
+    # (12 pending until listing) and bought 9 more before listing. The mark
+    # was blended over the 24 listed shares only while positions_value counts
+    # all 36, so NAV drifted by 36 x (price - mark) / 11 = 186.5454... KRW.
+    ledger = holding(24, 9600)
+    ledger.cash, ledger._nav = D(100000), ledger._nav + D(100000)
+    ledger.apply_corporate_actions([bonus("0.5")], EX)
+    ledger.mark_to_market({"A": D(6790)}, EX)
+    assert identity(ledger)
+    next_day = date(2024, 3, 5)
+    ledger.apply_fills([fill("A", "buy", 9, D(6847))], next_day)
+    assert ledger.nav == ledger.cash + ledger.positions_value + ledger.dividend_receivable
+    ledger.mark_to_market({"A": D(7290)}, next_day)
+    assert ledger.nav == ledger.cash + ledger.positions_value + ledger.dividend_receivable
+    assert ledger.positions_value == 45 * D(7290)
+    ledger.apply_corporate_actions([bonus("0.5")], LISTING)
+    assert ledger.positions["A"] == 45 and ledger.pending_shares == {}
+    assert identity(ledger)
