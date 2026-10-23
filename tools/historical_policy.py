@@ -16,6 +16,11 @@ fixes the champion's holding count and the grid before results:
 RES-01b adds a preregistered market ETF benchmark to a stock-only universe:
 
     ... --market-etf 069500 --allowed-types STOCK
+
+Explore v3 (explore-candidates-v3.md) narrows the universe by liquidity:
+
+    ... --top-n 5 --min-average-turnover 10000000000 \
+        --capital 100000000 --max-order-notional 40000000
 """
 
 from __future__ import annotations
@@ -23,6 +28,7 @@ from __future__ import annotations
 import argparse
 import json
 from dataclasses import replace
+from decimal import Decimal
 from pathlib import Path
 
 from trading_agent.contracts import canonical
@@ -43,6 +49,9 @@ def historical_policy(
     decision_cadence: str = "daily",
     market_etf_symbol: str | None = None,
     allowed_types: tuple[str, ...] | None = None,
+    min_average_turnover: str | None = None,
+    capital: str | None = None,
+    max_order_notional: str | None = None,
 ) -> AgentPolicy:
     p = AgentPolicy()
     logic = replace(
@@ -52,6 +61,15 @@ def historical_policy(
             p.logic.selection,
             spread_mode="historical_unavailable",
             allowed_types=allowed_types or p.logic.selection.allowed_types,
+            min_average_turnover=Decimal(min_average_turnover)
+            if min_average_turnover is not None
+            else p.logic.selection.min_average_turnover,
+            capital_limit=Decimal(capital)
+            if capital is not None
+            else p.logic.selection.capital_limit,
+            max_order_notional=Decimal(max_order_notional)
+            if max_order_notional is not None
+            else p.logic.selection.max_order_notional,
         ),
     )
     champion = logic.champion
@@ -89,6 +107,12 @@ def main() -> None:
     )
     parser.add_argument("--market-etf", help="preregistered benchmark ETF, e.g. 069500")
     parser.add_argument("--allowed-types", help="strategy universe, e.g. STOCK")
+    parser.add_argument(
+        "--min-average-turnover",
+        help="20-session average close x volume floor in KRW, e.g. 10000000000",
+    )
+    parser.add_argument("--capital", help="research capital in KRW, at most 100000000")
+    parser.add_argument("--max-order-notional", help="per-order cap in KRW")
     args = parser.parse_args()
     policy = historical_policy(
         top_n=args.top_n,
@@ -102,6 +126,9 @@ def main() -> None:
         allowed_types=tuple(args.allowed_types.split(","))
         if args.allowed_types
         else None,
+        min_average_turnover=args.min_average_turnover,
+        capital=args.capital,
+        max_order_notional=args.max_order_notional,
     )
     raw = json.loads(canonical(policy))
     if policy_from_dict(raw) != policy:
@@ -117,7 +144,10 @@ def main() -> None:
         f"max_drawdown={policy.logic.evaluation.max_drawdown} "
         f"decision_cadence={policy.decision_cadence} "
         f"market_etf={policy.market_etf_symbol} "
-        f"allowed_types={list(policy.logic.selection.allowed_types)}"
+        f"allowed_types={list(policy.logic.selection.allowed_types)} "
+        f"min_average_turnover={policy.logic.selection.min_average_turnover} "
+        f"capital={policy.logic.selection.capital_limit} "
+        f"max_order_notional={policy.logic.selection.max_order_notional}"
     )
 
 

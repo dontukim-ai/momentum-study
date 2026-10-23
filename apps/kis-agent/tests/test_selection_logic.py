@@ -264,7 +264,7 @@ class LogicWorkflowTests(unittest.TestCase):
             with self.assertRaisesRegex(AgentError, "bound"):
                 init_study(self.store, "test", settings)
         with self.assertRaises(AgentError):
-            SelectionPolicy(capital_limit=D(1000001))
+            SelectionPolicy(capital_limit=D(100000001))  # research ceiling, 2026-10-23
 
     def test_model_context_does_not_contain_future_prices_or_security_changes(self):
         context = logic_development_context(self.market,self.securities,self.settings.champion,self.settings)
@@ -435,3 +435,17 @@ class LogicWorkflowTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ResearchCapitalLimitTests(unittest.TestCase):
+    def test_research_capital_ceiling_is_separate_from_real_order_limit(self):
+        # User decision 2026-10-23: research may assume up to 100,000,000 KRW;
+        # the real-order limit and the research default stay 1,000,000.
+        from trading_agent.kis_real import REAL_CAPITAL_LIMIT
+        from trading_agent.selection import SelectionPolicy
+
+        self.assertEqual(SelectionPolicy().capital_limit, D("1000000"))
+        self.assertEqual(SelectionPolicy(capital_limit=D("100000000")).capital_limit, D("100000000"))
+        with self.assertRaisesRegex(AgentError, "at most 100000000"):
+            SelectionPolicy(capital_limit=D("100000001"))
+        self.assertEqual(REAL_CAPITAL_LIMIT, D("1000000"))
