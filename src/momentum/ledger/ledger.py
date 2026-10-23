@@ -358,7 +358,13 @@ class Ledger:
                 # same-day mark-to-market delta prices only the genuine
                 # move from acquisition to close, not the whole position
                 # from a stale prior mark (see docstring / finding 1 math).
-                self.marks[f.security_id] = (old_mark * held + f.price * f.shares) / new_qty
+                # Unlisted bonus shares are valued at the same mark, so they
+                # weigh in the blend too; otherwise NAV drifts by
+                # pending x (price - mark) / valued (explore v3, 2026-10-23).
+                valued = held + self.pending_quantity(f.security_id)
+                self.marks[f.security_id] = (old_mark * valued + f.price * f.shares) / (
+                    valued + f.shares
+                )
                 self.positions[f.security_id] = new_qty
                 self._nav -= f.cost
                 self.cash = (self.cash - notional - f.cost).quantize(self.money_quantum, ROUND_HALF_UP)
