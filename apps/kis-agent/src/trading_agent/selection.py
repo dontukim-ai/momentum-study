@@ -25,7 +25,20 @@ from .contracts import (
 from .data import MarketView
 from .execution import RiskPolicy
 
-RANKINGS = ("momentum", "risk_adjusted", "trend_stability")
+DEFAULT_RANKINGS = ("momentum", "risk_adjusted", "trend_stability")
+# Opt-in signals (user decision 2026-10-25, strategy-alternatives §5.4). They
+# must be named in a policy's rankings; the default search space is unchanged.
+#   short_reversal: buy the largest losers over the lookback (Korean individual
+#     stocks show reversal rather than momentum, Kang/Ryu/Webb 2025).
+#   low_volatility: lowest daily-return volatility over the lookback; it is a
+#     risk sort, so the momentum threshold does not apply.
+#   momentum_ex_max: momentum, excluding stocks whose largest daily return in
+#     the lookback exceeds MAX_FILTER_DAILY_RETURN (Bali/Cakici/Whitelaw 2011).
+SIGNAL_RANKINGS = ("short_reversal", "low_volatility", "momentum_ex_max")
+RANKINGS = (*DEFAULT_RANKINGS, *SIGNAL_RANKINGS)
+# Fixed before any result: KRX limits daily moves to 30%, so this removes
+# stocks with a near-limit-up day in the window.
+MAX_FILTER_DAILY_RETURN = D(".25")
 
 
 @dataclass(frozen=True)
@@ -192,6 +205,28 @@ class SelectionPolicy:
                           version="research-selection-fixed-risk-v1")
 
 
+def _signal_score(spec: RankedStrategy, history, momentum: D, features: dict, reasons: list) -> D:
+    """Score for an opt-in signal ranking over the strategy's own lookback."""
+    window = history[-spec.lookback - 1:]
+    returns = [b.close / a.close - 1 for a, b in zip(window, window[1:])]
+    if spec.ranking == "short_reversal":
+        # min_momentum is the minimum loss: a stock must have fallen by more.
+        if -momentum <= spec.min_momentum:
+            reasons.append("REVERSAL_BELOW_THRESHOLD")
+        return -momentum
+    if spec.ranking == "low_volatility":
+        mean = sum(returns, D(0)) / len(returns)
+        volatility = (sum(((r - mean) ** 2 for r in returns), D(0)) / len(returns)).sqrt()
+        features["lookback_volatility"] = volatility
+        return -volatility
+    features["max_daily_return"] = max(returns)
+    if momentum <= spec.min_momentum:
+        reasons.append("MOMENTUM_BELOW_THRESHOLD")
+    if features["max_daily_return"] > MAX_FILTER_DAILY_RETURN:
+        reasons.append("RECENT_MAX_RETURN_ABOVE_LIMIT")
+    return momentum
+
+
 def select_candidates(spec: RankedStrategy, view: MarketView, securities: SecurityHistory,
                       policy: SelectionPolicy, costs: Costs, valid_until: datetime,
                       equity: D | None = None, *, audit: bool = True) -> dict:
@@ -268,10 +303,13 @@ def select_candidates(spec: RankedStrategy, view: MarketView, securities: Securi
                 reasons.append("LOW_LIQUIDITY")
             if volatility > policy.max_daily_volatility:
                 reasons.append("EXCESSIVE_VOLATILITY")
-            if momentum <= spec.min_momentum:
-                reasons.append("MOMENTUM_BELOW_THRESHOLD")
-            score = (momentum if spec.ranking == "momentum" else momentum / max(volatility, D(".001"))
-                     if spec.ranking == "risk_adjusted" else momentum * features["positive_return_fraction"])
+            if spec.ranking in SIGNAL_RANKINGS:
+                score = _signal_score(spec, history, momentum, features, reasons)
+            else:
+                if momentum <= spec.min_momentum:
+                    reasons.append("MOMENTUM_BELOW_THRESHOLD")
+                score = (momentum if spec.ranking == "momentum" else momentum / max(volatility, D(".001"))
+                         if spec.ranking == "risk_adjusted" else momentum * features["positive_return_fraction"])
             features["score"] = score
         rows.append({"symbol": symbol, "status": "REJECTED" if reasons else "ELIGIBLE", "reasons": reasons,
                      "features": features, "security_source": state.source if state else None})

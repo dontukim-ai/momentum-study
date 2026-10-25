@@ -21,6 +21,12 @@ Explore v3 (explore-candidates-v3.md) narrows the universe by liquidity:
 
     ... --top-n 5 --min-average-turnover 10000000000 \
         --capital 100000000 --max-order-notional 40000000
+
+Signal rankings (strategy-alternatives §5.4) are opt-in and must be named
+together with a challenger budget that covers the grid:
+
+    ... --rankings momentum,short_reversal,low_volatility,momentum_ex_max \
+        --candidate-budget 11
 """
 
 from __future__ import annotations
@@ -52,6 +58,8 @@ def historical_policy(
     min_average_turnover: str | None = None,
     capital: str | None = None,
     max_order_notional: str | None = None,
+    rankings: tuple[str, ...] | None = None,
+    candidate_budget: int | None = None,
 ) -> AgentPolicy:
     p = AgentPolicy()
     logic = replace(
@@ -83,6 +91,10 @@ def historical_policy(
         logic,
         champion=champion,
         lookbacks=lookbacks if lookbacks is not None else logic.lookbacks,
+        rankings=rankings if rankings is not None else logic.rankings,
+        candidate_budget=candidate_budget
+        if candidate_budget is not None
+        else logic.candidate_budget,
         evaluation=replace(logic.evaluation, max_drawdown=max_drawdown)
         if max_drawdown is not None
         else logic.evaluation,
@@ -113,6 +125,10 @@ def main() -> None:
     )
     parser.add_argument("--capital", help="research capital in KRW, at most 100000000")
     parser.add_argument("--max-order-notional", help="per-order cap in KRW")
+    parser.add_argument(
+        "--rankings", help="comma-separated, e.g. momentum,short_reversal"
+    )
+    parser.add_argument("--candidate-budget", type=int, help="challengers per cycle")
     args = parser.parse_args()
     policy = historical_policy(
         top_n=args.top_n,
@@ -129,6 +145,8 @@ def main() -> None:
         min_average_turnover=args.min_average_turnover,
         capital=args.capital,
         max_order_notional=args.max_order_notional,
+        rankings=tuple(args.rankings.split(",")) if args.rankings else None,
+        candidate_budget=args.candidate_budget,
     )
     raw = json.loads(canonical(policy))
     if policy_from_dict(raw) != policy:
@@ -147,7 +165,9 @@ def main() -> None:
         f"allowed_types={list(policy.logic.selection.allowed_types)} "
         f"min_average_turnover={policy.logic.selection.min_average_turnover} "
         f"capital={policy.logic.selection.capital_limit} "
-        f"max_order_notional={policy.logic.selection.max_order_notional}"
+        f"max_order_notional={policy.logic.selection.max_order_notional} "
+        f"rankings={list(policy.logic.rankings)} "
+        f"candidate_budget={policy.logic.candidate_budget}"
     )
 
 
