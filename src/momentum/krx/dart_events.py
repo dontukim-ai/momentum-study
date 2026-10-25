@@ -21,7 +21,10 @@ KST = ZoneInfo("Asia/Seoul")
 # list.json provides a date, never a reception time. Conservatively prevent
 # even intraday disclosures from entering that day's decision inputs.
 DISCLOSURE_AVAILABLE_TIME = KRX.disclosure_available
-MAX_RECEPTION_LAG = timedelta(days=7)
+# A filing numbered on the last business day before a long holiday is listed
+# on the next business day: 2025-10-02 -> 2025-10-10 (개천절·추석·한글날,
+# four B-type filings). Ten days covers the longest Korean holiday runs.
+MAX_RECEPTION_LAG = timedelta(days=10)
 _REPORT_KINDS = (
     ("유무상증자결정", "BONUS_AND_RIGHTS"),
     ("무상증자결정", "BONUS_ISSUE"),
@@ -75,8 +78,8 @@ def _parse_row(row: dict[str, Any], source_hash: str) -> DisclosureEvent:
     # Real lists (2024, two of 32,064 I-type rows, both corrections) carry a
     # reception number dated one or two days before rcept_dt. Availability
     # uses the later rcept_dt, so the filing is never seen earlier than the
-    # list says; a number dated after rcept_dt, or more than a week before
-    # it, is not a known pattern and is refused.
+    # list says; a number dated after rcept_dt, or more than MAX_RECEPTION_LAG
+    # before it, is not a known pattern and is refused.
     if not timedelta(0) <= day - numbered <= MAX_RECEPTION_LAG:
         raise ValueError("rcept_no date differs from rcept_dt")
     corp_code = _digits(_text(row, "corp_code"), 8)

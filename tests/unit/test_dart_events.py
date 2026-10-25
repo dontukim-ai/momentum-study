@@ -135,7 +135,10 @@ def test_cli_summary(tmp_path):
 
 @pytest.mark.parametrize(('rcept_no', 'accepted'), [
     ('20240601000001', True),   # numbered two days before rcept_dt (real 2024 pattern)
-    ('20240526000001', False),  # more than a week apart
+    ('20240526000001', True),   # eight days: numbered before a holiday run (real 2025 pattern)
+    ('20240524000001', True),   # ten days, the limit
+    ('20240523000001', False),  # eleven days apart
+    ('20240604000001', False),  # numbered after rcept_dt
 ])
 def test_reception_number_dated_before_list_date(tmp_path, rcept_no, accepted):
     page = json.loads(PAGE.read_text())
@@ -151,3 +154,14 @@ def test_reception_number_dated_before_list_date(tmp_path, rcept_no, accepted):
     # Availability follows the later list date, never the earlier number.
     assert event.rcept_date == date(2024, 6, 3)
     assert event.available_at.date() == date(2024, 6, 3)
+
+
+def test_filing_numbered_before_the_2025_chuseok_holidays(tmp_path):
+    # Real list B/2025-10-03_2026-01-02: numbered 2025-10-02, listed 2025-10-10.
+    page = json.loads(PAGE.read_text())
+    page['list'] = [page['list'][0]]
+    page['list'][0].update(rcept_no='20251002000619', rcept_dt='20251010')
+    path = tmp_path / 'holiday.json'
+    path.write_text(json.dumps(page))
+    (event,) = parse_list_pages([path])
+    assert event.available_at.date() == date(2025, 10, 10)
