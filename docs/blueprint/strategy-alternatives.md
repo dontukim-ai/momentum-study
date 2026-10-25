@@ -78,6 +78,22 @@
 4. 진단: T3 야간·장중 분해(읽기 전용 분석으로 먼저).
 5. 데이터 과제: B1·B2 재무제표.
 
+## 5A. GitHub 공개 스킬·MCP·라이브러리 (2026-10-25 추가)
+
+질문: GitHub에 후보로 쓸 만한 스킬·MCP 서버·팩터 라이브러리가 있는가. Qlib 로더, KIS 공식 저장소, quant 스킬 저장소는 원본 페이지를 직접 읽었다. 나머지는 목록·요약 페이지로만 확인했다. 어떤 것도 설치하지 않았다.
+
+| 대상 | 내용 | 판정 |
+| --- | --- | --- |
+| microsoft/qlib Alpha158 | 일별 OHLCV만으로 만드는 158개 특징. 봉 모양 9개(KMID, KSFT 등), 기간 5·10·20·30·60일 롤링 29종(ROC, MA, STD, BETA, RSQR, RESI, MAX, MIN, RSV, IMAX·IMIN, CORR, CNTP, SUMP, VMA 등) | **후보 메뉴로 채택.** 기간이 60일 이하라 현재 상한과 입력에 맞는다. 일괄 시험은 스누핑 위험이 커서 근거 있는 몇 개만 고른다: MAX/MIN(60일 고점 근접도, A5의 짧은 판), RSV·ROC 음수(단기 반전, A1), STD(저변동성, A2), RESI(잔차, A4), KSFT(강한 종가), CORR(가격·거래량 상관). `trend_stability`는 이미 CNTP와 같은 아이디어다. |
+| koreainvestment/open-trading-api | KIS 공식 저장소. 전략 빌더(지표 80개), QuantConnect Lean 백테스터, MCP 서버. 사전 전략 10개: 골든크로스, 모멘텀, 52주 신고가, 연속 상승·하락, 이격도(역추세), 실패 돌파, 강한 종가, 변동성 돌파, 평균 회귀, 추세 필터 | **전략 목록만 참고.** 이격도·평균 회귀는 A1, 52주 신고가는 A5, 강한 종가는 KSFT, 추세 필터는 A3과 겹친다. MCP는 주문 API를 포함해 실주문 금지 원칙과 충돌하므로 설치하지 않는다. 백테스터는 Docker·Lean 의존이고 시점 기준 입력 계약이 없어 쓰지 않는다. |
+| WorldQuant 101 Formulaic Alphas (Kakushadze 외 2016, 구현 yli188/WorldQuant_alpha101_code 등) | 가격·거래량 수식 알파 101개, 평균 보유 0.6~6.4일 | 제외. 월간 리밸런싱·편도 25bp 비용과 맞지 않는 초단기 신호다. 논문은 알파가 WorldQuant 소유라고 밝힌다. |
+| shakeebshaan/claude-code-quant-skills (MIT) | 스킬 6개: backtest-review(미래 정보·생존 편향·과적합·비용 감사), strategy-critique(회의적 위험관리자 역할), indicator-design, risk-report, hedge-lab, data-scrub | 신호 후보는 아니다. 감사 절차 참고용. 저장소에 이미 `apps/kis-agent/skills/backtest-review`가 있다. strategy-critique 점검표는 사전 등록 검토에 빌려 쓸 수 있다. 설치는 내용 검토와 사용자 승인 뒤. |
+| tradingview-mcp, maverick-mcp, yfinance MCP 등 | 미국 시세(Yahoo·TradingView)와 RSI·MACD·볼린저, 간단한 백테스트 | 제외. KRX 시점 기준 입력이 아니고 지표는 T8과 같다. |
+| pykrx, pykrx-mcp | KRX·네이버 웹 수집 라이브러리 | 제외. KRX 자동 수집 금지 원칙과 충돌한다. |
+| Qlib용 한국 데이터 미들웨어, Tradix 등 | 외부 백테스트 엔진 | 제외. 공통 체결·회계 엔진을 복제하지 않는다는 원칙과 충돌한다. |
+
+결론: GitHub에서 새로 쓸 만한 것은 **Qlib Alpha158 특징 정의**(후보 신호 메뉴)와 **KIS 사전 전략 목록**(국내 실무 관점의 확인)이다. 둘 다 §5.4 권장 후보(단기 반전, 저변동성, MAX 필터)를 지지하고, 새 후보로 KSFT(강한 종가)와 60일 고점 근접도를 더한다. 외부 MCP·백테스터는 실주문·자동 수집·엔진 복제 금지 때문에 쓰지 않는다.
+
 ## 6. 출처
 
 - Kang·Ryu·Webb(2025) 초록: https://www.nisc.co.za/products/abstracts/38749/momentum-and-reversal-effects-in-the-korean-stock-market
@@ -100,3 +116,9 @@
 - 단일 지표 백테스트: https://elite.finviz.com/help/technical-analysis/backtests_report.ashx
 - 시계열 모멘텀: https://papers.ssrn.com/abstract=2089463
 - 계절성: https://www.nber.org/papers/w20815.pdf
+- Qlib Alpha158 정의: https://github.com/microsoft/qlib/blob/main/qlib/contrib/data/loader.py
+- KIS open-trading-api: https://github.com/koreainvestment/open-trading-api
+- 101 Formulaic Alphas: https://alphaxiv.org/overview/1601.00991v3 , https://hedgefundalpha.com/strategies/101-formulaic-alphas/
+- claude-code-quant-skills: https://github.com/shakeebshaan/claude-code-quant-skills
+- MCP 목록: https://blog.brightcoding.dev/2026/08/02/atilaahmettanertradingview-mcp-backtest-strategies-in-claude-code , https://playbooks.com/mcp/wshobson/maverick-mcp , https://mcpservers.org/servers/migusdn/KIS_MCP_Server
+- pykrx: https://github.com/sharebook-kr/pykrx
