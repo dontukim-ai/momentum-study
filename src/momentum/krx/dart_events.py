@@ -84,8 +84,11 @@ def _parse_row(row: dict[str, Any], source_hash: str) -> DisclosureEvent:
     if corp_cls not in {"Y", "K", "N", "E"}:
         raise ValueError(f"unknown corp_cls: {corp_cls!r}")
     stock_code = _text(row, "stock_code")
-    if stock_code:
-        _digits(stock_code, 6)
+    # KRX short codes are six characters; new listings from 2025 mix in
+    # capital letters (0030R0 대신밸류리츠, 2025-10-01 list). Lower case and
+    # other lengths are still refused, not normalized.
+    if stock_code and re.fullmatch(r"[0-9A-Z]{6}", stock_code) is None:
+        raise ValueError(f"expected a 6-character KRX code: {stock_code!r}")
     report = _text(row, "report_nm")
     kind = next((kind for token, kind in _REPORT_KINDS if token in report), "OTHER")
     return DisclosureEvent(
