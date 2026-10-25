@@ -42,6 +42,7 @@ def test_parse_fields_classification_and_corrections():
     ('rcept_no', '20240604000001'), ('rcept_no', '123'),
     ('rcept_dt', '20240230'), ('rcept_dt', '202463'),
     ('corp_cls', 'X'), ('corp_code', '123'), ('stock_code', '12345'),
+    ('stock_code', '0030r0'), ('stock_code', '0030R00'), ('stock_code', '0030-0'),
     ('corp_code', None), ('stock_code', None),
 ])
 def test_invalid_fields_rejected(tmp_path, field, value):
@@ -51,6 +52,15 @@ def test_invalid_fields_rejected(tmp_path, field, value):
     path.write_text(json.dumps(page))
     with pytest.raises(SpecUndefinedError, match='invalid.json'):
         parse_list_pages([path])
+
+
+def test_alphanumeric_krx_code_is_kept(tmp_path):
+    # Real 2025 lists carry new listings such as 0030R0 (대신밸류리츠).
+    page = json.loads(PAGE.read_text())
+    page['list'][0]['stock_code'] = '0030R0'
+    path = tmp_path / 'alnum.json'
+    path.write_text(json.dumps(page))
+    assert parse_list_pages([path])[0].stock_code == '0030R0'
 
 
 @pytest.mark.parametrize('payload', [

@@ -11,7 +11,7 @@
 
 ## 2. 사전 등록 값
 
-정책은 v5와 **같다**(`diff` 결과가 없어야 한다): 챔피언 momentum/20/top10, 순위 momentum·short_reversal·low_volatility·momentum_ex_max, 기간 20/40/60, 도전자 예산 11, 자본 1억 원, 주문 한도 4,000만 원, 거래대금 하한 100억 원, 매월, 낙폭 한도 25%, 기준 ETF 069500, 주식만, 편도 slippage 25bp, 게이트·통계 정책 기본값. 코드 변경은 입력 준비 도구(`tools/forward_input.py`)뿐이다. 패키지 소스(`src/momentum`, kis-agent)는 v5 실행 빌드와 같으므로 전략 버전 ID도 v5와 같다(kis-agent `implementation_id`는 패키지 파일만 해시한다).
+정책은 v5와 **같다**(`diff` 결과가 없어야 한다): 챔피언 momentum/20/top10, 순위 momentum·short_reversal·low_volatility·momentum_ex_max, 기간 20/40/60, 도전자 예산 11, 자본 1억 원, 주문 한도 4,000만 원, 거래대금 하한 100억 원, 매월, 낙폭 한도 25%, 기준 ETF 069500, 주식만, 편도 slippage 25bp, 게이트·통계 정책 기본값. 코드 변경은 입력 준비 도구(`tools/forward_input.py`)와, 수집 중 발견한 영숫자 KRX 단축코드 허용(`dart_events.py`, 2025년 신규 상장 `0030R0` 등) 두 가지다. kis-agent 소스는 v5와 같으므로 전략 버전 ID도 v5와 같다(kis-agent `implementation_id`는 그 패키지 파일만 해시한다). `src/momentum`이 바뀌어 연구 빌드 ID는 v5와 다르다.
 
 연구 이름 `explore-v6-forward`, 새 DB, 검증 예산 8사이클. 실패해도 자동 재실행하지 않는다.
 
