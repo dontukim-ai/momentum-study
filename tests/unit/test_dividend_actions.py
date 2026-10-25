@@ -357,3 +357,38 @@ def test_payment_on_a_non_session_moves_to_the_next_session():
     (later,) = build([record(pay="2024-04-19")], SESSIONS, CONFIRMED).actions
     assert later["pay_date"] == "2024-04-19"
     assert later["evidence"]["pay_date_unrolled"] is None
+
+
+def test_one_dividend_filed_under_two_kinds_becomes_one_action():
+    # Real 2025 lists: 005380 filed 결산배당 and 분기배당, same record date and amount.
+    final = record("20231215000001", available="2023-12-15T18:00:00+09:00")
+    quarterly = record(
+        "20231218000002", available="2023-12-18T18:00:00+09:00", dividend_kind="분기배당"
+    )
+    result = build([quarterly, final], SESSIONS, CONFIRMED)
+    assert len(result.actions) == 1
+    assert result.actions[0]["available_at"] == "2023-12-15T18:00:00+09:00"
+    assert result.actions[0]["evidence"]["rcept_no"] == "20231215000001"
+    assert result.duplicates == [
+        {
+            "rcept_no": "20231218000002",
+            "stock_code": "033780",
+            "same_dividend_as": "20231215000001",
+            "dividend_kind": "분기배당",
+        }
+    ]
+
+
+def test_different_dividends_on_one_ex_date_are_refused():
+    final = record("20231215000001")
+    special = record("20231215000002", dividend_kind="특별배당", amount="1000")
+    result = build([final, special], SESSIONS, CONFIRMED)
+    assert result.actions == []
+    assert result.unresolved == [
+        {
+            "stock_code": "033780",
+            "ex_date": result.unresolved[0]["ex_date"],
+            "filings": ["20231215000001", "20231215000002"],
+            "reason": "different dividends on one ex-date",
+        }
+    ]

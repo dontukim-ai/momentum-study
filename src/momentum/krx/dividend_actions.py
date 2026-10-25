@@ -245,4 +245,53 @@ def build(
         if recognized_on is not None:
             action["recognized_on"] = recognized_on.isoformat()
         actions.append(action)
-    return DividendActions(actions, unresolved, duplicates)
+    return DividendActions(*_one_per_ex_date(actions, unresolved, duplicates))
+
+
+_SAME_DIVIDEND = ("pay_date", "cash_amount", "recognized_on")
+
+
+def _one_per_ex_date(
+    actions: list[dict[str, Any]],
+    unresolved: list[dict[str, Any]],
+    duplicates: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """At most one action per security, action type and ex-date.
+
+    Companies sometimes file one dividend twice under different kinds with the
+    same record date (2025-04-24 005380: 결산배당 and 분기배당, 2,500원 each,
+    record 2025-05-30). Identical payments are one dividend, kept from the
+    earliest publication. Different payments on one ex-date cannot be told
+    apart from a mistake, so none of them becomes an action.
+    """
+    groups: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+    for action in actions:
+        key = (action["security_id"], action["action_type"], action["ex_date"])
+        groups.setdefault(key, []).append(action)
+    kept = []
+    for (code, _, ex), group in groups.items():
+        group.sort(key=lambda a: (a["available_at"], a["evidence"]["rcept_no"]))
+        first = group[0]
+        if all(
+            all(a.get(f) == first.get(f) for f in _SAME_DIVIDEND) for a in group[1:]
+        ):
+            kept.append(first)
+            duplicates.extend(
+                {
+                    "rcept_no": a["evidence"]["rcept_no"],
+                    "stock_code": code,
+                    "same_dividend_as": first["evidence"]["rcept_no"],
+                    "dividend_kind": a["evidence"]["dividend_kind"],
+                }
+                for a in group[1:]
+            )
+        else:
+            unresolved.append(
+                {
+                    "stock_code": code,
+                    "ex_date": ex,
+                    "filings": [a["evidence"]["rcept_no"] for a in group],
+                    "reason": "different dividends on one ex-date",
+                }
+            )
+    return kept, unresolved, duplicates
