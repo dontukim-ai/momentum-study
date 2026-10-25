@@ -23,6 +23,7 @@ from .evaluation import backtest
 from .proposals import StructuredProposer, generate_proposal
 from .research import research
 from .selection import (
+    DEFAULT_RANKINGS,
     RANKINGS,
     RankedStrategy,
     SecurityHistory,
@@ -60,7 +61,7 @@ class LogicSettings:
     costs: Costs = field(default_factory=lambda: Costs(D("1.5"), D("20"), D("5")))
     evaluation: EvaluationPolicy = field(default_factory=EvaluationPolicy)
     lookbacks: tuple[int, ...] = (5, 10, 20)
-    rankings: tuple[str, ...] = RANKINGS
+    rankings: tuple[str, ...] = DEFAULT_RANKINGS
     candidate_budget: int = 8
 
     def __post_init__(self):
