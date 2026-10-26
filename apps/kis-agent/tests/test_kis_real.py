@@ -235,6 +235,15 @@ class PastMinuteBarTests(unittest.TestCase):
         self.assertEqual(query["FID_INPUT_HOUR_1"], ["100000"])
         self.assertNotIn("CANO", query)
 
+    def test_alphanumeric_krx_codes_are_read_but_other_shapes_are_not(self):
+        # KRX has issued codes such as 0167A0 since 2025 (explore v6 PR #89 for DART).
+        day = datetime.now(KST).date() - timedelta(days=30)
+        self.client.minute_bars_on("0167A0", day, "100000")
+        self.assertEqual(parse_qs(urlparse(self.calls[-1][1]).query)["FID_INPUT_ISCD"], ["0167A0"])
+        for bad in ("0167a0", "167A0", "0167A00", "01-7A0"):
+            with self.assertRaisesRegex(AgentError, "six-character"):
+                self.client.minute_bars_on(bad, day, "100000")
+
     def test_future_or_older_than_a_year_and_a_month_is_rejected_before_any_request(self):
         today = datetime.now(KST).date()
         for day in (today + timedelta(days=1), today - timedelta(days=400)):
