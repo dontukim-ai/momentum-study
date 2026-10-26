@@ -24,7 +24,7 @@ from .proposals import StructuredProposer, generate_proposal
 from .research import research
 from .selection import (
     DEFAULT_RANKINGS,
-    FUNDAMENTAL_RANKINGS,
+    LOOKBACK_FREE_RANKINGS,
     RANKINGS,
     RankedStrategy,
     SecurityHistory,
@@ -56,10 +56,10 @@ class EvaluationPolicy:
 
 
 def candidate_grid(champion: RankedStrategy, lookbacks, rankings) -> list[RankedStrategy]:
-    """Lookback x ranking challengers, champion excluded. Fundamental rankings
-    ignore the lookback, so they are proposed once, at the champion's."""
-    grid = [replace(champion, lookback=n, ranking=r) for n in lookbacks for r in rankings if r not in FUNDAMENTAL_RANKINGS]
-    grid += [replace(champion, ranking=r) for r in rankings if r in FUNDAMENTAL_RANKINGS]
+    """Lookback x ranking challengers, champion excluded. Fundamental and trend
+    rankings ignore the lookback, so they are proposed once, at the champion's."""
+    grid = [replace(champion, lookback=n, ranking=r) for n in lookbacks for r in rankings if r not in LOOKBACK_FREE_RANKINGS]
+    grid += [replace(champion, ranking=r) for r in rankings if r in LOOKBACK_FREE_RANKINGS]
     unique = {spec.version: spec for spec in grid}
     unique.pop(champion.version, None)
     return list(unique.values())
