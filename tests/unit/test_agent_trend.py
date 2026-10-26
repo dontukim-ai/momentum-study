@@ -52,3 +52,17 @@ def test_trend_strategy_holds_only_the_etf_and_exits_below_its_average():
     first_of_month = [d for prev, d in pairwise(sessions) if d[:7] != prev[:7]]
     assert exit_day == next(d for d in first_of_month if d > drop)
     assert all(by_session[d] > 0 for d in sessions if first_of_month[0] <= d < exit_day)
+
+
+def test_residual_momentum_reads_the_market_symbol_through_the_evaluator():
+    # FIXTURE cycles +-2% every 10 sessions; FUND trends up. Residual momentum
+    # needs FUND's bars in the evaluator's view to score FIXTURE at all.
+    data = trend_market(drop_at=10**6)
+    p = policy()
+    p = replace(p, logic=replace(p.logic, selection=replace(p.logic.selection, market_symbol="FUND")))
+    spec = RankedStrategy(20, 1, D(".4"), ranking="residual_momentum")
+    result = CommonEvaluator(p).evaluate(data, spec, data.sessions[250], data.sessions[300])
+    assert result.trades > 0
+    assert {t["symbol"] for t in result.trade_log} <= {"FIXTURE", "FUND"}
+    missing = replace(p, logic=replace(p.logic, selection=replace(p.logic.selection, market_symbol="NONE")))
+    assert CommonEvaluator(missing).evaluate(data, spec, data.sessions[250], data.sessions[300]).trades == 0

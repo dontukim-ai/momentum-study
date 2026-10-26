@@ -50,7 +50,13 @@ FUNDAMENTAL_RANKINGS = ("value", "profitability", "value_profit")
 # otherwise. It ignores the lookback and the momentum threshold.
 TREND_RANKINGS = ("market_trend",)
 TREND_MONTHS = 10
-RANKINGS = (*DEFAULT_RANKINGS, *SIGNAL_RANKINGS, *FUNDAMENTAL_RANKINGS, *TREND_RANKINGS)
+# Residual momentum (strategy-candidates-v8 C3): over the lookback, beta is the
+# OLS slope of the stock's daily returns on the market_symbol's; the residual
+# return is r - beta * m (intercept kept, so it does not sum to zero) and the
+# score is its sum divided by its standard deviation. Like low_volatility it
+# is a pure sort: no momentum threshold.
+RESIDUAL_RANKINGS = ("residual_momentum",)
+RANKINGS = (*DEFAULT_RANKINGS, *SIGNAL_RANKINGS, *FUNDAMENTAL_RANKINGS, *TREND_RANKINGS, *RESIDUAL_RANKINGS)
 # Rankings whose score does not depend on the lookback: proposed once.
 LOOKBACK_FREE_RANKINGS = (*FUNDAMENTAL_RANKINGS, *TREND_RANKINGS)
 # Fixed before any result: KRX limits daily moves to 30%, so this removes
@@ -283,6 +289,31 @@ def _fundamental_inputs(spec, record, market_cap, day, features, signal) -> None
         features["score"] = features["book_to_market" if spec.ranking == "value" else "operating_profitability"]
 
 
+def _residual_score(spec, history, market: dict, features: dict, signal: list) -> None:
+    window = history[-spec.lookback - 1:]
+    if any(b.session not in market for b in window):
+        signal.append("RESIDUAL_MARKET_UNAVAILABLE")
+        return
+    stock = [b.close / a.close - 1 for a, b in zip(window, window[1:])]
+    index = [market[b.session] / market[a.session] - 1 for a, b in zip(window, window[1:])]
+    n = len(stock)
+    mean_s, mean_m = sum(stock, D(0)) / n, sum(index, D(0)) / n
+    variance = sum(((m - mean_m) ** 2 for m in index), D(0)) / n
+    if variance == 0:
+        signal.append("RESIDUAL_MARKET_UNAVAILABLE")
+        return
+    beta = sum(((r - mean_s) * (m - mean_m) for r, m in zip(stock, index)), D(0)) / n / variance
+    residual = [r - beta * m for r, m in zip(stock, index)]
+    mean_e = sum(residual, D(0)) / n
+    deviation = (sum(((e - mean_e) ** 2 for e in residual), D(0)) / n).sqrt()
+    features["residual_beta"], features["residual_return"] = beta, sum(residual, D(0))
+    if deviation == 0:
+        signal.append("RESIDUAL_VOLATILITY_ZERO")
+        return
+    features["residual_volatility"] = deviation
+    features["score"] = features["residual_return"] / deviation
+
+
 def _trend_score(history, features: dict, signal: list) -> None:
     month_ends = {}
     for bar in history:
@@ -317,8 +348,8 @@ def select_candidates(spec: RankedStrategy, view: MarketView, securities: Securi
     fundamental = spec.ranking in FUNDAMENTAL_RANKINGS
     if (fundamental or policy.max_market_cap_rank is not None) and fundamentals is None:
         raise AgentError("Fundamental rankings and the market-cap universe need point-in-time fundamentals")
-    if spec.ranking in TREND_RANKINGS and policy.market_symbol is None:
-        raise AgentError("market_trend needs a preregistered market_symbol")
+    if spec.ranking in (*TREND_RANKINGS, *RESIDUAL_RANKINGS) and policy.market_symbol is None:
+        raise AgentError(f"{spec.ranking} needs a preregistered market_symbol")
     if spec.gross_weight > policy.max_gross or spec.gross_weight / spec.top_n > policy.max_position:
         raise AgentError("Strategy allocation exceeds the fixed selection risk policy")
     full_equity = policy.capital_limit if equity is None else dec(equity)
@@ -331,6 +362,8 @@ def select_candidates(spec: RankedStrategy, view: MarketView, securities: Securi
     required_history = max(policy.min_history, spec.lookback + 1)
     expected_sessions = tuple(sorted({b.session for h in visible_histories.values() for b in h}))[-required_history:]
     symbols = sorted(set(states) | set(visible_histories))
+    market = ({b.session: b.close for b in visible_histories.get(policy.market_symbol, ())}
+              if spec.ranking in RESIDUAL_RANKINGS else {})
     rows, signals = [], {}
     for symbol in symbols:
         history, state, reasons, features = visible_histories.get(symbol, ()), states.get(symbol), [], {}
@@ -407,6 +440,8 @@ def select_candidates(spec: RankedStrategy, view: MarketView, securities: Securi
                     signal.append("NOT_TREND_SYMBOL")
                 else:
                     _trend_score(history, features, signal)
+            elif spec.ranking in RESIDUAL_RANKINGS:
+                _residual_score(spec, history, market, features, signal)
             elif fundamental:
                 _fundamental_inputs(spec, fundamentals.financials(symbol, view.as_of), market_cap,
                                     view.expected_session, features, signal)
