@@ -118,3 +118,21 @@ def test_universe_keeps_liquid_domestic_equity_etfs_and_1x_inverse(tmp_path):
     assert [r["symbol"] for r in result["symbols"]] == ["069500", "114800"]
     assert result["eligible"] == 3
     assert result["dropped"] == {"2X": 1, "not quoted every session": 1, "미국": 1, "채권": 1}
+
+
+def test_universe_can_require_quotes_over_the_whole_collection_window(tmp_path):
+    older = {"069500": 900, "102110": 500}
+    young = {"0167A0": 800}  # listed inside the collection window
+    pages, presence = {}, {}
+    for day in ("2026-01-05", "2026-01-06"):
+        page(tmp_path / day / "page-1.json", [{"srtnCd": s, "itmsNm": s, "bssIdxIdxNm": "코스피 200", "trPrc": "1"}
+                                             for s in older])
+        presence[day] = [tmp_path / day / "page-1.json"]
+    for day in ("2026-10-22", "2026-10-23"):
+        page(tmp_path / day / "page-1.json", [{"srtnCd": s, "itmsNm": s, "bssIdxIdxNm": "코스피 200", "trPrc": str(v)}
+                                             for s, v in {**older, **young}.items()])
+        pages[day] = presence[day] = [tmp_path / day / "page-1.json"]
+    assert [r["symbol"] for r in universe.select(pages, top=2)["symbols"]] == ["069500", "0167A0"]
+    result = universe.select(pages, top=2, presence=presence)
+    assert [r["symbol"] for r in result["symbols"]] == ["069500", "102110"]
+    assert result["dropped"]["not quoted since the collection start"] == 1
