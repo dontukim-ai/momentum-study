@@ -15,7 +15,7 @@ from trading_agent.selection import (
     select_candidates,
 )
 
-POLICY = SelectionPolicy(trend_symbol="IDX")
+POLICY = SelectionPolicy(market_symbol="IDX")
 
 
 def market(close_of):
@@ -63,12 +63,12 @@ class TrendRankingTests(unittest.TestCase):
         early = screen(snapshot, securities, sessions[150])  # about seven months of history
         self.assertEqual({r["symbol"]: r for r in early["candidates"]}["IDX"]["reasons"], ["INSUFFICIENT_TREND_HISTORY"])
 
-    def test_trend_symbol_is_required_and_proposed_once(self):
+    def test_market_symbol_is_required_and_proposed_once(self):
         snapshot, securities, sessions = market(lambda i: D(10000))
-        with self.assertRaisesRegex(AgentError, "trend_symbol"):
+        with self.assertRaisesRegex(AgentError, "market_symbol"):
             screen(snapshot, securities, sessions[-1], SelectionPolicy())
-        with self.assertRaisesRegex(AgentError, "trend symbol"):
-            SelectionPolicy(trend_symbol="bad/name")
+        with self.assertRaisesRegex(AgentError, "market symbol"):
+            SelectionPolicy(market_symbol="bad/name")
         grid = candidate_grid(RankedStrategy(20), (20, 40), ("momentum", "market_trend"))
         self.assertEqual([(s.ranking, s.lookback) for s in grid], [("momentum", 40), ("market_trend", 20)])
         LogicSettings(champion=RankedStrategy(20), lookbacks=(20, 40), rankings=("momentum", "market_trend"),

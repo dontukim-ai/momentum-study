@@ -45,7 +45,7 @@ SIGNAL_RANKINGS = ("short_reversal", "low_volatility", "momentum_ex_max")
 #   value_profit: mean of the two percentile ranks among eligible stocks.
 FUNDAMENTAL_RANKINGS = ("value", "profitability", "value_profit")
 # Market trend filter (strategy-candidates-v8 C1, Faber 2007): hold the
-# policy's trend_symbol only while its close is above the average of its last
+# policy's market_symbol only while its close is above the average of its last
 # TREND_MONTHS month-end closes (the latest bar counts for its month); cash
 # otherwise. It ignores the lookback and the momentum threshold.
 TREND_RANKINGS = ("market_trend",)
@@ -192,8 +192,9 @@ class SelectionPolicy:
     # Explore v7 §3: keep only the N largest screened stocks by market cap.
     # ETFs are not ranked, so a market-ETF benchmark stays screenable.
     max_market_cap_rank: int | None = None
-    # Strategy-candidates-v8 C1: the one instrument market_trend may hold.
-    trend_symbol: str | None = None
+    # Strategy-candidates-v8: the preregistered market ETF. market_trend holds
+    # only it (C1); residual_momentum regresses on its returns (C3).
+    market_symbol: str | None = None
 
     def __post_init__(self):
         if self.spread_mode not in ("quoted", "historical_unavailable"):
@@ -223,9 +224,9 @@ class SelectionPolicy:
         if self.max_market_cap_rank is not None and (type(self.max_market_cap_rank) is not int
                                                      or not 1 <= self.max_market_cap_rank <= 10000):
             raise AgentError("Market-cap universe size must be an integer 1..10000")
-        if self.trend_symbol is not None and (not isinstance(self.trend_symbol, str)
-                                              or not re.fullmatch(r"[A-Za-z0-9_]{1,30}", self.trend_symbol)):
-            raise AgentError("Invalid trend symbol")
+        if self.market_symbol is not None and (not isinstance(self.market_symbol, str)
+                                              or not re.fullmatch(r"[A-Za-z0-9_]{1,30}", self.market_symbol)):
+            raise AgentError("Invalid market symbol")
         self.risk(("VALIDATION",))
 
     def risk(self, symbols: tuple[str, ...]):
@@ -316,8 +317,8 @@ def select_candidates(spec: RankedStrategy, view: MarketView, securities: Securi
     fundamental = spec.ranking in FUNDAMENTAL_RANKINGS
     if (fundamental or policy.max_market_cap_rank is not None) and fundamentals is None:
         raise AgentError("Fundamental rankings and the market-cap universe need point-in-time fundamentals")
-    if spec.ranking in TREND_RANKINGS and policy.trend_symbol is None:
-        raise AgentError("market_trend needs a preregistered trend_symbol")
+    if spec.ranking in TREND_RANKINGS and policy.market_symbol is None:
+        raise AgentError("market_trend needs a preregistered market_symbol")
     if spec.gross_weight > policy.max_gross or spec.gross_weight / spec.top_n > policy.max_position:
         raise AgentError("Strategy allocation exceeds the fixed selection risk policy")
     full_equity = policy.capital_limit if equity is None else dec(equity)
@@ -402,7 +403,7 @@ def select_candidates(spec: RankedStrategy, view: MarketView, securities: Securi
             if volatility > policy.max_daily_volatility:
                 reasons.append("EXCESSIVE_VOLATILITY")
             if spec.ranking in TREND_RANKINGS:
-                if symbol != policy.trend_symbol:
+                if symbol != policy.market_symbol:
                     signal.append("NOT_TREND_SYMBOL")
                 else:
                     _trend_score(history, features, signal)

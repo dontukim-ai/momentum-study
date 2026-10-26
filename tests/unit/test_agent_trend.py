@@ -32,7 +32,7 @@ def test_trend_strategy_holds_only_the_etf_and_exits_below_its_average():
     p = replace(
         p,
         decision_cadence="monthly",
-        logic=replace(p.logic, selection=replace(p.logic.selection, trend_symbol="FUND")),
+        logic=replace(p.logic, selection=replace(p.logic.selection, market_symbol="FUND")),
     )
     spec = RankedStrategy(20, 1, D(".4"), ranking="market_trend")
     start, end = data.sessions[250], data.sessions[-1]
