@@ -14,8 +14,13 @@ from typing import Any
 
 from trading_agent.contracts import AgentError, aware, digest
 from trading_agent.data import Snapshot
+from trading_agent.fundamentals import FundamentalHistory
 from trading_agent.logic import LogicSettings, settings_from_dict
-from trading_agent.selection import SecurityHistory, SecurityState
+from trading_agent.selection import (
+    FUNDAMENTAL_RANKINGS,
+    SecurityHistory,
+    SecurityState,
+)
 
 from momentum.ledger.ledger import CorporateAction
 
@@ -209,6 +214,9 @@ class ResearchInput:
     corporate_action_basis: str = "raw-unadjusted; supplied-actions-complete"
     calendar: tuple[date, ...] = ()
     late_dividends: tuple[LateDividend, ...] = ()
+    # Annual financials and listed-share runs (explore v7); only studies whose
+    # policy uses fundamental rankings or a market-cap universe need them.
+    fundamentals: FundamentalHistory | None = None
 
     def __post_init__(self) -> None:
         if not self.sessions:
@@ -277,6 +285,9 @@ class ResearchInput:
             if isinstance(self.calendar, _ObservedCalendar)
             else tuple(d for d in self.calendar if d <= end),
             tuple(d for d in self.late_dividends if d.available_at <= clock),
+            None
+            if self.fundamentals is None
+            else self.fundamentals.until(end, clock),
         )
 
     def fingerprint(self, end: date) -> str:
@@ -302,6 +313,8 @@ class ResearchInput:
         # fingerprints already stored by existing studies.
         if prefix.late_dividends:
             content["late_dividends"] = prefix.late_dividends
+        if prefix.fundamentals is not None:
+            content["fundamentals"] = prefix.fundamentals.id
         return digest(content)
 
 
@@ -435,6 +448,13 @@ class AgentPolicy:
             < self.min_tail_draws
         ):
             raise AgentError("Too few bootstrap tail draws for statistical policy v2")
+
+
+def needs_fundamentals(policy: AgentPolicy) -> bool:
+    logic = policy.logic
+    return logic.selection.max_market_cap_rank is not None or any(
+        r in FUNDAMENTAL_RANKINGS for r in (logic.champion.ranking, *logic.rankings)
+    )
 
 
 def policy_from_dict(raw: dict[str, Any]) -> AgentPolicy:

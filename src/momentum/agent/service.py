@@ -35,6 +35,7 @@ from .contracts import (
     AgentPolicy,
     ResearchInput,
     build_id,
+    needs_fundamentals,
     policy_from_dict,
     require_observed,
 )
@@ -306,6 +307,7 @@ def _require_screenable(data: ResearchInput, policy: AgentPolicy, end: date) -> 
         MarketCosts(c.commission_bps, c.sell_tax_bps, c.slippage_bps),
         market.report_deadline(end),
         audit=False,
+        fundamentals=data.fundamentals,
     )
     if not any(
         row["status"] in {"SELECTED", "NOT_SELECTED"} for row in report["candidates"]
@@ -1737,6 +1739,12 @@ class ResearchAgent:
             or not 1 <= max_cycles <= policy.max_validation_cycles
         ):
             raise AgentError("max_cycles must fit the fixed total validation budget")
+        if needs_fundamentals(policy) and data.fundamentals is None:
+            # Refuse before any budget is reserved: every screen would fail.
+            raise AgentError(
+                "Policy uses fundamental rankings or a market-cap universe; "
+                "supply --financials and --shares"
+            )
         with self.store.transaction():
             self._checkpoint(name, data, data.sessions[0])
         completed: list[dict[str, Any]] = []
@@ -3127,6 +3135,7 @@ class ResearchAgent:
             policy.logic.selection,
             costs,
             profile(policy.market).report_deadline(end),
+            fundamentals=frozen.fundamentals,
         )
         report = json.loads(canonical(report))
         with self.store.transaction():
