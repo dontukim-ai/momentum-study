@@ -56,6 +56,19 @@ class RealKeyTests(unittest.TestCase):
                 if "trading/" in parsed.path:
                     self.assertEqual(parse_qs(parsed.query)["CANO"], ["12345678"])
 
+    def test_account_without_hyphen_is_the_same_8_digit_account(self, _sleep):
+        with patch.dict("os.environ", {"KIS_ACCOUNT": "1234567801"}):
+            plain = KisRealReadOnly(self.exchange)
+            self.assertTrue(doctor(policy=DENY)["real"]["configured"])
+        self.assertEqual(plain.account_params(), {"CANO": "12345678", "ACNT_PRDT_CD": "01"})
+        self.assertEqual(plain._cache_id, self.client._cache_id)
+        for bad in ("12345678", "1234567802", "123456789-01", "12345678-1", " 1234567801"):
+            with patch.dict("os.environ", {"KIS_ACCOUNT": bad}):
+                with self.assertRaisesRegex(AgentError, "KIS_ACCOUNT"):
+                    KisRealReadOnly(self.exchange)
+                self.assertFalse(doctor(policy=DENY)["real"]["configured"])
+        self.assertEqual(self.exchange.calls, [])
+
     def test_order_and_cancel_operations_rejected_before_authentication(self, _sleep):
         for operation in ("buy", "sell", "cancel", "/uapi/domestic-stock/v1/trading/order-cash"):
             with self.assertRaisesRegex(AgentError, "reads are allowed"):

@@ -15,6 +15,7 @@ from trading_agent.contracts import (
     Quote,
     session_time,
 )
+from trading_agent.diagnostics import doctor
 from trading_agent.execution import OMS, RiskPolicy, SimulatedBroker
 from trading_agent.kis_paper import PAPER_HOST, KisPaperBroker, PaperSession
 from trading_agent.store import Store
@@ -156,6 +157,17 @@ class PaperBrokerTests(unittest.TestCase):
         duplicate = KisPaperBroker(self.store, self.session, "duplicate-alias", {"123456": D(1)})
         with self.assertRaisesRegex(AgentError, "already has an account alias"):
             duplicate.bootstrap()
+
+    def test_account_without_hyphen_is_the_same_8_digit_account(self):
+        with patch.dict("os.environ", {"KIS_PAPER_ACCOUNT": "1234567801"}):
+            plain = PaperSession(self.exchange, .1)
+            self.assertTrue(doctor(policy={})["paper_account_format_valid"])
+        self.assertEqual(plain.identity, self.session.identity)
+        for bad in ("12345678", "1234567802", "123456789-01"):
+            with patch.dict("os.environ", {"KIS_PAPER_ACCOUNT": bad}):
+                with self.assertRaisesRegex(AgentError, "KIS_PAPER_ACCOUNT"):
+                    PaperSession(self.exchange, .1)
+                self.assertFalse(doctor(policy={})["paper_account_format_valid"])
 
     def test_explicit_business_rejection_is_terminal_not_unknown(self):
         self.exchange.business_reject = True
