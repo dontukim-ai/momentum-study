@@ -22,6 +22,7 @@ books them (CLAUDE.md rule 7):
 
 from __future__ import annotations
 
+from bisect import bisect_right
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from decimal import ROUND_FLOOR, ROUND_HALF_UP
@@ -79,11 +80,15 @@ def won(value: D) -> D:
 class View:
     """What a strategy may see: earlier days whole, today up to ``time``."""
 
-    def __init__(self, days: Days, day: str, time: str):
+    def __init__(self, days: Days, day: str, time: str, times: Mapping[str, list[str]] | None = None):
         self.day, self.time, self._days = day, time, days
+        # Bar times per symbol for today, so a lookup is a bisection, not a scan.
+        self._times = times if times is not None else {
+            s: [b.time for b in bars] for s, bars in days[day].items()}
 
-    def bars(self, symbol: str) -> list[Bar]:
-        return [b for b in self._days[self.day].get(symbol, ()) if b.time <= self.time]
+    def bars(self, symbol: str) -> tuple[Bar, ...]:
+        today = self._days[self.day].get(symbol, ())
+        return today[:bisect_right(self._times.get(symbol, []), self.time)]
 
     def previous_days(self) -> list[tuple[str, dict[str, tuple[Bar, ...]]]]:
         return [(d, bars) for d, bars in self._days.items() if d < self.day]
@@ -193,9 +198,10 @@ def run(days: Days, strategy: Strategy, capital: D = CAPITAL) -> Result:
         for symbol, bars in symbols.items():
             for b in bars:
                 by_time.setdefault(b.time, {})[symbol] = b
+        bar_times = {s: [b.time for b in bars] for s, bars in symbols.items()}
         opening = times[0]
         before = _second_before(opening)
-        targets = strategy.open_auction(View(days, day, before))
+        targets = strategy.open_auction(View(days, day, before, bar_times))
         if targets is not None:
             book.auction(targets, day, before, by_time[opening], "open_auction", "open")
         pending: dict[str, int] = {}
@@ -204,12 +210,12 @@ def run(days: Days, strategy: Strategy, capital: D = CAPITAL) -> Result:
                 if symbol in pending:
                     book.fill(symbol, pending.pop(symbol), bar.open, bar, "continuous", day)
                 book.marks[symbol] = bar.close
-            decided = strategy.on_minute(View(days, day, time))
+            decided = strategy.on_minute(View(days, day, time, bar_times))
             if decided is not None:
                 pending = book.deltas(decided, day, time)
         for symbol in sorted(pending):
             result.events.append({"event": "expired", "day": day, "symbol": symbol, "requested": pending[symbol]})
-        closing = strategy.close_auction(View(days, day, CLOSE_INFO))
+        closing = strategy.close_auction(View(days, day, CLOSE_INFO, bar_times))
         book.auction(closing or {}, day, CLOSE_INFO, by_time.get(CLOSE_AUCTION, {}), "close_auction", "close")
         for time in (t for t in times if t >= CONTINUOUS_END):
             for symbol, bar in by_time[time].items():
