@@ -1,0 +1,84 @@
+{
+  "bootstrap_block": 5,
+  "bootstrap_samples": 2000,
+  "currency": "KRW",
+  "decision_cadence": "monthly",
+  "degradation_drawdown": null,
+  "degradation_reference": "equal_weight_eligible",
+  "degradation_underperformance": 0.03,
+  "demotion_checkpoints": 3,
+  "development_sessions": 120,
+  "embargo_sessions": 5,
+  "execution_min_observation_sessions": 60,
+  "family_alpha": 0.05,
+  "holdout_sessions": 40,
+  "logic": {
+    "candidate_budget": 11,
+    "champion": {
+      "gross_weight": "0.8",
+      "lookback": 20,
+      "min_momentum": "0",
+      "ranking": "momentum",
+      "top_n": 10
+    },
+    "costs": {
+      "commission_bps": "1.5",
+      "sell_tax_bps": "20",
+      "slippage_bps": "25"
+    },
+    "evaluation": {
+      "holdout_fraction": 0.2,
+      "max_drawdown": 0.25,
+      "min_fold_trades": 2,
+      "min_holdout_trades": 4,
+      "min_improvement": 0.001
+    },
+    "lookbacks": [
+      20,
+      40,
+      60
+    ],
+    "rankings": [
+      "momentum",
+      "short_reversal",
+      "low_volatility",
+      "momentum_ex_max"
+    ],
+    "selection": {
+      "allowed_markets": [
+        "KOSPI",
+        "KOSDAQ"
+      ],
+      "allowed_types": [
+        "STOCK",
+        "ETF"
+      ],
+      "capital_limit": "100000000",
+      "feature_window": 20,
+      "market_symbol": "069500",
+      "max_daily_volatility": "0.08",
+      "max_gross": "0.8",
+      "max_market_cap_rank": null,
+      "max_order_notional": "40000000",
+      "max_position": "0.4",
+      "max_spread_bps": "30",
+      "max_state_age_seconds": 86400,
+      "min_average_turnover": "10000000000",
+      "min_average_volume": "10000",
+      "min_history": 60,
+      "min_price": "1000",
+      "spread_mode": "historical_unavailable"
+    }
+  },
+  "market": "KRX",
+  "market_etf_symbol": "069500",
+  "max_validation_cycles": 8,
+  "memory_cooldown_cycles": 2,
+  "memory_policy": "none",
+  "min_tail_draws": 50,
+  "money_quantum": "1",
+  "observation_checkpoint_sessions": 20,
+  "shadow_sessions": 20,
+  "statistical_policy_version": "v1",
+  "warmup_sessions": 61
+}
