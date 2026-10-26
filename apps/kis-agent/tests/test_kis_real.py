@@ -2,7 +2,7 @@ import io
 import json
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -203,3 +203,41 @@ class MarketDataReadTests(unittest.TestCase):
             self.client.request("/uapi/domestic-stock/v1/trading/order-cash", {})
         self.assertFalse(hasattr(self.client, "submit"))
         self.assertEqual(REAL_CAPITAL_LIMIT, D("1000000"))
+
+
+class PastMinuteBarTests(unittest.TestCase):
+    """Past-date one-minute bars (FHKST03010230), read-only market data."""
+
+    def setUp(self):
+        self.env = patch.dict("os.environ", REAL_ENV, clear=True)
+        self.env.start()
+        self.calls = []
+        self.client = KisRealReadOnly(self.transport, minimum_interval=.1)
+
+    def tearDown(self):
+        self.env.stop()
+
+    def transport(self, method, url, headers, body):
+        self.calls.append((method, url, headers, body))
+        if method == "POST":
+            return {"access_token": "token", "expires_in": 86400}
+        return {"rt_cd": "0", "output1": {}, "output2": [
+            {"stck_bsop_date": "20260105", "stck_cntg_hour": "100000", "stck_prpr": "35000"}]}
+
+    def test_past_day_bars_use_their_tr_id_and_date(self):
+        day = datetime.now(KST).date() - timedelta(days=30)
+        result = self.client.minute_bars_on("069500", day, "100000")
+        self.assertEqual(result["output2"][0]["stck_cntg_hour"], "100000")
+        method, url, headers, _ = self.calls[-1]
+        self.assertEqual((method, headers["tr_id"]), ("GET", "FHKST03010230"))
+        query = parse_qs(urlparse(url).query)
+        self.assertEqual(query["FID_INPUT_DATE_1"], [day.strftime("%Y%m%d")])
+        self.assertEqual(query["FID_INPUT_HOUR_1"], ["100000"])
+        self.assertNotIn("CANO", query)
+
+    def test_future_or_older_than_a_year_and_a_month_is_rejected_before_any_request(self):
+        today = datetime.now(KST).date()
+        for day in (today + timedelta(days=1), today - timedelta(days=400)):
+            with self.assertRaisesRegex(AgentError, "retained minute-bar window"):
+                self.client.minute_bars_on("069500", day, "100000")
+        self.assertEqual(self.calls, [])

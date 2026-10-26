@@ -34,8 +34,11 @@ READ_ROUTES = {
     # Market-data reads for the intraday cost probe (intraday-cost-probe-v10 §7).
     "asking": ("/uapi/domestic-stock/v1/quotations/inquire-asking-price-exp-ccn", "FHKST01010200"),
     "minute": ("/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice", "FHKST03010200"),
+    # Past-date one-minute bars; KIS keeps about a year (intraday-candidates-v10 §5).
+    "minute_daily": ("/uapi/domestic-stock/v1/quotations/inquire-time-dailychartprice", "FHKST03010230"),
 }
-MARKET_READS = ("quote", "asking", "minute")
+MARKET_READS = ("quote", "asking", "minute", "minute_daily")
+MINUTE_HISTORY_DAYS = 380
 
 
 def _integer(value) -> int:
@@ -153,6 +156,23 @@ class KisRealReadOnly:
         result = self.request("minute", {"FID_ETC_CLS_CODE": "", "FID_COND_MRKT_DIV_CODE": "J",
                                          "FID_INPUT_ISCD": _symbol(symbol), "FID_INPUT_HOUR_1": hour,
                                          "FID_PW_DATA_INCU_YN": "Y"})
+        rows = result.get("output2")
+        if not isinstance(rows, list) or any(
+                not isinstance(row, dict) or not {"stck_bsop_date", "stck_cntg_hour", "stck_prpr"} <= row.keys()
+                for row in rows):
+            raise AgentError("Missing real minute-bar rows")
+        return result
+
+    def minute_bars_on(self, symbol: str, day: date, hour: str) -> dict:
+        """Up to 120 one-minute bars of a past ``day`` ending at ``hour`` (HHMMSS, KST)."""
+        today = datetime.now(KST).date()
+        if type(day) is not date or not 0 <= (today - day).days <= MINUTE_HISTORY_DAYS:
+            raise AgentError("Only days inside the retained minute-bar window are supported")
+        if not isinstance(hour, str) or not re.fullmatch(r"(0[89]|1[0-5])[0-5][0-9][0-5][0-9]", hour):
+            raise AgentError("A KRX session time HHMMSS is required")
+        result = self.request("minute_daily", {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": _symbol(symbol),
+                                               "FID_INPUT_HOUR_1": hour, "FID_INPUT_DATE_1": day.strftime("%Y%m%d"),
+                                               "FID_PW_DATA_INCU_YN": "Y", "FID_FAKE_TICK_INCU_YN": ""})
         rows = result.get("output2")
         if not isinstance(rows, list) or any(
                 not isinstance(row, dict) or not {"stck_bsop_date", "stck_cntg_hour", "stck_prpr"} <= row.keys()
