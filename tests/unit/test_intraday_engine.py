@@ -152,3 +152,12 @@ def test_unfilled_orders_expire_at_1520_and_close_auction_flattens_by_default():
     result = engine.run(golden_days(), Late())
     assert [e["event"] for e in result.events if e["symbol"] == B][:1] == ["expired"]
     assert result.trades == [] and result.final_equity == D(100000000)
+
+
+def test_cost_scale_doubles_commission_and_tick():
+    """Same golden trades at twice the costs: ticks 10/2 KRW, commission 3bp (sizes may move by a share)."""
+    base, doubled = engine.run(golden_days(), Scripted()), engine.run(golden_days(), Scripted(), cost_scale=2)
+    first = doubled.trades[0]
+    assert (first["price"], first["commission"]) == (D(10020), engine.won(3000 * D(10020) * D("0.0003")))
+    assert doubled.trades[1]["price"] == D(1512)
+    assert doubled.final_equity < base.final_equity

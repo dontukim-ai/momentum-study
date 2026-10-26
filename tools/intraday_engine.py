@@ -113,8 +113,8 @@ class Result:
 
 
 class _Book:
-    def __init__(self, symbols: set[str], capital: D):
-        self.symbols, self.capital = symbols, capital
+    def __init__(self, symbols: set[str], capital: D, cost_scale: D = D(1)):
+        self.symbols, self.capital, self.scale = symbols, capital, cost_scale
         self.cash = capital
         self.held: dict[str, int] = {}
         self.marks: dict[str, D] = {}
@@ -146,12 +146,12 @@ class _Book:
 
     def fill(self, symbol: str, delta: int, base: D, bar: Bar, kind: str, day: str) -> None:
         side = "BUY" if delta > 0 else "SELL"
-        adverse = tick(base) if kind == "continuous" else D(0)
+        adverse = tick(base) * self.scale if kind == "continuous" else D(0)
         price = base + adverse if delta > 0 else base - adverse
         cap = int((CAPACITY * bar.close * bar.volume / price).to_integral_value(ROUND_FLOOR))
         quantity = min(abs(delta), cap)
         if delta > 0:
-            while quantity and quantity * price + won(quantity * price * COMMISSION) > self.cash:
+            while quantity and quantity * price + won(quantity * price * COMMISSION * self.scale) > self.cash:
                 quantity -= 1
         else:
             quantity = min(quantity, self.held.get(symbol, 0))
@@ -162,7 +162,7 @@ class _Book:
         if not quantity:
             return
         notional = quantity * price
-        commission = won(notional * COMMISSION)
+        commission = won(notional * COMMISSION * self.scale)
         signed = quantity if delta > 0 else -quantity
         self.cash += -notional - commission if delta > 0 else notional - commission
         held = self.held.get(symbol, 0) + signed
@@ -188,8 +188,9 @@ class _Book:
             self.fill(symbol, delta, getattr(bar, price_of), bar, kind, day)
 
 
-def run(days: Days, strategy: Strategy, capital: D = CAPITAL) -> Result:
-    book = _Book({s for symbols in days.values() for s in symbols}, capital)
+def run(days: Days, strategy: Strategy, capital: D = CAPITAL, cost_scale: float = 1) -> Result:
+    """``cost_scale`` multiplies commission and tick (the plan's twice-the-cost check)."""
+    book = _Book({s for symbols in days.values() for s in symbols}, capital, D(str(cost_scale)))
     result = book.result
     for day, symbols in days.items():
         start = book.equity()
