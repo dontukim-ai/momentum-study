@@ -94,13 +94,16 @@ def kind_files(new: Path, history: Path) -> dict[str, list[Path]]:
             raise SpecUndefinedError(f"{path}: cannot tell which KRX list this is")
         return found[0]
 
+    def lists(folder: Path) -> list[Path]:  # skips hidden files such as .DS_Store
+        return sorted(p for p in folder.iterdir() if p.is_file() and not p.name.startswith("."))
+
     files: dict[str, list[Path]] = {"managed": [], "halted": [], "delisted": []}
-    for path in sorted(p for p in new.iterdir() if p.is_file()):
+    for path in lists(new):
         files[classify(path)].append(path)
     if any(len(v) != 1 for v in files.values()):
         raise SpecUndefinedError(f"{new} needs exactly one managed, halted and delisting list: "
                                  f"{ {k: len(v) for k, v in files.items()} }")
-    for path in sorted(p for p in history.iterdir() if p.is_file()) if history.is_dir() else []:
+    for path in lists(history) if history.is_dir() else []:
         if classify(path) == "delisted":
             files["delisted"].append(path)
     return files

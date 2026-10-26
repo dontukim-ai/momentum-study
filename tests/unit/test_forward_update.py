@@ -80,6 +80,14 @@ def test_kind_files_take_only_delisting_lists_from_history(tmp_path):
         tool.kind_files(kind_dir(tmp_path / "short", delisting=False), old)
 
 
+def test_kind_files_skip_hidden_files(tmp_path):
+    # macOS Finder drops .DS_Store into folders; it is not a KRX list.
+    new, old = kind_dir(tmp_path / "new"), kind_dir(tmp_path / "old")
+    for folder in (new, old):
+        (folder / ".DS_Store").write_bytes(b"\x00\x80\xff")
+    assert tool.kind_files(new, old)["delisted"] == [new / "c.csv", old / "c.csv"]
+
+
 def test_price_digest_ignores_order_and_later_sessions(tmp_path):
     a, b = tmp_path / "a.csv", tmp_path / "b.csv"
     a.write_text("session,symbol\n2026-10-20,X\n2026-10-19,Y\n")
