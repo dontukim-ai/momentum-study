@@ -8,6 +8,8 @@ of the calendar, keep ETFs quoted on every one of them whose name and base
 index carry no excluded keyword (foreign markets, bonds, rates, money market,
 commodities, currencies, REITs, multi-asset, leverage, covered calls; 1x
 inverse stays in), then take the --top by average daily trading value (trPrc).
+With --listed-since, an ETF must also be quoted on every session from that day
+(the minute-bar collection window), so every kept ETF has the whole year.
 Writes the list with names, index and average value; nothing else.
 """
 
@@ -35,7 +37,16 @@ def excluded(*texts: str) -> str | None:
     return next((k for k in EXCLUDE if k in joined), None)
 
 
-def select(pages_by_day: dict[str, list[Path]], top: int) -> dict:
+def quoted(pages: list[Path]) -> set[str]:
+    symbols = set()
+    for page in pages:
+        body = json.loads(page.read_text(encoding="utf-8"))["response"]["body"]
+        symbols.update(str(i.get("srtnCd")) for i in (body.get("items") or {}).get("item", []))
+    return symbols
+
+
+def select(pages_by_day: dict[str, list[Path]], top: int, presence: dict[str, list[Path]] | None = None) -> dict:
+    """``presence``: sessions on which a kept ETF must also be quoted (the collection window)."""
     seen: dict[str, dict] = {}
     values: dict[str, list[float]] = defaultdict(list)
     for day, pages in sorted(pages_by_day.items()):
@@ -49,6 +60,7 @@ def select(pages_by_day: dict[str, list[Path]], top: int) -> dict:
                 seen[symbol] = {"name": str(item.get("itmsNm") or ""), "index": str(item.get("bssIdxIdxNm") or "")}
                 values[symbol].append(value)
     days = len(pages_by_day)
+    always = set.intersection(*(quoted(p) for p in presence.values())) if presence else None
     kept, dropped = [], defaultdict(int)
     for symbol, meta in seen.items():
         reason = excluded(meta["name"], meta["index"])
@@ -56,10 +68,13 @@ def select(pages_by_day: dict[str, list[Path]], top: int) -> dict:
             dropped[reason] += 1
         elif len(values[symbol]) < days:
             dropped["not quoted every session"] += 1
+        elif always is not None and symbol not in always:
+            dropped["not quoted since the collection start"] += 1
         else:
             kept.append({"symbol": symbol, **meta, "average_trading_value": sum(values[symbol]) / days})
     kept.sort(key=lambda r: (-r["average_trading_value"], r["symbol"]))
     return {"sessions": sorted(pages_by_day), "top": top, "symbols": kept[:top],
+            "listed_since": min(presence) if presence else None,
             "eligible": len(kept), "dropped": dict(sorted(dropped.items()))}
 
 
@@ -69,20 +84,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fsc-root", type=Path, default=Path("data/krx/raw/fsc"))
     parser.add_argument("--sessions", type=int, default=60)
     parser.add_argument("--top", type=int, default=30)
+    parser.add_argument("--listed-since", help="also require quotes on every session from this day")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
     if args.out.exists():
         print(f"etf-universe: STOP: {args.out} exists; the universe is fixed once")
         return 1
-    sessions = json.loads((args.calendar / "calendar.json").read_text())[-args.sessions:]
-    pages = {d: sorted((args.fsc_root / "etf" / d).glob("page-*.json")) for d in sessions}
+    calendar = json.loads((args.calendar / "calendar.json").read_text())
+    window = [d for d in calendar if args.listed_since and d >= args.listed_since]
+    pages = {d: sorted((args.fsc_root / "etf" / d).glob("page-*.json")) for d in {*calendar[-args.sessions:], *window}}
     if any(not p for p in pages.values()):
-        print(f"etf-universe: STOP: sessions without ETF pages: {[d for d, p in pages.items() if not p]}")
+        print(f"etf-universe: STOP: sessions without ETF pages: {sorted(d for d, p in pages.items() if not p)}")
         return 1
-    result = select(pages, args.top)
+    result = select({d: pages[d] for d in calendar[-args.sessions:]}, args.top,
+                    {d: pages[d] for d in window} if window else None)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-    print(f"etf-universe: {result['sessions'][0]}~{result['sessions'][-1]}, eligible {result['eligible']}, "
+    print(f"etf-universe: {result['sessions'][0]}~{result['sessions'][-1]}, listed since {result['listed_since']}, "
+          f"eligible {result['eligible']}, "
           f"kept {len(result['symbols'])}, dropped {result['dropped']}")
     for row in result["symbols"]:
         print(f"{row['symbol']} {row['average_trading_value'] / 1e8:>10,.0f}억 {row['name']} | {row['index']}")
