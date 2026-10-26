@@ -24,6 +24,7 @@ from .proposals import StructuredProposer, generate_proposal
 from .research import research
 from .selection import (
     DEFAULT_RANKINGS,
+    FUNDAMENTAL_RANKINGS,
     RANKINGS,
     RankedStrategy,
     SecurityHistory,
@@ -54,6 +55,16 @@ class EvaluationPolicy:
             raise AgentError("Positive fold and holdout activity requirements are required")
 
 
+def candidate_grid(champion: RankedStrategy, lookbacks, rankings) -> list[RankedStrategy]:
+    """Lookback x ranking challengers, champion excluded. Fundamental rankings
+    ignore the lookback, so they are proposed once, at the champion's."""
+    grid = [replace(champion, lookback=n, ranking=r) for n in lookbacks for r in rankings if r not in FUNDAMENTAL_RANKINGS]
+    grid += [replace(champion, ranking=r) for r in rankings if r in FUNDAMENTAL_RANKINGS]
+    unique = {spec.version: spec for spec in grid}
+    unique.pop(champion.version, None)
+    return list(unique.values())
+
+
 @dataclass(frozen=True)
 class LogicSettings:
     champion: RankedStrategy = field(default_factory=RankedStrategy)
@@ -73,8 +84,7 @@ class LogicSettings:
             raise AgentError("Invalid preregistered ranking/search space")
         if type(self.candidate_budget) is not int or not 1 <= self.candidate_budget <= 12:
             raise AgentError("Logic challenger budget must be 1..12")
-        count = len(self.lookbacks) * len(self.rankings) - int(self.champion.lookback in self.lookbacks and self.champion.ranking in self.rankings)
-        if count > self.candidate_budget:
+        if len(candidate_grid(self.champion, self.lookbacks, self.rankings)) > self.candidate_budget:
             raise AgentError("Preregistered search space exceeds the challenger budget")
         if self.champion.gross_weight > self.selection.max_gross or self.champion.gross_weight / self.champion.top_n > self.selection.max_position:
             raise AgentError("Champion allocation exceeds the fixed policy")
@@ -138,9 +148,7 @@ class LogicProposer:
 
     def propose(self, champion):
         lookbacks = self.structured.bundle["lookbacks"] if self.structured else self.settings.lookbacks
-        candidates = {replace(champion, lookback=n, ranking=ranking).version: replace(champion, lookback=n, ranking=ranking)
-                      for n in lookbacks for ranking in self.settings.rankings}
-        candidates.pop(champion.version, None)
+        candidates = {spec.version: spec for spec in candidate_grid(champion, lookbacks, self.settings.rankings)}
         if len(candidates) > self.settings.candidate_budget:
             if self.structured:
                 raise AgentError("Logic proposal exceeds the fixed challenger budget")

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -24,6 +25,7 @@ from .contracts import (
 )
 from .data import MarketView
 from .execution import RiskPolicy
+from .fundamentals import MAX_FINANCIAL_AGE_MONTHS, FundamentalHistory, months_after
 
 DEFAULT_RANKINGS = ("momentum", "risk_adjusted", "trend_stability")
 # Opt-in signals (user decision 2026-10-25, strategy-alternatives §5.4). They
@@ -35,7 +37,14 @@ DEFAULT_RANKINGS = ("momentum", "risk_adjusted", "trend_stability")
 #   momentum_ex_max: momentum, excluding stocks whose largest daily return in
 #     the lookback exceeds MAX_FILTER_DAILY_RETURN (Bali/Cakici/Whitelaw 2011).
 SIGNAL_RANKINGS = ("short_reversal", "low_volatility", "momentum_ex_max")
-RANKINGS = (*DEFAULT_RANKINGS, *SIGNAL_RANKINGS)
+# Annual-report rankings (explore v7 §4, user decision 2026-10-26). They need a
+# FundamentalHistory, ignore the lookback and the momentum threshold, and are
+# proposed at the champion's lookback only.
+#   value: book equity / market cap (B/M).
+#   profitability: operating income / total assets.
+#   value_profit: mean of the two percentile ranks among eligible stocks.
+FUNDAMENTAL_RANKINGS = ("value", "profitability", "value_profit")
+RANKINGS = (*DEFAULT_RANKINGS, *SIGNAL_RANKINGS, *FUNDAMENTAL_RANKINGS)
 # Fixed before any result: KRX limits daily moves to 30%, so this removes
 # stocks with a near-limit-up day in the window.
 MAX_FILTER_DAILY_RETURN = D(".25")
@@ -172,6 +181,9 @@ class SelectionPolicy:
     max_position: D = D(".4")
     max_order_notional: D = D("400000")
     spread_mode: str = "quoted"
+    # Explore v7 §3: keep only the N largest screened stocks by market cap.
+    # ETFs are not ranked, so a market-ETF benchmark stays screenable.
+    max_market_cap_rank: int | None = None
 
     def __post_init__(self):
         if self.spread_mode not in ("quoted", "historical_unavailable"):
@@ -198,6 +210,9 @@ class SelectionPolicy:
             raise AgentError("History and age limits must be integers")
         if self.max_state_age_seconds <= 0 or not 2 <= self.feature_window < self.min_history:
             raise AgentError("Invalid history or metadata age policy")
+        if self.max_market_cap_rank is not None and (type(self.max_market_cap_rank) is not int
+                                                     or not 1 <= self.max_market_cap_rank <= 10000):
+            raise AgentError("Market-cap universe size must be an integer 1..10000")
         self.risk(("VALIDATION",))
 
     def risk(self, symbols: tuple[str, ...]):
@@ -227,9 +242,52 @@ def _signal_score(spec: RankedStrategy, history, momentum: D, features: dict, re
     return momentum
 
 
+def _fundamental_inputs(spec, record, market_cap, day, features, signal) -> None:
+    """Annual-report ratios; a missing or unusable input makes the stock ineligible."""
+    if record is None:
+        signal.append("FINANCIALS_UNAVAILABLE")
+        return
+    features["financial_period_end"], features["financial_statement"] = record.period_end, record.statement
+    if months_after(record.period_end, MAX_FINANCIAL_AGE_MONTHS) < day:
+        signal.append("FINANCIALS_STALE")
+        return
+    if spec.ranking in ("value", "value_profit"):
+        if record.equity is None or market_cap is None:
+            signal.append("FINANCIALS_UNAVAILABLE" if record.equity is None else "MARKET_CAP_UNAVAILABLE")
+        elif record.equity <= 0:
+            signal.append("BOOK_EQUITY_NONPOSITIVE")
+        else:
+            features["book_to_market"] = record.equity / market_cap
+    if spec.ranking in ("profitability", "value_profit"):
+        if record.assets is None or record.operating_income is None:
+            signal.append("FINANCIALS_UNAVAILABLE")
+        elif record.assets <= 0:
+            signal.append("ASSETS_NONPOSITIVE")
+        else:
+            features["operating_profitability"] = record.operating_income / record.assets
+    if not signal and spec.ranking != "value_profit":
+        features["score"] = features["book_to_market" if spec.ranking == "value" else "operating_profitability"]
+
+
+def _percentiles(rows, key) -> dict[str, D]:
+    """Mid-rank percentile in (0, 1] of ``features[key]``; ties share their average rank."""
+    values = sorted(r["features"][key] for r in rows)
+    count = D(len(values))
+    result = {}
+    for row in rows:
+        value = row["features"][key]
+        below, through = bisect_left(values, value), bisect_right(values, value)
+        result[row["symbol"]] = (D(below) + D(through - below + 1) / 2) / count
+    return result
+
+
 def select_candidates(spec: RankedStrategy, view: MarketView, securities: SecurityHistory,
                       policy: SelectionPolicy, costs: Costs, valid_until: datetime,
-                      equity: D | None = None, *, audit: bool = True) -> dict:
+                      equity: D | None = None, *, audit: bool = True,
+                      fundamentals: FundamentalHistory | None = None) -> dict:
+    fundamental = spec.ranking in FUNDAMENTAL_RANKINGS
+    if (fundamental or policy.max_market_cap_rank is not None) and fundamentals is None:
+        raise AgentError("Fundamental rankings and the market-cap universe need point-in-time fundamentals")
     if spec.gross_weight > policy.max_gross or spec.gross_weight / spec.top_n > policy.max_position:
         raise AgentError("Strategy allocation exceeds the fixed selection risk policy")
     full_equity = policy.capital_limit if equity is None else dec(equity)
@@ -242,9 +300,12 @@ def select_candidates(spec: RankedStrategy, view: MarketView, securities: Securi
     required_history = max(policy.min_history, spec.lookback + 1)
     expected_sessions = tuple(sorted({b.session for h in visible_histories.values() for b in h}))[-required_history:]
     symbols = sorted(set(states) | set(visible_histories))
-    rows = []
+    rows, signals = [], {}
     for symbol in symbols:
         history, state, reasons, features = visible_histories.get(symbol, ()), states.get(symbol), [], {}
+        # Ranking-specific rejections are kept apart so the market-cap universe
+        # is the same for every strategy screened on this day.
+        signal = signals[symbol] = []
         if state is None:
             reasons.append("SECURITY_METADATA_UNAVAILABLE")
         else:
@@ -289,6 +350,13 @@ def select_candidates(spec: RankedStrategy, view: MarketView, securities: Securi
             features["affordable_quantity"] = max(0, int(allocation / unit_cost))
             if features["affordable_quantity"] < 1:
                 reasons.append("UNAFFORDABLE_WITHIN_POSITION_BUDGET")
+        market_cap = None
+        if fundamentals is not None and history and history[-1].session == view.expected_session:
+            shares = fundamentals.listed_shares(symbol, view.expected_session, view.as_of)
+            if shares is not None:
+                market_cap = features["market_cap"] = history[-1].close * shares
+        if policy.max_market_cap_rank is not None and (state is None or state.asset_type == "STOCK") and market_cap is None:
+            reasons.append("MARKET_CAP_UNAVAILABLE")
         if len(history) >= max(policy.min_history, spec.lookback + 1):
             tail = history[-policy.feature_window:]
             returns = [b.close / a.close - 1 for a, b in zip(history[-policy.feature_window-1:], history[-policy.feature_window:])]
@@ -303,16 +371,34 @@ def select_candidates(spec: RankedStrategy, view: MarketView, securities: Securi
                 reasons.append("LOW_LIQUIDITY")
             if volatility > policy.max_daily_volatility:
                 reasons.append("EXCESSIVE_VOLATILITY")
-            if spec.ranking in SIGNAL_RANKINGS:
-                score = _signal_score(spec, history, momentum, features, reasons)
+            if fundamental:
+                _fundamental_inputs(spec, fundamentals.financials(symbol, view.as_of), market_cap,
+                                    view.expected_session, features, signal)
+            elif spec.ranking in SIGNAL_RANKINGS:
+                features["score"] = _signal_score(spec, history, momentum, features, signal)
             else:
                 if momentum <= spec.min_momentum:
-                    reasons.append("MOMENTUM_BELOW_THRESHOLD")
-                score = (momentum if spec.ranking == "momentum" else momentum / max(volatility, D(".001"))
-                         if spec.ranking == "risk_adjusted" else momentum * features["positive_return_fraction"])
-            features["score"] = score
-        rows.append({"symbol": symbol, "status": "REJECTED" if reasons else "ELIGIBLE", "reasons": reasons,
-                     "features": features, "security_source": state.source if state else None})
+                    signal.append("MOMENTUM_BELOW_THRESHOLD")
+                features["score"] = (momentum if spec.ranking == "momentum" else momentum / max(volatility, D(".001"))
+                                     if spec.ranking == "risk_adjusted" else momentum * features["positive_return_fraction"])
+        rows.append({"symbol": symbol, "reasons": reasons, "features": features,
+                     "security_source": state.source if state else None, "asset_type": state.asset_type if state else None})
+    if policy.max_market_cap_rank is not None:
+        sized = sorted((r for r in rows if not r["reasons"] and r["asset_type"] == "STOCK"),
+                       key=lambda r: (-r["features"]["market_cap"], r["symbol"]))
+        for rank, row in enumerate(sized, 1):
+            row["features"]["market_cap_rank"] = rank
+            if rank > policy.max_market_cap_rank:
+                row["reasons"].append("OUTSIDE_MARKET_CAP_UNIVERSE")
+    for row in rows:
+        row["reasons"].extend(signals[row["symbol"]])
+        row["status"] = "REJECTED" if row["reasons"] else "ELIGIBLE"
+        del row["asset_type"]
+    if spec.ranking == "value_profit":
+        both = [r for r in rows if r["status"] == "ELIGIBLE"]
+        value_rank, profit_rank = _percentiles(both, "book_to_market"), _percentiles(both, "operating_profitability")
+        for row in both:
+            row["features"]["score"] = (value_rank[row["symbol"]] + profit_rank[row["symbol"]]) / 2
     eligible = sorted((r for r in rows if r["status"] == "ELIGIBLE"), key=lambda r: (-r["features"]["score"], r["symbol"]))
     for rank, row in enumerate(eligible, 1):
         row["rank"] = rank
@@ -320,7 +406,10 @@ def select_candidates(spec: RankedStrategy, view: MarketView, securities: Securi
         if rank > spec.top_n:
             row["reasons"] = ["OUTSIDE_TOP_N"]
     selected = [r["symbol"] for r in eligible[:spec.top_n]]
-    visible_id = digest({"bars": visible_histories, "securities": securities.visible(view.as_of)}) if audit else view.snapshot_id
+    visible = {"bars": visible_histories, "securities": securities.visible(view.as_of)}
+    if fundamentals is not None:
+        visible["fundamentals"] = fundamentals.id
+    visible_id = digest(visible) if audit else view.snapshot_id
     decision = Decision(spec.version, visible_id, view.as_of, valid_until,
                         {symbol: allocation / full_equity for symbol in selected})
     return {"mode": "RESEARCH_SELECTION_ONLY", "as_of": view.as_of, "session": view.expected_session,
@@ -335,13 +424,15 @@ def select_candidates(spec: RankedStrategy, view: MarketView, securities: Securi
 
 
 class SelectionEngine:
-    def __init__(self, securities: SecurityHistory, policy: SelectionPolicy, costs: Costs):
-        self.securities, self.policy, self.costs = securities, policy, costs
+    def __init__(self, securities: SecurityHistory, policy: SelectionPolicy, costs: Costs,
+                 fundamentals: FundamentalHistory | None = None):
+        self.securities, self.policy, self.costs, self.fundamentals = securities, policy, costs, fundamentals
 
     def __call__(self, spec, view, valid_until, wallet: Wallet):
         marks = {symbol: h[-1].close for symbol, h in view.histories.items() if h and h[-1].session == view.expected_session}
         equity = wallet.equity(marks)
-        return select_candidates(spec, view, self.securities, self.policy, self.costs, valid_until, equity, audit=False)["decision"]
+        return select_candidates(spec, view, self.securities, self.policy, self.costs, valid_until, equity, audit=False,
+                                 fundamentals=self.fundamentals)["decision"]
 
     def execution_allowed(self, symbol: str, side: str, at: datetime) -> bool:
         state = self.securities.states(at).get(symbol)
