@@ -136,3 +136,18 @@ def test_stage_call_thresholds():
     assert call(5.01, 15, 30, 30) == "USER"
     assert call(15.01, 16, 17, 18) == "STOP"
     assert call(1.0, None, 2.0, 3.0) == "INCOMPLETE"
+
+
+def test_pair_divergence_measures_the_gap_against_the_switch_cost():
+    def row(minute, mid_a_bp, spread_bp=1.0):
+        at = DAY.replace(hour=10, minute=minute)
+        return {"at": at, "mid": 10000 * (1 + mid_a_bp / 1e4), "spread_bp": spread_bp}
+    a = [row(m, 0.0) for m in range(10)] + [row(10, 4.0)]      # one 4bp jump against B
+    b = [{**row(m, 0.0), "at": DAY.replace(hour=10, minute=m, second=3)} for m in range(11)]
+    result = report_tool.pair_divergence(a, b, commission_bps=1.5)
+    assert result["pairs"] == 11
+    assert result["abs_deviation_bp"]["max"] == pytest.approx(4.0, rel=1e-3)
+    # Switching costs half of each spread plus two commissions: 0.5 + 0.5 + 3 = 4bp; 4.0bp does not beat it.
+    assert result["switch_cost_bp_median"] == pytest.approx(4.0)
+    assert result["share_beating_switch_cost"] == 0.0
+    assert report_tool.pair_divergence(a, b, commission_bps=1.0)["share_beating_switch_cost"] == pytest.approx(1 / 11)

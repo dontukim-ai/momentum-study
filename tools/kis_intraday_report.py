@@ -49,7 +49,7 @@ def book_row(record: dict) -> dict | None:
     if ask <= 0 or bid <= 0 or ask < bid:
         return None
     at = datetime.fromisoformat(record["received_at"]).astimezone(KST)
-    return {"at": at, "spread_bp": (ask - bid) / ((ask + bid) / 2) * 1e4,
+    return {"at": at, "mid": (ask + bid) / 2, "spread_bp": (ask - bid) / ((ask + bid) / 2) * 1e4,
             "ask_krw": ask * ask_size, "bid_krw": bid * bid_size}
 
 
@@ -123,8 +123,40 @@ def report(days: list[Path], commission_bps: float) -> dict:
             "minute_delay_seconds_median": statistics.median(delays[symbol]) if delays[symbol] else None,
             "slow_reads": slow[symbol],
         }
+    continuous_books = {s: [r for r in v if CONTINUOUS[0] <= r["at"].time() < CONTINUOUS[1]] for s, v in books.items()}
+    pair = (pair_divergence(continuous_books["069500"], continuous_books["102110"], commission_bps)
+            if continuous_books.get("069500") and continuous_books.get("102110") else None)
     return {"days": [d.name for d in days], "commission_bps": commission_bps, "errors": errors,
+            "pair_069500_102110": pair,
             "symbols": symbols, "decision": stage_call({s: symbols[s]["round_trip_bp"] if s in symbols else None for s in ETFS})}
+
+
+def pair_divergence(a: list[dict], b: list[dict], commission_bps: float, within_s: float = 5.0) -> dict:
+    """Same-index ETF pair (intraday-candidates-v10 candidate D): mid ratio gap vs the switch cost.
+
+    Books read within ``within_s`` seconds of each other are paired. The gap is
+    the mid ratio's deviation from that day's median ratio, in bp; switching
+    from one ETF to the other pays half of each spread plus two commissions.
+    """
+    later = sorted(b, key=lambda r: r["at"])
+    pairs, j = [], 0
+    for row in sorted(a, key=lambda r: r["at"]):
+        while j < len(later) and (later[j]["at"] - row["at"]).total_seconds() < -within_s:
+            j += 1
+        if j < len(later) and abs((later[j]["at"] - row["at"]).total_seconds()) <= within_s:
+            pairs.append((row, later[j]))
+    by_day: dict = defaultdict(list)
+    for x, y in pairs:
+        by_day[x["at"].date()].append(x["mid"] / y["mid"])
+    medians = {day: statistics.median(v) for day, v in by_day.items()}
+    gaps = [abs(x["mid"] / y["mid"] / medians[x["at"].date()] - 1) * 1e4 for x, y in pairs]
+    costs = [(x["spread_bp"] + y["spread_bp"]) / 2 + 2 * commission_bps for x, y in pairs]
+    return {"pairs": len(pairs),
+            "abs_deviation_bp": {"median": quantile(gaps, .5), "p90": quantile(gaps, .9),
+                                 "p99": quantile(gaps, .99), "max": max(gaps, default=None)},
+            "switch_cost_bp_median": statistics.median(costs) if costs else None,
+            "share_beating_switch_cost": (sum(g > c for g, c in zip(gaps, costs, strict=True)) / len(pairs)
+                                          if pairs else None)}
 
 
 def stage_call(etf_round_trips: dict[str, float | None]) -> str:
@@ -160,6 +192,12 @@ def main(argv: list[str] | None = None) -> int:
               + " ".join(f"{'-' if fits[str(s)] is None else f'{fits[str(s)]:.0%}':>5}" for s in SIZES)
               + f" {min(row['minute_bars_per_day'], default=0)}-{max(row['minute_bars_per_day'], default=0):<6}"
               + f" {'-' if delay is None else f'{delay:.0f}':>7}")
+    pair = result["pair_069500_102110"]
+    if pair:
+        gap = pair["abs_deviation_bp"]
+        print(f"pair 069500/102110 (candidate D): {pair['pairs']} pairs, |gap| median {gap['median']:.2f}bp "
+              f"p99 {gap['p99']:.2f}bp, switch cost {pair['switch_cost_bp_median']:.2f}bp, "
+              f"beating it {pair['share_beating_switch_cost']:.1%}")
     print(f"decision (§6): {result['decision']}")
     print(json.dumps(result, sort_keys=True))
     return 0
