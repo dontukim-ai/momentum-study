@@ -159,7 +159,8 @@ abandon은 worker를 종료하는 명령이 아니다. 실제 프로세스가 �
 ## 10. 클라우드 ↔ 맥 결과 전달 (2026-10-26 사용자 확정)
 
 - **클라우드 → 맥:** 클라우드 주관 세션이 실행 블록을 맥 세션에 `send_message`로 보낸다(`.claude/settings.json` 허용 규칙).
-- **맥 → 클라우드:** 맥 세션의 `send_message`는 신뢰 기기 인증이 필요한 주관 세션으로 가지 못한다(`elevated_session_untrusted_device`). 대신 결과를 git 브랜치로 넘긴다.
+- **맥 → 클라우드 (2026-10-27부터 기본, 사용자 결정):** 맥은 결과 **요약 txt만** 구글 드라이브 동기화 폴더의 `내 드라이브/momentum-results/`(드라이브 폴더 ID `1E7WClU3plm_INXB9jSiyVGhCVDsKLrep`)에 쓴다. 클라우드는 Google Drive 커넥터로 파일을 찾아(`search_files`) 내려받는다(`download_file_content`). 원자료(`data/kis`·`data/krx`, KIS 응답 원문, 키)는 드라이브에 쓰지 않는다. 파일 이름은 `<작업>-<날짜>.txt`로 하고, 같은 이름을 덮어쓰지 않는다. 드라이브가 동작하지 않을 때만 아래 git 브랜치 방식을 쓴다.
+- **맥 → 클라우드 (예비: git 브랜치):** 맥 세션의 `send_message`는 신뢰 기기 인증이 필요한 주관 세션으로 가지 못한다(`elevated_session_untrusted_device`). 대신 결과를 git 브랜치로 넘긴다.
   1. 맥은 메인 작업 트리를 건드리지 않고 임시 worktree에서 코드 없는 orphan 브랜치 `results/<이름>`을 만든다. 결과 txt만 커밋해 푸시한다. `data/krx/`·`artifacts/`·키·로그는 넣지 않는다. 임시 worktree와 로컬 브랜치는 바로 지운다.
   2. 클라우드가 그 브랜치를 읽어 판정·기록한다.
   3. 원격 브랜치 삭제는 클라우드에서 막혀 있다. 클라우드가 다 읽은 `results/*` 브랜치는 이름을 적어 맥에 삭제를 요청하고, 맥은 묻지 않고 바로 지운다(사용자 지시 2026-10-26). 이 규칙은 `results/*`에만 적용한다. `main`·PR 브랜치 등 다른 브랜치 삭제는 사용자에게 먼저 묻는다.
