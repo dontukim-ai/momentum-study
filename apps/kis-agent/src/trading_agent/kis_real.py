@@ -49,8 +49,9 @@ def _integer(value) -> int:
 
 
 def _symbol(symbol) -> str:
-    if not isinstance(symbol, str) or not re.fullmatch(r"[0-9]{6}", symbol):
-        raise AgentError("A six-digit Korean symbol is required")
+    # KRX short codes are six characters, digits and capital letters since 2025 (e.g. 0167A0).
+    if not isinstance(symbol, str) or not re.fullmatch(r"[0-9A-Z]{6}", symbol):
+        raise AgentError("A six-character Korean symbol is required")
     return symbol
 
 
