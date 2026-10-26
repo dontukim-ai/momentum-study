@@ -17,7 +17,7 @@ from trading_agent.data import Snapshot
 from trading_agent.fundamentals import FundamentalHistory
 from trading_agent.logic import LogicSettings, settings_from_dict
 from trading_agent.selection import (
-    FUNDAMENTAL_RANKINGS,
+    SHARE_RANKINGS,
     SecurityHistory,
     SecurityState,
 )
@@ -453,7 +453,7 @@ class AgentPolicy:
 def needs_fundamentals(policy: AgentPolicy) -> bool:
     logic = policy.logic
     return logic.selection.max_market_cap_rank is not None or any(
-        r in FUNDAMENTAL_RANKINGS for r in (logic.champion.ranking, *logic.rankings)
+        r in SHARE_RANKINGS for r in (logic.champion.ranking, *logic.rankings)
     )
 
 

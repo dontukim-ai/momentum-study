@@ -56,9 +56,21 @@ TREND_MONTHS = 10
 # score is its sum divided by its standard deviation. Like low_volatility it
 # is a pure sort: no momentum threshold.
 RESIDUAL_RANKINGS = ("residual_momentum",)
-RANKINGS = (*DEFAULT_RANKINGS, *SIGNAL_RANKINGS, *FUNDAMENTAL_RANKINGS, *TREND_RANKINGS, *RESIDUAL_RANKINGS)
+# Market-cap rankings (strategy-candidates-v8 C4, user proposal 2026-10-26):
+# the score is close x listed shares, so they need a FundamentalHistory and
+# ignore the lookback and the momentum threshold. market_cap_trend also holds
+# a stock only while its market cap is above the mean of its last
+# CAP_TREND_SESSIONS daily market caps (the current one included). Market cap
+# rather than the raw close keeps splits and bonus issues from faking a cross,
+# since bars are not adjusted for corporate actions.
+CAP_RANKINGS = ("market_cap", "market_cap_trend")
+CAP_TREND_SESSIONS = 200
+RANKINGS = (*DEFAULT_RANKINGS, *SIGNAL_RANKINGS, *FUNDAMENTAL_RANKINGS, *TREND_RANKINGS, *RESIDUAL_RANKINGS,
+            *CAP_RANKINGS)
+# Rankings that need point-in-time fundamentals.
+SHARE_RANKINGS = (*FUNDAMENTAL_RANKINGS, *CAP_RANKINGS)
 # Rankings whose score does not depend on the lookback: proposed once.
-LOOKBACK_FREE_RANKINGS = (*FUNDAMENTAL_RANKINGS, *TREND_RANKINGS)
+LOOKBACK_FREE_RANKINGS = (*FUNDAMENTAL_RANKINGS, *TREND_RANKINGS, *CAP_RANKINGS)
 # Fixed before any result: KRX limits daily moves to 30%, so this removes
 # stocks with a near-limit-up day in the window.
 MAX_FILTER_DAILY_RETURN = D(".25")
@@ -329,6 +341,24 @@ def _trend_score(history, features: dict, signal: list) -> None:
         signal.append("BELOW_TREND")
 
 
+def _cap_trend(symbol, history, fundamentals: FundamentalHistory, at, features: dict, signal: list) -> None:
+    window = history[-CAP_TREND_SESSIONS:]
+    caps = []
+    for bar in window:
+        shares = fundamentals.listed_shares(symbol, bar.session, at)
+        if shares is None:
+            break
+        caps.append(bar.close * shares)
+    if len(caps) < CAP_TREND_SESSIONS:
+        signal.append("INSUFFICIENT_TREND_HISTORY")
+        return
+    average = sum(caps, D(0)) / len(caps)
+    features["trend_average"] = average
+    features["trend_ratio"] = caps[-1] / average - 1
+    if features["trend_ratio"] <= 0:
+        signal.append("BELOW_TREND")
+
+
 def _percentiles(rows, key) -> dict[str, D]:
     """Mid-rank percentile in (0, 1] of ``features[key]``; ties share their average rank."""
     values = sorted(r["features"][key] for r in rows)
@@ -346,7 +376,7 @@ def select_candidates(spec: RankedStrategy, view: MarketView, securities: Securi
                       equity: D | None = None, *, audit: bool = True,
                       fundamentals: FundamentalHistory | None = None) -> dict:
     fundamental = spec.ranking in FUNDAMENTAL_RANKINGS
-    if (fundamental or policy.max_market_cap_rank is not None) and fundamentals is None:
+    if (spec.ranking in SHARE_RANKINGS or policy.max_market_cap_rank is not None) and fundamentals is None:
         raise AgentError("Fundamental rankings and the market-cap universe need point-in-time fundamentals")
     if spec.ranking in (*TREND_RANKINGS, *RESIDUAL_RANKINGS) and policy.market_symbol is None:
         raise AgentError(f"{spec.ranking} needs a preregistered market_symbol")
@@ -442,6 +472,12 @@ def select_candidates(spec: RankedStrategy, view: MarketView, securities: Securi
                     _trend_score(history, features, signal)
             elif spec.ranking in RESIDUAL_RANKINGS:
                 _residual_score(spec, history, market, features, signal)
+            elif spec.ranking in CAP_RANKINGS:
+                if market_cap is None:
+                    if "MARKET_CAP_UNAVAILABLE" not in reasons:
+                        signal.append("MARKET_CAP_UNAVAILABLE")
+                else:
+                    features["score"] = market_cap
             elif fundamental:
                 _fundamental_inputs(spec, fundamentals.financials(symbol, view.as_of), market_cap,
                                     view.expected_session, features, signal)
@@ -461,6 +497,13 @@ def select_candidates(spec: RankedStrategy, view: MarketView, securities: Securi
             row["features"]["market_cap_rank"] = rank
             if rank > policy.max_market_cap_rank:
                 row["reasons"].append("OUTSIDE_MARKET_CAP_UNIVERSE")
+    if spec.ranking == "market_cap_trend":
+        # Only for stocks still in the universe: the trend reads up to
+        # CAP_TREND_SESSIONS share counts per stock.
+        for row in rows:
+            if not row["reasons"] and not signals[row["symbol"]]:
+                _cap_trend(row["symbol"], visible_histories[row["symbol"]], fundamentals, view.as_of,
+                           row["features"], signals[row["symbol"]])
     for row in rows:
         row["reasons"].extend(signals[row["symbol"]])
         row["status"] = "REJECTED" if row["reasons"] else "ELIGIBLE"

@@ -136,3 +136,13 @@ def test_read_input_loads_fundamentals_only_as_a_pair(tmp_path):
     assert read_input(*files).fundamentals is None
     with pytest.raises(AgentError, match="together"):
         read_input(*files, financials=tmp_path / "financials.jsonl")
+
+
+def test_market_cap_ranking_holds_the_universe_through_the_evaluator():
+    # strategy-candidates-v8 C4 comparison (1): the largest caps at fixed weights.
+    data, p, spec = universe_market()
+    spec = replace(spec, ranking="market_cap", top_n=2, gross_weight=D(".6"))
+    no_universe = replace(p.logic.selection, max_market_cap_rank=None)
+    assert needs_fundamentals(replace(p, logic=replace(p.logic, selection=no_universe, rankings=("market_cap",))))
+    result = CommonEvaluator(p).evaluate(data, spec, data.sessions[70], data.sessions[71])
+    assert {t["symbol"] for t in result.trade_log} == {"B", "C"}
