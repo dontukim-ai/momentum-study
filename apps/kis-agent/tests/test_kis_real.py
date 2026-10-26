@@ -139,3 +139,54 @@ class RealKeyTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MarketDataReadTests(unittest.TestCase):
+    """intraday-cost-probe-v10 §7: order-book and minute-bar reads only."""
+
+    def setUp(self):
+        self.env = patch.dict("os.environ", REAL_ENV, clear=True)
+        self.env.start()
+        self.calls = []
+        self.client = KisRealReadOnly(self.transport, minimum_interval=.1)
+
+    def tearDown(self):
+        self.env.stop()
+
+    def transport(self, method, url, headers, body):
+        self.calls.append((method, url, headers, body))
+        if method == "POST":
+            return {"access_token": "token", "expires_in": 86400}
+        path = urlparse(url).path
+        if path.endswith("inquire-asking-price-exp-ccn"):
+            return {"rt_cd": "0", "output1": {"askp1": "35005", "bidp1": "35000", "aspr_acpt_hour": "100000"},
+                    "output2": {}}
+        return {"rt_cd": "0", "output1": {}, "output2": [
+            {"stck_bsop_date": "20261027", "stck_cntg_hour": "100000", "stck_prpr": "35000"}]}
+
+    def test_reads_use_their_tr_ids_without_account_identity(self):
+        book = self.client.asking("069500")
+        bars = self.client.minute_bars("069500", "100000")
+        self.assertEqual(book["output1"]["askp1"], "35005")
+        self.assertEqual(bars["output2"][0]["stck_cntg_hour"], "100000")
+        gets = [c for c in self.calls if c[0] == "GET"]
+        self.assertEqual([c[2]["tr_id"] for c in gets], ["FHKST01010200", "FHKST03010200"])
+        for _, url, _, body in gets:
+            query = parse_qs(urlparse(url).query)
+            self.assertEqual(query["FID_INPUT_ISCD"], ["069500"])
+            self.assertNotIn("CANO", query)
+            self.assertIsNone(body)
+        self.assertEqual(parse_qs(urlparse(gets[1][1]).query)["FID_INPUT_HOUR_1"], ["100000"])
+
+    def test_bad_inputs_are_rejected_before_any_request(self):
+        for call in (lambda: self.client.asking("69500"), lambda: self.client.minute_bars("069500", "1000"),
+                     lambda: self.client.minute_bars("069500", "170000")):
+            with self.assertRaises(AgentError):
+                call()
+        self.assertEqual(self.calls, [])
+
+    def test_orders_stay_rejected(self):
+        with self.assertRaisesRegex(AgentError, "reads are allowed"):
+            self.client.request("/uapi/domestic-stock/v1/trading/order-cash", {})
+        self.assertFalse(hasattr(self.client, "submit"))
+        self.assertEqual(REAL_CAPITAL_LIMIT, D("1000000"))

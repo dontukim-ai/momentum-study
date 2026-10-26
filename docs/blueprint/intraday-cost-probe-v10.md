@@ -82,3 +82,19 @@ kis-agent 변경은 사용자 허락이 필요한 범위다. 이 문서의 승�
 2. 맥에서 실호출 한 번으로 응답 형식 확인(1종목, 장중)
 3. 10거래일 수집
 4. 보고서(이 문서 §11에 결과 기록)
+
+## 11. 구현 (2026-10-26)
+
+- **확인한 사실.**
+  - API 경로·TR ID·응답 필드는 KIS 공식 예제 저장소(`koreainvestment/open-trading-api`, `examples_llm/domestic_stock`)로 확인했다. 호가는 `output1`의 `askp1..10`·`bidp1..10`·`askp_rsqn*`·`bidp_rsqn*`·`aspr_acpt_hour`이다. 분봉은 `output2`의 `stck_bsop_date`·`stck_cntg_hour`·`stck_prpr`·`stck_oprc`·`stck_hgpr`·`stck_lwpr`·`cntg_vol`이며, 한 번에 최대 30개, 당일만 준다.
+  - 매도세: 국내 상장 ETF는 세법상 신탁형 펀드라 매도 시 증권거래세가 없다(KB자산운용 ETF 세금 안내). 개별 주식은 0.20%다. 보고 도구는 ETF 0bp, 005930 20bp로 계산한다.
+  - **KIS 실제 수수료는 아직 확인하지 않았다.** 보고 도구의 `--commission-bps`(기본 1.5bp, 편도)를 계좌의 실제 요율로 바꿔 실행한다.
+- **변경.**
+  - `trading_agent/kis_real.py`: `READ_ROUTES`에 `asking`(`FHKST01010200`)·`minute`(`FHKST03010200`)을 더했고, 계좌 정보 없이 보내는 시세 조회로 묶었다. `asking()`·`minute_bars()`는 응답 원문을 돌려준다. 주문 경로와 `REAL_CAPITAL_LIMIT`은 그대로다.
+  - `tools/kis_intraday_probe.py`: 하루 수집 도구다. 08:30~15:30에 `--interval`(기본 10초)마다 호가를 읽고, 10~15시 정각마다 최근 분봉을 읽는다. 15:31 이후에는 그날 분봉 전부를 30개씩 거슬러 읽는다. 응답은 수신 시각·응답 시간과 함께 `data/kis/intraday/<날짜>/`의 JSONL에 덧붙인다. 키가 섞인 응답은 쓰지 않고 멈춘다. 오류는 기록하고 계속하되, 30번 연속 실패하면 멈춘다. 이미 있는 날짜 폴더는 `--resume` 없이는 거부한다.
+  - `tools/kis_intraday_report.py`: §5 지표와 §6 판정을 계산한다. 아무것도 쓰지 않는다.
+- **검증.**
+  - 가짜 KIS·가짜 시계로 하루(08:20 시작)를 끝까지 돌리고, 그 출력으로 보고서와 판정을 계산했다.
+  - 키 유출 시 멈추는지, 연속 실패 시 멈추는지, 판정 경계값(5bp·15bp)을 테스트로 확인했다.
+  - kis-agent에는 새 조회의 TR ID·계좌 정보 미포함·입력 거부·주문 거부 테스트를 더했다.
+- **실행.** 맥에서 거래일 08:30 전에 `uv run --extra agent python tools/kis_intraday_probe.py`를 띄운다. 10거래일 뒤 `uv run python tools/kis_intraday_report.py data/kis/intraday/<날짜>... --commission-bps <실제 요율>`을 실행한다.

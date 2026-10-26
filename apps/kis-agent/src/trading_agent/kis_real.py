@@ -21,7 +21,11 @@ READ_ROUTES = {
     "quote": ("/uapi/domestic-stock/v1/quotations/inquire-price", "FHKST01010100"),
     "balance": ("/uapi/domestic-stock/v1/trading/inquire-balance", "TTTC8434R"),
     "orders": ("/uapi/domestic-stock/v1/trading/inquire-daily-ccld", "TTTC0081R"),
+    # Market-data reads for the intraday cost probe (intraday-cost-probe-v10 §7).
+    "asking": ("/uapi/domestic-stock/v1/quotations/inquire-asking-price-exp-ccn", "FHKST01010200"),
+    "minute": ("/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice", "FHKST03010200"),
 }
+MARKET_READS = ("quote", "asking", "minute")
 
 
 def _integer(value) -> int:
@@ -29,6 +33,12 @@ def _integer(value) -> int:
     if number < 0 or number != number.to_integral_value():
         raise AgentError("Invalid nonnegative real-account quantity")
     return int(number)
+
+
+def _symbol(symbol) -> str:
+    if not isinstance(symbol, str) or not re.fullmatch(r"[0-9]{6}", symbol):
+        raise AgentError("A six-digit Korean symbol is required")
+    return symbol
 
 
 class KisRealReadOnly:
@@ -58,8 +68,8 @@ class KisRealReadOnly:
 
     def request(self, operation: str, params: dict, continuation: str = "") -> dict:
         if operation not in READ_ROUTES:
-            raise AgentError("Only real-account quote, balance and recent-order reads are allowed")
-        if operation != "quote" and any(params.get(k) != v for k, v in self.account_params().items()):
+            raise AgentError("Only real-account quote, order-book, minute-bar, balance and recent-order reads are allowed")
+        if operation not in MARKET_READS and any(params.get(k) != v for k, v in self.account_params().items()):
             raise AgentError("Real-account read identity mismatch")
         path, tr_id = READ_ROUTES[operation]
         with self._lock:
@@ -111,13 +121,33 @@ class KisRealReadOnly:
         raise AgentError("Real-account page budget exhausted; partial results rejected")
 
     def quote(self, symbol: str) -> Quote:
-        if not isinstance(symbol, str) or not re.fullmatch(r"[0-9]{6}", symbol):
-            raise AgentError("A six-digit Korean symbol is required")
-        result = self.request("quote", {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": symbol})
+        result = self.request("quote", {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": _symbol(symbol)})
         output = result.get("output")
         if not isinstance(output, dict) or "stck_prpr" not in output:
             raise AgentError("Missing real quote price")
         return Quote(symbol, dec(output["stck_prpr"]), datetime.now(UTC))
+
+    def asking(self, symbol: str) -> dict:
+        """The raw ten-level order book; prices and sizes are left for the caller to parse."""
+        result = self.request("asking", {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": _symbol(symbol)})
+        output = result.get("output1")
+        if not isinstance(output, dict) or not {"askp1", "bidp1", "aspr_acpt_hour"} <= output.keys():
+            raise AgentError("Missing real order-book levels")
+        return result
+
+    def minute_bars(self, symbol: str, hour: str) -> dict:
+        """Up to 30 same-day one-minute bars ending at ``hour`` (HHMMSS, KST)."""
+        if not isinstance(hour, str) or not re.fullmatch(r"(0[89]|1[0-5])[0-5][0-9][0-5][0-9]", hour):
+            raise AgentError("A KRX session time HHMMSS is required")
+        result = self.request("minute", {"FID_ETC_CLS_CODE": "", "FID_COND_MRKT_DIV_CODE": "J",
+                                         "FID_INPUT_ISCD": _symbol(symbol), "FID_INPUT_HOUR_1": hour,
+                                         "FID_PW_DATA_INCU_YN": "Y"})
+        rows = result.get("output2")
+        if not isinstance(rows, list) or any(
+                not isinstance(row, dict) or not {"stck_bsop_date", "stck_cntg_hour", "stck_prpr"} <= row.keys()
+                for row in rows):
+            raise AgentError("Missing real minute-bar rows")
+        return result
 
     def balance(self) -> dict:
         rows, summaries = self._pages("balance", {**self.account_params(), "AFHR_FLPR_YN": "N", "OFL_YN": "",
