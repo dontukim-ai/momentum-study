@@ -113,6 +113,7 @@ def benchmark_decision(
         valid_until,
         equity,
         audit=False,
+        fundamentals=selector.fundamentals,
     )
     if kind == "market_etf":
         row = next(r for r in screened["candidates"] if r["symbol"] == etf_symbol)
@@ -159,6 +160,7 @@ def benchmark_decision(
         valid_until,
         equity,
         audit=False,
+        fundamentals=selector.fundamentals,
     )
     if diagnostics is not None:
         diagnostics["unaffordable_candidates"] += sum(
@@ -558,7 +560,9 @@ class CommonEvaluator:
                 selection_policy,
                 allowed_types=(*selection_policy.allowed_types, "ETF"),
             )
-        selector = SelectionEngine(data.securities, selection_policy, costs)
+        selector = SelectionEngine(
+            data.securities, selection_policy, costs, data.fundamentals
+        )
         curve: list[dict[str, Any]] = []
         trade_log: list[dict[str, Any]] = []
         events: list[dict[str, Any]] = []

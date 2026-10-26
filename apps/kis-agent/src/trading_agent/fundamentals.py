@@ -11,7 +11,8 @@ from __future__ import annotations
 import csv
 import json
 import re
-from dataclasses import dataclass
+from bisect import bisect_right
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -62,8 +63,18 @@ class FinancialRecord:
 
 @dataclass(frozen=True)
 class ShareCount:
+    """One run of identical daily listed-share counts, ``session`` through ``through``.
+
+    The daily quote files report the count on every session a stock is
+    quoted; storing runs keeps the research input small. The builder must
+    split a run wherever a quoted session lacks a count, so a lookup never
+    carries a value over a day that had none. ``available_at`` is the first
+    session's publication; later days in the run repeat that value.
+    """
+
     symbol: str
     session: date
+    through: date
     available_at: datetime
     listed_shares: int
     source: str
@@ -71,8 +82,9 @@ class ShareCount:
     def __post_init__(self):
         _symbol(self.symbol)
         object.__setattr__(self, "available_at", aware(self.available_at))
-        if type(self.session) is not date or type(self.listed_shares) is not int or self.listed_shares <= 0:
-            raise AgentError("Listed shares must be a positive integer for one session")
+        if (type(self.session) is not date or type(self.through) is not date or self.through < self.session
+                or type(self.listed_shares) is not int or self.listed_shares <= 0):
+            raise AgentError("Listed shares must be a positive integer over an ordered session run")
         if not isinstance(self.source, str) or not self.source.strip():
             raise AgentError("Explicit share count source is required")
 
@@ -83,13 +95,34 @@ class FundamentalHistory:
         self.share_records = tuple(sorted(shares, key=lambda r: (r.symbol, r.session)))
         if len({(r.symbol, r.period_end, r.available_at) for r in financials}) != len(financials):
             raise AgentError("Duplicate financial record")
-        self._shares = {(r.symbol, r.session): r for r in shares}
-        if len(self._shares) != len(shares):
-            raise AgentError("Duplicate share count for one session")
+        self._shares: dict[str, list[ShareCount]] = {}
+        for record in self.share_records:
+            runs = self._shares.setdefault(record.symbol, [])
+            if runs and runs[-1].through >= record.session:
+                raise AgentError("Overlapping share count runs")
+            runs.append(record)
+        self._starts = {symbol: [r.session for r in runs] for symbol, runs in self._shares.items()}
         self._financials: dict[str, list[FinancialRecord]] = {}
         for record in self.financial_records:
             self._financials.setdefault(record.symbol, []).append(record)
-        self.id = digest({"financials": self.financial_records, "shares": self.share_records})
+        self._id: str | None = None
+
+    @property
+    def id(self) -> str:
+        # Computed on first use: research prefixes build many histories whose
+        # id is only needed for fingerprints and audited screens.
+        if self._id is None:
+            self._id = digest({"financials": self.financial_records, "shares": self.share_records})
+        return self._id
+
+    def until(self, end: date, at: datetime) -> FundamentalHistory:
+        """Records published by ``at``, with share runs cut at ``end``, so a
+        prefix's id does not change when later sessions extend a run."""
+        at = aware(at)
+        return FundamentalHistory(
+            [r for r in self.financial_records if r.available_at <= at],
+            [replace(r, through=min(r.through, end)) for r in self.share_records
+             if r.available_at <= at and r.session <= end])
 
     def financials(self, symbol: str, at: datetime) -> FinancialRecord | None:
         """Latest fiscal period published by ``at``; its latest published version."""
@@ -98,8 +131,11 @@ class FundamentalHistory:
         return max(visible, key=lambda r: (r.period_end, r.available_at)) if visible else None
 
     def listed_shares(self, symbol: str, session: date, at: datetime) -> int | None:
-        record = self._shares.get((symbol, session))
-        return record.listed_shares if record is not None and record.available_at <= aware(at) else None
+        index = bisect_right(self._starts.get(symbol, ()), session) - 1
+        if index < 0:
+            return None
+        record = self._shares[symbol][index]
+        return record.listed_shares if session <= record.through and record.available_at <= aware(at) else None
 
 
 def read_fundamentals(financials_path: Path, shares_path: Path) -> FundamentalHistory:
@@ -120,7 +156,8 @@ def read_fundamentals(financials_path: Path, shares_path: Path) -> FundamentalHi
         for number, row in enumerate(csv.DictReader(handle), 2):
             try:
                 shares.append(ShareCount(row["symbol"], date.fromisoformat(row["session"]),
-                                         timestamp(row["available_at"]), int(row["listed_shares"]), row["source"]))
+                                         date.fromisoformat(row["through"]), timestamp(row["available_at"]),
+                                         int(row["listed_shares"]), row["source"]))
             except (KeyError, TypeError, ValueError):
                 raise AgentError(f"Invalid share count CSV row at line {number}") from None
     return FundamentalHistory(financials, shares)

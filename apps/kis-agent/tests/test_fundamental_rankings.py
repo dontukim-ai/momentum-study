@@ -2,6 +2,7 @@
 
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -35,7 +36,7 @@ def financial(symbol, equity, assets, operating_income, period_end=FY2023, avail
 
 
 def market():
-    bars, records, shares, day, sessions = [], [], [], date(2024, 1, 2), []
+    bars, records, day, sessions = [], [], date(2024, 1, 2), []
     prices = dict.fromkeys((*SHARES, "H", "ETF1"), D(10000))
     while len(sessions) < SESSIONS:
         if day.weekday() < 5:
@@ -47,9 +48,9 @@ def market():
                 records.append(SecurityState(symbol, session_time(day, 15, 30), session_time(day, 15, 40), "NORMAL",
                                              "ETF" if symbol == "ETF1" else "STOCK", "KOSPI", False, False, False, False,
                                              closing, closing, "TEST"))
-                if symbol in SHARES:
-                    shares.append(ShareCount(symbol, day, session_time(day, 15, 40), SHARES[symbol], "TEST"))
         day += timedelta(days=1)
+    shares = [ShareCount(s, sessions[0], sessions[-1], session_time(sessions[0], 15, 40), n, "TEST")
+              for s, n in SHARES.items()]
     financials = [
         financial("A", 5400000000, 10000000000, 1000000000),
         financial("B", 2100000000, 10000000000, 3000000000),
@@ -168,12 +169,35 @@ class FundamentalHistoryTests(unittest.TestCase):
         with self.assertRaisesRegex(AgentError, "statement kind"):
             financial("A", 1, 1, 1, statement="XFS")
         with self.assertRaisesRegex(AgentError, "positive integer"):
-            ShareCount("A", date(2024, 1, 2), session_time(date(2024, 1, 2), 16), 0, "TEST")
-        share = ShareCount("A", date(2024, 1, 2), session_time(date(2024, 1, 2), 16), 5, "TEST")
-        with self.assertRaisesRegex(AgentError, "Duplicate share count"):
-            FundamentalHistory([], [share, share])
+            ShareCount("A", date(2024, 1, 2), date(2024, 1, 2), session_time(date(2024, 1, 2), 16), 0, "TEST")
+        with self.assertRaisesRegex(AgentError, "ordered session run"):
+            ShareCount("A", date(2024, 1, 3), date(2024, 1, 2), session_time(date(2024, 1, 3), 16), 5, "TEST")
+        share = ShareCount("A", date(2024, 1, 2), date(2024, 1, 5), session_time(date(2024, 1, 2), 16), 5, "TEST")
+        with self.assertRaisesRegex(AgentError, "Overlapping share count runs"):
+            FundamentalHistory([], [share, ShareCount("A", date(2024, 1, 5), date(2024, 1, 9),
+                                                      session_time(date(2024, 1, 5), 16), 6, "TEST")])
         self.assertIsNone(FundamentalHistory([], [share]).listed_shares("A", date(2024, 1, 2),
                                                                         session_time(date(2024, 1, 2), 15)))
+
+    def test_share_runs_answer_only_inside_a_run_and_after_publication(self):
+        runs = [ShareCount("A", date(2024, 1, 2), date(2024, 1, 3), session_time(date(2024, 1, 2), 16), 5, "TEST"),
+                # 2024-01-04 was quoted without a count, so the builder split the run there.
+                ShareCount("A", date(2024, 1, 5), date(2024, 1, 9), session_time(date(2024, 1, 5), 16), 10, "TEST")]
+        history = FundamentalHistory([], runs)
+        late = session_time(date(2024, 2, 1), 16)
+        self.assertEqual(history.listed_shares("A", date(2024, 1, 3), late), 5)
+        self.assertIsNone(history.listed_shares("A", date(2024, 1, 4), late))
+        self.assertEqual(history.listed_shares("A", date(2024, 1, 8), late), 10)
+        self.assertIsNone(history.listed_shares("A", date(2024, 1, 10), late))
+        self.assertIsNone(history.listed_shares("A", date(2024, 1, 1), late))
+        self.assertIsNone(history.listed_shares("A", date(2024, 1, 5), session_time(date(2024, 1, 5), 15)))
+        self.assertIsNone(history.listed_shares("B", date(2024, 1, 5), late))
+        prefix = history.until(date(2024, 1, 8), late)
+        self.assertEqual([r.through for r in prefix.share_records], [date(2024, 1, 3), date(2024, 1, 8)])
+        self.assertIsNone(prefix.listed_shares("A", date(2024, 1, 9), late))
+        extended = FundamentalHistory([], [runs[0], replace(runs[1], through=date(2024, 1, 31))])
+        self.assertEqual(extended.until(date(2024, 1, 8), late).id, prefix.id)
+        self.assertEqual(len(history.until(date(2024, 1, 3), session_time(date(2024, 1, 3), 16)).share_records), 1)
 
     def test_files_round_trip(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -183,12 +207,13 @@ class FundamentalHistoryTests(unittest.TestCase):
                 '"statement":"OFS","equity":"100","assets":"1000","operating_income":null,"source":"TEST"}\n',
                 encoding="utf-8")
             (root / "shares.csv").write_text(
-                "symbol,session,available_at,listed_shares,source\nA,2024-03-21,2024-03-21T06:40:00+00:00,500,TEST\n",
+                "symbol,session,through,available_at,listed_shares,source\n"
+                "A,2024-03-21,2024-03-29,2024-03-21T06:40:00+00:00,500,TEST\n",
                 encoding="utf-8")
             history = read_fundamentals(root / "financials.jsonl", root / "shares.csv")
             record = history.financials("A", session_time(date(2024, 3, 21), 16))
             self.assertEqual((record.statement, record.equity, record.operating_income), ("OFS", 100, None))
-            self.assertEqual(history.listed_shares("A", date(2024, 3, 21), session_time(date(2024, 3, 21), 16)), 500)
+            self.assertEqual(history.listed_shares("A", date(2024, 3, 28), session_time(date(2024, 3, 28), 16)), 500)
             (root / "shares.csv").write_text("symbol,session\nA,2024-03-21\n", encoding="utf-8")
             with self.assertRaisesRegex(AgentError, "line 2"):
                 read_fundamentals(root / "financials.jsonl", root / "shares.csv")

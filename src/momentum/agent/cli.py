@@ -22,6 +22,7 @@ from typing import Any
 
 from trading_agent.contracts import AgentError, canonical, timestamp
 from trading_agent.data import read_csv
+from trading_agent.fundamentals import read_fundamentals
 from trading_agent.selection import read_security_history
 from trading_agent.store import Store
 
@@ -58,9 +59,13 @@ def read_input(
     basis: str = "raw-unadjusted; supplied-actions-complete",
     calendar: Path | None = None,
     securities_mode: str = "snapshot",
+    financials: Path | None = None,
+    shares: Path | None = None,
 ) -> ResearchInput:
     if securities_mode not in ("snapshot", "session-confirmed"):
         raise AgentError("Unknown securities mode")
+    if (financials is None) != (shares is None):
+        raise AgentError("--financials and --shares must be given together")
     announced = []
     late = []
     if actions:
@@ -117,6 +122,7 @@ def read_input(
         if calendar
         else (),
         tuple(late),
+        read_fundamentals(financials, shares) if financials and shares else None,
     )
 
 
@@ -233,6 +239,16 @@ def parser() -> argparse.ArgumentParser:
         default="snapshot",
         help="session-confirmed: the file lists status changes only, complete "
         "through the session clock (historical FSC-derived states)",
+    )
+    p.add_argument(
+        "--financials",
+        type=Path,
+        help="JSONL of point-in-time annual financials (explore v7); with --shares",
+    )
+    p.add_argument(
+        "--shares",
+        type=Path,
+        help="CSV of listed-share runs (explore v7); with --financials",
     )
     p.add_argument("--source-db", type=Path)
     p.add_argument("--approved-by")
@@ -360,6 +376,8 @@ def quality_report(args: argparse.Namespace) -> dict[str, Any]:
             args.corporate_action_basis,
             args.calendar,
             args.securities_mode,
+            args.financials,
+            args.shares,
         )
         source = {"csv": str(args.csv)}
     else:
@@ -373,7 +391,17 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     if (
         args.action == "run"
         and args.bundle
-        and any((args.csv, args.securities, args.actions, args.sessions, args.calendar))
+        and any(
+            (
+                args.csv,
+                args.securities,
+                args.actions,
+                args.sessions,
+                args.calendar,
+                args.financials,
+                args.shares,
+            )
+        )
     ):
         raise AgentError("--bundle cannot be combined with input file paths")
     if args.action == "quality-screen":
@@ -383,6 +411,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     if args.action == "bundle-publish":
         if not args.bundle or not args.csv or not args.securities:
             raise AgentError("bundle-publish requires --bundle, --csv and --securities")
+        if args.financials or args.shares:
+            raise AgentError("Bundles do not carry fundamentals; pass input files to run")
         files = {"prices.csv": args.csv, "securities.jsonl": args.securities}
         for name in ("actions", "sessions", "calendar"):
             path = getattr(args, name)
@@ -495,6 +525,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                     args.corporate_action_basis,
                     args.calendar,
                     args.securities_mode,
+                    args.financials,
+                    args.shares,
                 )
 
             class BundleReporter(ResearchAgent):
