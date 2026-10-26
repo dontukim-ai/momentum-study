@@ -8,7 +8,6 @@ from trading_agent.data import Snapshot
 from trading_agent.logic import LogicSettings
 from trading_agent.selection import (
     DEFAULT_RANKINGS,
-    FUNDAMENTAL_RANKINGS,
     MAX_FILTER_DAILY_RETURN,
     RANKINGS,
     SIGNAL_RANKINGS,
@@ -99,8 +98,8 @@ class SignalRankingTests(unittest.TestCase):
     def test_default_search_space_and_existing_features_are_unchanged(self):
         self.assertEqual(DEFAULT_RANKINGS, ("momentum", "risk_adjusted", "trend_stability"))
         self.assertEqual(LogicSettings().rankings, DEFAULT_RANKINGS)
-        self.assertEqual(set(RANKINGS) - set(DEFAULT_RANKINGS) - set(FUNDAMENTAL_RANKINGS),
-                         {"short_reversal", "low_volatility", "momentum_ex_max"})
+        self.assertEqual(set(SIGNAL_RANKINGS), {"short_reversal", "low_volatility", "momentum_ex_max"})
+        self.assertLessEqual({*DEFAULT_RANKINGS, *SIGNAL_RANKINGS}, set(RANKINGS))
         for ranking in DEFAULT_RANKINGS:
             features = self.rows(self.screen(ranking))["WINNER"]["features"]
             self.assertNotIn("max_daily_return", features)

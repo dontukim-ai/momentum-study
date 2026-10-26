@@ -44,7 +44,15 @@ SIGNAL_RANKINGS = ("short_reversal", "low_volatility", "momentum_ex_max")
 #   profitability: operating income / total assets.
 #   value_profit: mean of the two percentile ranks among eligible stocks.
 FUNDAMENTAL_RANKINGS = ("value", "profitability", "value_profit")
-RANKINGS = (*DEFAULT_RANKINGS, *SIGNAL_RANKINGS, *FUNDAMENTAL_RANKINGS)
+# Market trend filter (strategy-candidates-v8 C1, Faber 2007): hold the
+# policy's trend_symbol only while its close is above the average of its last
+# TREND_MONTHS month-end closes (the latest bar counts for its month); cash
+# otherwise. It ignores the lookback and the momentum threshold.
+TREND_RANKINGS = ("market_trend",)
+TREND_MONTHS = 10
+RANKINGS = (*DEFAULT_RANKINGS, *SIGNAL_RANKINGS, *FUNDAMENTAL_RANKINGS, *TREND_RANKINGS)
+# Rankings whose score does not depend on the lookback: proposed once.
+LOOKBACK_FREE_RANKINGS = (*FUNDAMENTAL_RANKINGS, *TREND_RANKINGS)
 # Fixed before any result: KRX limits daily moves to 30%, so this removes
 # stocks with a near-limit-up day in the window.
 MAX_FILTER_DAILY_RETURN = D(".25")
@@ -184,6 +192,8 @@ class SelectionPolicy:
     # Explore v7 §3: keep only the N largest screened stocks by market cap.
     # ETFs are not ranked, so a market-ETF benchmark stays screenable.
     max_market_cap_rank: int | None = None
+    # Strategy-candidates-v8 C1: the one instrument market_trend may hold.
+    trend_symbol: str | None = None
 
     def __post_init__(self):
         if self.spread_mode not in ("quoted", "historical_unavailable"):
@@ -213,6 +223,9 @@ class SelectionPolicy:
         if self.max_market_cap_rank is not None and (type(self.max_market_cap_rank) is not int
                                                      or not 1 <= self.max_market_cap_rank <= 10000):
             raise AgentError("Market-cap universe size must be an integer 1..10000")
+        if self.trend_symbol is not None and (not isinstance(self.trend_symbol, str)
+                                              or not re.fullmatch(r"[A-Za-z0-9_]{1,30}", self.trend_symbol)):
+            raise AgentError("Invalid trend symbol")
         self.risk(("VALIDATION",))
 
     def risk(self, symbols: tuple[str, ...]):
@@ -269,6 +282,21 @@ def _fundamental_inputs(spec, record, market_cap, day, features, signal) -> None
         features["score"] = features["book_to_market" if spec.ranking == "value" else "operating_profitability"]
 
 
+def _trend_score(history, features: dict, signal: list) -> None:
+    month_ends = {}
+    for bar in history:
+        month_ends[(bar.session.year, bar.session.month)] = bar.close
+    closes = [month_ends[k] for k in sorted(month_ends)][-TREND_MONTHS:]
+    if len(closes) < TREND_MONTHS:
+        signal.append("INSUFFICIENT_TREND_HISTORY")
+        return
+    average = sum(closes, D(0)) / len(closes)
+    features["trend_average"] = average
+    features["score"] = features["trend_ratio"] = history[-1].close / average - 1
+    if features["trend_ratio"] <= 0:
+        signal.append("BELOW_TREND")
+
+
 def _percentiles(rows, key) -> dict[str, D]:
     """Mid-rank percentile in (0, 1] of ``features[key]``; ties share their average rank."""
     values = sorted(r["features"][key] for r in rows)
@@ -288,6 +316,8 @@ def select_candidates(spec: RankedStrategy, view: MarketView, securities: Securi
     fundamental = spec.ranking in FUNDAMENTAL_RANKINGS
     if (fundamental or policy.max_market_cap_rank is not None) and fundamentals is None:
         raise AgentError("Fundamental rankings and the market-cap universe need point-in-time fundamentals")
+    if spec.ranking in TREND_RANKINGS and policy.trend_symbol is None:
+        raise AgentError("market_trend needs a preregistered trend_symbol")
     if spec.gross_weight > policy.max_gross or spec.gross_weight / spec.top_n > policy.max_position:
         raise AgentError("Strategy allocation exceeds the fixed selection risk policy")
     full_equity = policy.capital_limit if equity is None else dec(equity)
@@ -371,7 +401,12 @@ def select_candidates(spec: RankedStrategy, view: MarketView, securities: Securi
                 reasons.append("LOW_LIQUIDITY")
             if volatility > policy.max_daily_volatility:
                 reasons.append("EXCESSIVE_VOLATILITY")
-            if fundamental:
+            if spec.ranking in TREND_RANKINGS:
+                if symbol != policy.trend_symbol:
+                    signal.append("NOT_TREND_SYMBOL")
+                else:
+                    _trend_score(history, features, signal)
+            elif fundamental:
                 _fundamental_inputs(spec, fundamentals.financials(symbol, view.as_of), market_cap,
                                     view.expected_session, features, signal)
             elif spec.ranking in SIGNAL_RANKINGS:
