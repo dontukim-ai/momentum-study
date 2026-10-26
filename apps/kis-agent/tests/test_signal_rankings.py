@@ -8,8 +8,10 @@ from trading_agent.data import Snapshot
 from trading_agent.logic import LogicSettings
 from trading_agent.selection import (
     DEFAULT_RANKINGS,
+    FUNDAMENTAL_RANKINGS,
     MAX_FILTER_DAILY_RETURN,
     RANKINGS,
+    SIGNAL_RANKINGS,
     RankedStrategy,
     SecurityHistory,
     SecurityState,
@@ -97,7 +99,8 @@ class SignalRankingTests(unittest.TestCase):
     def test_default_search_space_and_existing_features_are_unchanged(self):
         self.assertEqual(DEFAULT_RANKINGS, ("momentum", "risk_adjusted", "trend_stability"))
         self.assertEqual(LogicSettings().rankings, DEFAULT_RANKINGS)
-        self.assertEqual(set(RANKINGS) - set(DEFAULT_RANKINGS), {"short_reversal", "low_volatility", "momentum_ex_max"})
+        self.assertEqual(set(RANKINGS) - set(DEFAULT_RANKINGS) - set(FUNDAMENTAL_RANKINGS),
+                         {"short_reversal", "low_volatility", "momentum_ex_max"})
         for ranking in DEFAULT_RANKINGS:
             features = self.rows(self.screen(ranking))["WINNER"]["features"]
             self.assertNotIn("max_daily_return", features)
@@ -105,9 +108,10 @@ class SignalRankingTests(unittest.TestCase):
 
     def test_signal_rankings_must_be_preregistered_and_respect_the_challenger_budget(self):
         LogicSettings(champion=RankedStrategy(20), lookbacks=(20, 40, 60),
-                      rankings=("momentum", *RANKINGS[3:]), candidate_budget=11)
+                      rankings=("momentum", *SIGNAL_RANKINGS), candidate_budget=11)
         with self.assertRaisesRegex(AgentError, "challenger budget"):
-            LogicSettings(champion=RankedStrategy(20), lookbacks=(20, 40, 60), rankings=RANKINGS, candidate_budget=12)
+            LogicSettings(champion=RankedStrategy(20), lookbacks=(20, 40, 60),
+                          rankings=(*DEFAULT_RANKINGS, *SIGNAL_RANKINGS), candidate_budget=12)
         with self.assertRaisesRegex(AgentError, "allowlisted"):
             RankedStrategy(20, ranking="macd")
 
