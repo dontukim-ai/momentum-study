@@ -23,6 +23,7 @@ from .contracts import (
     canonical,
     dec,
     digest,
+    kis_account,
 )
 from .kis import http_json
 from .store import Store
@@ -55,8 +56,8 @@ class PaperSession:
                  token_cache_dir: Path | None = None):
         self._key = os.environ.get("KIS_PAPER_APP_KEY", "")
         self._secret = os.environ.get("KIS_PAPER_APP_SECRET", "")
-        account = os.environ.get("KIS_PAPER_ACCOUNT", "")
-        if not self._key or not self._secret or not re.fullmatch(r"[0-9]{8}-01", account):
+        account = kis_account(os.environ.get("KIS_PAPER_ACCOUNT", ""))
+        if not self._key or not self._secret or not account:
             raise AgentError("Configure KIS_PAPER_APP_KEY, KIS_PAPER_APP_SECRET and KIS_PAPER_ACCOUNT (8 digits-01)")
         if not minimum_interval >= .1:
             raise AgentError("Invalid request interval")

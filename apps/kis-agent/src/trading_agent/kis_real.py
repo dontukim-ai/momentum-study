@@ -10,7 +10,17 @@ from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import urlencode
 
-from .contracts import KST, UTC, AgentError, D, Quote, canonical, dec, digest
+from .contracts import (
+    KST,
+    UTC,
+    AgentError,
+    D,
+    Quote,
+    canonical,
+    dec,
+    digest,
+    kis_account,
+)
 from .kis import http_json
 from .token_cache import cached_token
 
@@ -45,7 +55,8 @@ class KisRealReadOnly:
     def __init__(self, transport=http_json, token_cache_dir: Path | None = None,
                  minimum_interval: float = .7):
         self._key, self._secret, account = (os.environ.get(name, "") for name in REAL_NAMES)
-        if not self._key or not self._secret or not re.fullmatch(r"[0-9]{8}-01", account):
+        account = kis_account(account)
+        if not self._key or not self._secret or not account:
             raise AgentError("Configure KIS_APP_KEY, KIS_APP_SECRET and KIS_ACCOUNT (8 digits-01)")
         if not minimum_interval >= .1:
             raise AgentError("Invalid real-account read interval")

@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
-from .contracts import KST, UTC, AgentError, implementation_id
+from .contracts import KST, UTC, AgentError, implementation_id, kis_account
 from .kis import http_json
 from .kis_paper import PAPER_HOST, ROUTES, KisPaperBroker, PaperSession
 from .kis_real import (
@@ -62,7 +62,7 @@ def doctor(*, probe_paper: bool = False, probe_real: bool = False, symbol: str |
         raise AgentError("A six-digit --symbol is required for a read probe")
     policy = load_network_policy() if policy is None else policy
     present = {name: bool(os.environ.get(name)) for name in (*PAPER_NAMES, *REAL_NAMES, "OPENAI_API_KEY", "OPENAI_MODEL")}
-    account_valid = bool(re.fullmatch(r"[0-9]{8}-01", os.environ.get("KIS_PAPER_ACCOUNT", "")))
+    account_valid = bool(kis_account(os.environ.get("KIS_PAPER_ACCOUNT", "")))
     paper_access = host_access("openapivts.koreainvestment.com", policy)
     llm_access = host_access("api.openai.com", policy)
     paper_configured = all(present[name] for name in PAPER_NAMES) and account_valid
@@ -72,7 +72,7 @@ def doctor(*, probe_paper: bool = False, probe_real: bool = False, symbol: str |
               "paper": {"configured": paper_configured, "network_policy": paper_access,
                         "probe": "NOT_REQUESTED", "read_probe_verified": False,
                         "full_order_contract_verified": False},
-              "real": {"configured": all(present[name] for name in REAL_NAMES) and bool(re.fullmatch(r"[0-9]{8}-01", os.environ.get("KIS_ACCOUNT", ""))),
+              "real": {"configured": all(present[name] for name in REAL_NAMES) and bool(kis_account(os.environ.get("KIS_ACCOUNT", ""))),
                        "network_policy": host_access("openapi.koreainvestment.com", policy),
                        "mode": "REAL_READ_ONLY", "capital_limit_krw": str(REAL_CAPITAL_LIMIT),
                        "orders_enabled": False, "probe": "NOT_REQUESTED", "read_probe_verified": False,

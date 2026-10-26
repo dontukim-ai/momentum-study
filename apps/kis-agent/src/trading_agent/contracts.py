@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, time, timezone
 from decimal import ROUND_CEILING, ROUND_HALF_UP, Decimal
@@ -64,6 +65,12 @@ def canonical(value: Any) -> str:
 
 def digest(value: Any) -> str:
     return hashlib.sha256(canonical(value).encode()).hexdigest()
+
+
+def kis_account(text: str) -> str:
+    """The canonical 8 digits-01 account, accepting the hyphen-free 10-digit form; empty if invalid."""
+    match = re.fullmatch(r"([0-9]{8})-?(01)", text)
+    return f"{match[1]}-{match[2]}" if match else ""
 
 
 @lru_cache(maxsize=1)
