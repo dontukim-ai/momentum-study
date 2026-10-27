@@ -8,7 +8,9 @@ Each rule decides on the previous close (calendar or drift), sizes orders on
 the previous close (``compute_weight_targets``) and fills at the next open
 through the one engine (``Ledger.step_session``): costs, the 1%-of-ADV cap,
 cancelled orders on a missing open, whole-won ledger. Trading starts once
-every ETF has 20 sessions of volume history. An implausible close (-40% or
+every ETF has 20 sessions of volume history. v14.1 (§13): every rule first
+rebalances each session until one session fills every order uncut (the
+build, at most 20 sessions); rules and metrics start after it. An implausible close (-40% or
 +60% in a session) stops the run rather than being repaired. Prints the
 table, the §8 verdict per mix and one JSON line; writes nothing.
 """
@@ -38,7 +40,7 @@ MIXES = {  # §2, fixed before any price was read
 RULES = ("H", "M", "Q", "A", "B5", "B10")
 BANDS = {"B5": 0.05, "B10": 0.10}
 COSTS = {"base": 4.5, "stress": 11.5}           # bp one way: 1.5 commission + 3 or 10 slippage (§11)
-CAPITAL, HISTORY, YEAR = Decimal(100_000_000), 20, 252
+CAPITAL, HISTORY, YEAR, BUILD = Decimal(100_000_000), 20, 252, 20
 LOW, HIGH = Decimal("0.6"), Decimal("1.6")      # close / previous close outside this is not a market move
 
 
@@ -125,16 +127,19 @@ def run(prices: Prices, weights: dict[str, float], rule: str, cost_bps: float) -
     cfg = ExecutionCfg(base_cost_bps=cost_bps, participation_limit=0.01, participation_lookback_days=HISTORY,
                        max_weight=1.0, cash_buffer=0.005)
     ledger = Ledger(CAPITAL, cfg, money_quantum=Decimal(1))
-    out: dict[str, Any] = {"sessions": [], "nav": [], "drift": [], "rebalances": [], "traded": [], "costs": []}
+    out: dict[str, Any] = {"sessions": [], "nav": [], "drift": [], "rebalances": [], "traded": [], "costs": [],
+                           "measure_from": None}
+    building = True
     for i in range(start, len(sessions)):
         day, prev = sessions[i], sessions[i - 1]
         nav = ledger.nav
         now = {s: float(q * ledger.marks[s] / nav) for s, q in ledger.positions.items() if q and nav > 0}
         orders = []
-        if i == start or decide(rule, prev, day, now, weights):
+        if building or decide(rule, prev, day, now, weights):
             prev_close = {s: b.close for s, b in prices[prev].items() if s in weights and b.close is not None}
             orders = compute_weight_targets(weights, nav, prev_close, dict(ledger.positions), cfg)
-            out["rebalances"].append(day)
+            if not building:
+                out["rebalances"].append(day)
         adv = {}
         for s in {o.security_id for o in orders}:
             window = [prices[d][s].volume for d in sessions[i - HISTORY:i] if s in prices[d]]
@@ -153,24 +158,31 @@ def run(prices: Prices, weights: dict[str, float], rule: str, cost_bps: float) -
         out["drift"].append(float(sum(abs(held.get(s, Decimal(0)) - Decimal(str(w))) for s, w in weights.items())))
         out["sessions"].append(day)
         out["nav"].append(nav)
+        if building:
+            if all(f.status == "filled" for f in today):
+                building = False
+                out["measure_from"] = len(out["sessions"])
+            elif len(out["sessions"]) >= BUILD:
+                raise SpecUndefinedError(f"the build did not complete in {BUILD} sessions (last {day})")
+    if out["measure_from"] is None or out["measure_from"] >= len(out["sessions"]):
+        raise SpecUndefinedError("no session left to measure after the build")
     out["ledger"] = ledger
     return out
 
 
-def _segment(result: dict, lo: int, hi: int, opening: bool) -> dict[str, float]:
+def _segment(result: dict, lo: int, hi: int) -> dict[str, float]:
     nav = [float(x) for x in result["nav"][lo:hi]]
-    base = float(result["nav"][lo - 1]) if lo > 0 else float(CAPITAL)
+    base = float(result["nav"][lo - 1])
     returns = [b / a - 1 for a, b in zip([base, *nav], nav, strict=False)]
     years = len(nav) / YEAR
     peak, mdd = base, 0.0
     for x in nav:
         peak = max(peak, x)
         mdd = max(mdd, 1 - x / peak)
-    skip = 1 if opening else 0                     # the opening buy is the same for every rule
     avg = statistics.fmean(nav)
-    traded = float(sum(result["traded"][lo + skip:hi]))
-    cost = float(sum(result["costs"][lo + skip:hi]))
-    days = set(result["sessions"][lo + skip:hi])
+    traded = float(sum(result["traded"][lo:hi]))
+    cost = float(sum(result["costs"][lo:hi]))
+    days = set(result["sessions"][lo:hi])
     return {"sessions": len(nav), "rebalances": sum(d in days for d in result["rebalances"]),
             "turnover_per_year": traded / 2 / avg / years, "cost_bp_per_year": cost / avg / years * 1e4,
             "drift_mean": statistics.fmean(result["drift"][lo:hi]), "drift_max": max(result["drift"][lo:hi]),
@@ -179,10 +191,10 @@ def _segment(result: dict, lo: int, hi: int, opening: bool) -> dict[str, float]:
 
 
 def metrics(result: dict) -> dict[str, dict[str, float]]:
-    n = len(result["nav"])
-    half = n // 2
-    return {"full": _segment(result, 0, n, True), "first_half": _segment(result, 0, half, True),
-            "second_half": _segment(result, half, n, False)}
+    lo, n = result["measure_from"], len(result["nav"])
+    half = lo + (n - lo) // 2
+    return {"full": _segment(result, lo, n), "first_half": _segment(result, lo, half),
+            "second_half": _segment(result, half, n)}
 
 
 def judge(table: dict[str, dict[str, dict[str, float]]]) -> dict[str, Any]:
@@ -215,7 +227,7 @@ def main(argv: list[str] | None = None) -> int:
                 for rule in RULES:
                     result = run(prices, weights, rule, bps)
                     table[rule] = metrics(result)
-                    span = [result["sessions"][0].isoformat(), result["sessions"][-1].isoformat()]
+                    span = [result["sessions"][result["measure_from"]].isoformat(), result["sessions"][-1].isoformat()]
                 report[mix][cost_name] = {"table": table, "verdict": judge(table), "span": span}
     except SpecUndefinedError as exc:
         print(f"allocation-rebalance: STOP: {exc}")

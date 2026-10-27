@@ -62,7 +62,7 @@ def test_rules_trigger_on_the_calendar_and_on_drift():
 def test_buy_and_hold_trades_once_and_the_ledger_reconciles():
     prices = market()
     result = alloc.run(prices, W, "H", cost_bps=4.5)
-    assert result["rebalances"] == [result["sessions"][0]]
+    assert result["rebalances"] == [] and result["measure_from"] == 1  # deep volume: built on the first session
     last = result["sessions"][-1]
     nav = result["ledger"].cash + sum(q * prices[last][s].close for s, q in result["ledger"].positions.items())
     assert result["nav"][-1] == nav                                      # exact, whole won
@@ -73,7 +73,7 @@ def test_monthly_trades_each_month_and_bands_trade_only_on_drift():
     prices = market()
     first = alloc.run(prices, W, "M", cost_bps=4.5)
     months = {d.strftime("%Y-%m") for d in first["sessions"]}
-    assert len(first["rebalances"]) == len(months)
+    assert len(first["rebalances"]) == len(months) - 1                 # the build month has no rule rebalance
     band = alloc.run(prices, W, "B5", cost_bps=4.5)
     # 1% a session on A moves its weight ~0.25pp a session: about 20 sessions to cross 5pp.
     gaps = [(b - a).days for a, b in zip(band["rebalances"], band["rebalances"][1:], strict=False)]
@@ -93,8 +93,9 @@ def test_missing_open_cancels_the_buy_and_missing_close_keeps_the_mark():
     start = sorted(prices)[20]
     prices[start]["B"] = Bar(open=None, close=prices[start]["B"].close, volume=1e9)
     result = alloc.run(prices, W, "H", cost_bps=4.5)
-    assert result["ledger"].positions.get("B", 0) == 0                   # never bought under H
     assert any(f.status == "cancelled_no_open" for f in result["ledger"].fills)
+    # v14.1: the cancelled buy keeps the build open, so B is bought at the next open.
+    assert result["measure_from"] == 2 and result["ledger"].positions.get("B", 0) > 0
 
 
 def test_an_implausible_close_stops_the_run():
@@ -110,7 +111,7 @@ def test_metrics_and_halves():
     m = alloc.metrics(result)
     assert set(m) == {"full", "first_half", "second_half"}
     full = m["full"]
-    assert full["rebalances"] == len(result["rebalances"]) - 1           # the opening buy is not counted
+    assert full["rebalances"] == len(result["rebalances"])              # build sessions are not counted
     assert full["cost_bp_per_year"] > 0 and full["turnover_per_year"] > 0 and 0 <= full["max_drawdown"] < 0.05
 
 
@@ -139,3 +140,32 @@ def test_fsc_pages_load_open_close_volume(tmp_path):
     bars = prices[date(2024, 1, 2)]
     assert bars["A"] == Bar(Decimal(10000), Decimal(10100), 500.0)
     assert bars["B"].open is None and set(bars) == {"A", "B"}
+
+
+def thin(prices, volume):
+    return {d: {s: b._replace(volume=volume) for s, b in row.items()} for d, row in prices.items()}
+
+
+def test_build_up_buys_every_session_until_nothing_is_cut_then_rules_apply():
+    # 1% of 30,000 shares = 300 a session; 50M won per ETF at ~10,000+ needs about 17 sessions.
+    prices = thin(market(), 30_000)
+    result = alloc.run(prices, W, "H", cost_bps=4.5)
+    built = result["measure_from"]
+    assert built > 10
+    assert result["rebalances"] == []                                   # H never rebalances after the build
+    assert result["drift"][built - 1] < 0.02                            # fully invested at the end of the build
+    assert all(f.status == "filled" for f in result["ledger"].fills if f.session_date == result["sessions"][built - 1])
+    m = alloc.run(prices, W, "M", cost_bps=4.5)
+    assert m["measure_from"] == built                                    # every rule shares the build
+
+
+def test_a_build_that_never_completes_stops():
+    with pytest.raises(SpecUndefinedError, match="build"):
+        alloc.run(thin(market(), 1_000), W, "H", cost_bps=4.5)
+
+
+def test_metrics_start_after_the_build():
+    result = alloc.run(thin(market(), 30_000), W, "M", cost_bps=4.5)
+    m = alloc.metrics(result)
+    assert m["full"]["sessions"] == len(result["sessions"]) - result["measure_from"]
+    assert m["first_half"]["sessions"] + m["second_half"]["sessions"] == m["full"]["sessions"]
