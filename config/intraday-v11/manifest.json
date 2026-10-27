@@ -34,7 +34,7 @@
   "292150",
   "0008T0"
  ],
- "frozen_at": "2026-10-27T09:00:00+09:00",
+ "frozen_at": "2026-10-27T10:05:00+09:00",
  "holdout": [
   "2026-07-01",
   "2026-10-23"
@@ -48,6 +48,6 @@
  "code": {
   "tools/intraday_engine.py": "424c16a2c73d3e2dce43f83011f8ab0071b23496ca30650ccc3418287a68427c",
   "tools/intraday_candidates.py": "13dd57f5a9b051aaf596f8c017090b77b4db842b6db92cd0364b4b860ffeb80b",
-  "tools/intraday_holdout.py": "53e342d8384464db7aefd024d97f2b6d02d37110fe59acd39eff00ddb45940c8"
+  "tools/intraday_holdout.py": "22a78d4d0d6877f6eaa362ddbb6c315c8af6c777b6a288179eb8fb2bbb550522"
  }
 }
