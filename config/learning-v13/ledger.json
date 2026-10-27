@@ -968,12 +968,17 @@
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-27",
      "reason": "registered; freeze pending (PR #138)"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "동결 config/direction-v12/model.json sha256 9f3fc3f3…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -994,12 +999,17 @@
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-27",
      "reason": "registered; freeze pending (PR #138)"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "동결 config/direction-v12/model.json sha256 9f3fc3f3…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -1020,12 +1030,17 @@
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-27",
      "reason": "registered; freeze pending (PR #138)"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "동결 config/direction-v12/model.json sha256 9f3fc3f3…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -1046,12 +1061,17 @@
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-27",
      "reason": "registered; freeze pending (PR #138)"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "동결 config/direction-v12/model.json sha256 9f3fc3f3…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -1072,12 +1092,17 @@
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-27",
      "reason": "registered; freeze pending (PR #138)"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "동결 config/direction-v12/model.json sha256 9f3fc3f3…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -1098,12 +1123,17 @@
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-27",
      "reason": "registered; freeze pending (PR #138)"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "동결 config/direction-v12/model.json sha256 9f3fc3f3…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -1124,12 +1154,17 @@
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-27",
      "reason": "registered; freeze pending (PR #138)"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "동결 config/direction-v12/model.json sha256 9f3fc3f3…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -1150,12 +1185,17 @@
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-27",
      "reason": "registered; freeze pending (PR #138)"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "동결 config/direction-v12/model.json sha256 9f3fc3f3…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -1176,12 +1216,17 @@
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-27",
      "reason": "registered; freeze pending (PR #138)"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "동결 config/direction-v12/model.json sha256 9f3fc3f3…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -1202,12 +1247,17 @@
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-27",
      "reason": "registered; freeze pending (PR #138)"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "동결 config/direction-v12/model.json sha256 9f3fc3f3…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -1228,12 +1278,17 @@
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-27",
      "reason": "registered; freeze pending (PR #138)"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "동결 config/direction-v12/model.json sha256 9f3fc3f3…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -1254,12 +1309,17 @@
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-27",
      "reason": "registered; freeze pending (PR #138)"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "동결 config/direction-v12/model.json sha256 9f3fc3f3…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -1280,12 +1340,17 @@
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-27",
      "reason": "registered; freeze pending (PR #138)"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "동결 config/direction-v12/model.json sha256 9f3fc3f3…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -1306,12 +1371,17 @@
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-27",
      "reason": "registered; freeze pending (PR #138)"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "동결 config/direction-v12/model.json sha256 9f3fc3f3…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -1332,12 +1402,17 @@
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-27",
      "reason": "registered; freeze pending (PR #138)"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "동결 config/direction-v12/model.json sha256 9f3fc3f3…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -1359,12 +1434,17 @@
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-27",
      "reason": "registered; dev eval pending (PR #140)"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "동결 config/return-v12b/model.json sha256 f371eb82…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -1386,12 +1466,17 @@
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-27",
      "reason": "registered; dev eval pending (PR #140)"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "동결 config/return-v12b/model.json sha256 f371eb82…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -1413,12 +1498,17 @@
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-27",
      "reason": "registered; dev eval pending (PR #140)"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "동결 config/return-v12b/model.json sha256 f371eb82…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -1440,12 +1530,17 @@
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-27",
      "reason": "registered; dev eval pending (PR #140)"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "동결 config/return-v12b/model.json sha256 f371eb82…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -1467,12 +1562,17 @@
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-27",
      "reason": "registered; dev eval pending (PR #140)"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "동결 config/return-v12b/model.json sha256 f371eb82…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -1494,12 +1594,17 @@
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-27",
      "reason": "registered; dev eval pending (PR #140)"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "동결 config/return-v12b/model.json sha256 f371eb82…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -1521,12 +1626,17 @@
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-27",
      "reason": "registered; dev eval pending (PR #140)"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "동결 config/return-v12b/model.json sha256 f371eb82…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -1548,12 +1658,17 @@
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-27",
      "reason": "registered; dev eval pending (PR #140)"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "동결 config/return-v12b/model.json sha256 f371eb82…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -1575,12 +1690,17 @@
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-27",
      "reason": "registered; dev eval pending (PR #140)"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "동결 config/return-v12b/model.json sha256 f371eb82…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -1602,12 +1722,17 @@
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-27",
      "reason": "registered; dev eval pending (PR #140)"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "동결 config/return-v12b/model.json sha256 f371eb82…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -1629,12 +1754,17 @@
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-27",
      "reason": "registered; dev eval pending (PR #140)"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "동결 config/return-v12b/model.json sha256 f371eb82…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -1656,12 +1786,17 @@
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-27",
      "reason": "registered; dev eval pending (PR #140)"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "동결 config/return-v12b/model.json sha256 f371eb82…, 2026-10-26부터 전진 채점"
     }
    ]
   }
