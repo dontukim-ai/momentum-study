@@ -169,3 +169,18 @@ abandon은 worker를 종료하는 명령이 아니다. 실제 프로세스가 �
   2. 클라우드가 그 브랜치를 읽어 판정·기록한다.
   3. 원격 브랜치 삭제는 클라우드에서 막혀 있다. 클라우드가 다 읽은 `results/*` 브랜치는 이름을 적어 맥에 삭제를 요청하고, 맥은 묻지 않고 바로 지운다(사용자 지시 2026-10-26). 이 규칙은 `results/*`에만 적용한다. `main`·PR 브랜치 등 다른 브랜치 삭제는 사용자에게 먼저 묻는다.
 - 블록의 0단계에서 맥 HEAD(`git log --oneline -1`)를 출력해 원격 main과 같은지 확인한다.
+
+## 11. 월간 분봉 연구 갱신 (2026-10-27)
+
+v9 전진 기록 월간 갱신(`tools/forward_update.py`)과 같은 날, 맥에서 이어서 한다. 모두 읽기 전용이고 주문은 없다. 결과 요약 txt만 §10 방식으로 넘긴다.
+
+1. **분봉 수집(KIS 읽기, FHKST03010230):** `uv run --extra agent python tools/kis_minute_history.py --universe data/kis/etf-universe-v2.json --start 2026-10-26 --end <그달 마지막 세션>`
+   - 이미 받은 날은 다시 받지 않는다.
+   - `--end`는 장이 끝난 날이어야 한다.
+2. **방향 예측 채점(v12 §8):** `uv run python tools/direction_lab.py score --universe data/kis/etf-universe-v2.json --model config/direction-v12/model.json`
+3. **수익률 예측 채점(v12b §4):** `uv run python tools/return_lab.py score --universe data/kis/etf-universe-v2.json --model config/return-v12b/model.json`
+   - v12b 동결 모형이 저장소에 들어간 뒤부터 한다.
+4. 결과는 각 문서의 기록 절과 시험 장부(`tools/learning_ledger.py`)에 남긴다.
+   - 판정 시점 전에는 보고만 한다. v12는 40거래일, v9는 2027-10이다.
+
+v11 분봉 전략은 검증을 통과한 후보가 없어 월간 기록 대상이 없다(v11 §11).
