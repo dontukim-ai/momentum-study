@@ -757,7 +757,7 @@
     "mean_daily": null
    },
    "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
-   "stage": "S1",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
@@ -768,6 +768,11 @@
      "stage": "S1",
      "date": "2026-10-27",
      "reason": "v11 §4 선정, v11 검증 구간 1회 실행 중 (v13 이전 규칙, v13 §10)"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 검증 구간 불통과: 순수익 -9.95%, t -1.17 (v11 §11)"
     }
    ]
   },
@@ -1350,7 +1355,7 @@
    "dev": {
     "t": null,
     "ic": null,
-    "r2": null,
+    "r2": 0.0,
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
@@ -1377,7 +1382,7 @@
    "dev": {
     "t": null,
     "ic": null,
-    "r2": null,
+    "r2": -1e-05,
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
@@ -1402,9 +1407,9 @@
     "2026-06-30"
    ],
    "dev": {
-    "t": null,
-    "ic": null,
-    "r2": null,
+    "t": 26.6,
+    "ic": 0.0904,
+    "r2": 0.00621,
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
@@ -1429,9 +1434,9 @@
     "2026-06-30"
    ],
    "dev": {
-    "t": null,
-    "ic": null,
-    "r2": null,
+    "t": 41.41,
+    "ic": 0.2177,
+    "r2": 0.23794,
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
@@ -1458,7 +1463,7 @@
    "dev": {
     "t": null,
     "ic": null,
-    "r2": null,
+    "r2": 0.0,
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
@@ -1485,7 +1490,7 @@
    "dev": {
     "t": null,
     "ic": null,
-    "r2": null,
+    "r2": -6e-05,
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
@@ -1510,9 +1515,9 @@
     "2026-06-30"
    ],
    "dev": {
-    "t": null,
-    "ic": null,
-    "r2": null,
+    "t": 11.25,
+    "ic": 0.0427,
+    "r2": 0.00174,
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
@@ -1537,9 +1542,9 @@
     "2026-06-30"
    ],
    "dev": {
-    "t": null,
-    "ic": null,
-    "r2": null,
+    "t": 36.56,
+    "ic": 0.226,
+    "r2": 0.25904,
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
@@ -1566,7 +1571,7 @@
    "dev": {
     "t": null,
     "ic": null,
-    "r2": null,
+    "r2": 0.0,
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
@@ -1593,7 +1598,7 @@
    "dev": {
     "t": null,
     "ic": null,
-    "r2": null,
+    "r2": -0.00024,
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
@@ -1618,9 +1623,9 @@
     "2026-06-30"
    ],
    "dev": {
-    "t": null,
-    "ic": null,
-    "r2": null,
+    "t": -1.93,
+    "ic": -0.0159,
+    "r2": 0.00141,
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
@@ -1645,9 +1650,9 @@
     "2026-06-30"
    ],
    "dev": {
-    "t": null,
-    "ic": null,
-    "r2": null,
+    "t": 17.04,
+    "ic": 0.1613,
+    "r2": 0.23371,
     "mean_daily": null
    },
    "cost_version": "none (forecast)",
