@@ -432,6 +432,7 @@ class Ledger:
             self.cfg,
             session_date=d,
             asof=asof,
+            money_quantum=self.money_quantum,
         )
         self.apply_fills(fills, d)
         self.mark_to_market(closes, d)

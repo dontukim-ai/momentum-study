@@ -19,7 +19,7 @@ from decimal import Decimal
 from typing import NamedTuple
 
 from momentum.config import ExecutionCfg, SpecUndefinedError
-from momentum.execution.costs import apply_caps, one_way_cost
+from momentum.execution.costs import CENT, apply_caps, one_way_cost
 from momentum.portfolio.targets import TargetOrder
 
 PRICE_SOURCE = "open_raw"
@@ -38,12 +38,12 @@ class Fill(NamedTuple):
     reduction_reasons: tuple[str, ...] = ()
 
 
-def _affordable_shares(desired: int, price: Decimal, cash: Decimal, bps: float) -> int:
-    """Largest n <= desired with n*price + one_way_cost(n*price, bps) <= cash."""
+def _affordable_shares(desired: int, price: Decimal, cash: Decimal, bps: float, quantum: Decimal) -> int:
+    """Largest n <= desired with n*price + one_way_cost(n*price, bps, quantum) <= cash."""
     if price <= 0 or cash <= 0:
         return 0
     n = min(desired, int(cash // price))
-    while n > 0 and n * price + one_way_cost(n * price, bps) > cash:
+    while n > 0 and n * price + one_way_cost(n * price, bps, quantum) > cash:
         n -= 1
     return n
 
@@ -57,6 +57,7 @@ def execute(
     *,
     session_date: date,
     asof: date,
+    money_quantum: Decimal = CENT,
 ) -> list[Fill]:
     bps = cfg.base_cost_bps
     fills: list[Fill] = []
@@ -97,7 +98,7 @@ def execute(
         sell_reasons: tuple[str, ...] = (reason,) if reason is not None else ()
         status = "filled" if reason is None else "reduced_participation"
         notional = shares * price
-        cost = one_way_cost(notional, bps)
+        cost = one_way_cost(notional, bps, money_quantum)
         available += notional - cost
         fills.append(
             Fill(
@@ -122,12 +123,12 @@ def execute(
         capped, reason = apply_caps(order.shares, _adv_for(order), cfg)
         reasons: list[str] = [reason] if reason is not None else []
         status = "filled" if reason is None else "reduced_participation"
-        shares = _affordable_shares(capped, price, available, bps)
+        shares = _affordable_shares(capped, price, available, bps, money_quantum)
         if shares < capped:
             status = "reduced_cash"
             reasons.append("insufficient_cash")
         notional = shares * price
-        cost = one_way_cost(notional, bps)
+        cost = one_way_cost(notional, bps, money_quantum)
         available -= notional + cost
         fills.append(
             Fill(
