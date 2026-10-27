@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from decimal import Decimal
 from typing import Literal, NamedTuple
 
-from momentum.config import ExecutionCfg
+from momentum.config import ExecutionCfg, SpecUndefinedError
 
 
 class TargetOrder(NamedTuple):
@@ -64,3 +65,39 @@ def compute_targets(
             sells.append(TargetOrder(sid, "sell", -delta, -1))
 
     return sells + buys
+
+
+def compute_weight_targets(
+    weights: Mapping[str, float],
+    nav: Decimal,
+    prev_close: dict[str, Decimal],
+    holdings: dict[str, int],
+    cfg: ExecutionCfg,
+) -> list[TargetOrder]:
+    """목표 비중표를 전일 종가만으로 수량화한다(v14 §11). 다음 시가는 받지 않는다.
+
+    Weights above ``cfg.max_weight``, negative, or summing above one are refused
+    rather than trimmed. Holdings outside the table are sold in full. As in
+    ``compute_targets``, a security without a previous close gets no order in
+    either direction (rule 3). Sells come first, then buys in table order.
+    """
+    for sid, w in weights.items():
+        if not 0 <= w <= cfg.max_weight:
+            raise SpecUndefinedError(f"weight {w} for {sid} outside [0, {cfg.max_weight}]")
+    if sum(weights.values()) > 1 + 1e-9:
+        raise SpecUndefinedError(f"weights sum to {sum(weights.values())} > 1")
+    sells = [TargetOrder(sid, "sell", qty, -1) for sid, qty in sorted(holdings.items())
+             if qty > 0 and sid not in weights]
+    buys: list[TargetOrder] = []
+    investable = nav * (Decimal(1) - Decimal(str(cfg.cash_buffer)))
+    for rank, sid in enumerate(sorted(weights)):
+        px = prev_close.get(sid)
+        if px is None or px <= 0:
+            continue
+        target = int((investable * Decimal(str(weights[sid]))) // px)
+        delta = target - holdings.get(sid, 0)
+        if delta > 0:
+            buys.append(TargetOrder(sid, "buy", delta, rank))
+        elif delta < 0:
+            sells.append(TargetOrder(sid, "sell", -delta, -1))
+    return sorted(sells, key=lambda o: o.security_id) + buys

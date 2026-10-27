@@ -8,8 +8,9 @@ from momentum.config import ExecutionCfg
 CENT = Decimal("0.01")
 
 
-def one_way_cost(notional: Decimal, bps: float) -> Decimal:
-    return (notional * Decimal(str(bps)) / Decimal(10000)).quantize(CENT, ROUND_HALF_UP)
+def one_way_cost(notional: Decimal, bps: float, quantum: Decimal = CENT) -> Decimal:
+    """Cost rounded half-up at the money quantum: cents by default, whole won for a KRW ledger."""
+    return (notional * Decimal(str(bps)) / Decimal(10000)).quantize(quantum, ROUND_HALF_UP)
 
 
 def participation_cap(adv_shares: float, cfg: ExecutionCfg) -> int:
