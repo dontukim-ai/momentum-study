@@ -35,6 +35,7 @@ import json
 import math
 import sys
 from collections import defaultdict
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -68,11 +69,11 @@ def grid(rows: list[dict]) -> tuple[np.ndarray, np.ndarray]:
 
 
 def day_samples(price: np.ndarray, volume: np.ndarray, market: np.ndarray | None) -> dict[str, np.ndarray]:
-    """Feature rows and targets (+1/0/-1 per horizon) for one symbol-day."""
+    """Feature rows, targets (+1/0/-1 per horizon) and the realised returns for one symbol-day."""
     with np.errstate(invalid="ignore", divide="ignore"):
         r1 = np.r_[np.nan, price[1:] / price[:-1] - 1]
         mr1 = np.r_[np.nan, market[1:] / market[:-1] - 1] if market is not None else np.full(GRID, np.nan)
-    rows, targets = [], {h: [] for h in HORIZONS}
+    rows, vols, targets, moves = [], [], {h: [] for h in HORIZONS}, {h: [] for h in HORIZONS}
     cum_pv, cum_v = np.nancumsum(np.nan_to_num(price) * volume), np.cumsum(volume)
     for i in range(WARM, GRID - 1):
         window = r1[i - 59:i + 1]
@@ -89,11 +90,15 @@ def day_samples(price: np.ndarray, volume: np.ndarray, market: np.ndarray | None
                0.0 if np.isnan(mr1[i]) else np.sign(mr1[i]),
                i / GRID]
         rows.append(row)
+        vols.append(sd * 1e4)
         for h in HORIZONS:
-            targets[h].append(np.sign(price[i + h] / price[i] - 1) if i + h < GRID else np.nan)
-    out = {"X": np.array(rows, dtype=float).reshape(-1, len(FEATURES))}
+            move = price[i + h] / price[i] - 1 if i + h < GRID else np.nan
+            targets[h].append(np.sign(move))
+            moves[h].append(move)
+    out = {"X": np.array(rows, dtype=float).reshape(-1, len(FEATURES)), "v": np.array(vols, dtype=float)}
     for h in HORIZONS:
         out[f"y{h}"] = np.array(targets[h], dtype=float)
+        out[f"r{h}"] = np.array(moves[h], dtype=float)
     return out
 
 
@@ -121,6 +126,12 @@ def stack(data: dict, days: list[str], h: int) -> tuple[np.ndarray, np.ndarray, 
     if not xs:
         return np.empty((0, len(FEATURES))), np.empty(0), np.empty(0)
     return np.vstack(xs), np.concatenate(ys), np.concatenate(ds)
+
+
+def returns(data: dict, days: list[str], h: int) -> np.ndarray:
+    """Realised h-minute returns in the same order as ``stack``."""
+    out = [s[f"r{h}"][~np.isnan(s[f"y{h}"])] for day in days for s in data[day].values()]
+    return np.concatenate(out) if out else np.empty(0)
 
 
 def fit(model: str, X: np.ndarray, y: np.ndarray) -> Any:
@@ -169,8 +180,28 @@ def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
     return (centre - half, centre + half)
 
 
-def score(p: np.ndarray, y: np.ndarray, day: np.ndarray) -> dict[str, Any]:
-    """Direction calls on up/down outcomes; abstain when p == 0.5."""
+CONFIDENCE_BANDS = (0.0, 0.02, 0.05, 0.10, 0.50)  # |p - 0.5|, fixed before any forward day (v12 §9)
+
+
+def _day_t(per_day: list[float], centre: float) -> float:
+    sd = np.std(per_day, ddof=1) if len(per_day) > 1 else 0.0
+    return float((np.mean(per_day) - centre) / (sd / math.sqrt(len(per_day)))) if sd > 0 else math.nan
+
+
+def strength(p: np.ndarray, r: np.ndarray, day: np.ndarray) -> dict[str, Any]:
+    """Calls (p != 0.5) on moves weighed by the size of the move (v12 §9)."""
+    gain = np.sign(p - 0.5) * r
+    size = np.abs(r)
+    large = size >= np.quantile(size, 0.75) if len(size) else size.astype(bool)
+    per_day = [float(gain[day == d].mean()) * 1e4 for d in np.unique(day)]
+    return {"magnitude_weighted": float(gain.sum() / size.sum()) if size.sum() > 0 else math.nan,
+            "signed_return_bp": float(gain.mean()) * 1e4 if len(gain) else math.nan,
+            "signed_return_day_t": _day_t(per_day, 0.0),
+            "large_move_accuracy": float((gain[large] > 0).mean()) if large.any() else math.nan}
+
+
+def score(p: np.ndarray, y: np.ndarray, day: np.ndarray, r: np.ndarray | None = None) -> dict[str, Any]:
+    """Direction calls on up/down outcomes; abstain when p == 0.5. With ``r``, also the strength metrics."""
     flat_share = float(np.mean(y == 0)) if len(y) else math.nan
     moving = y != 0
     p, up, day = p[moving], (y[moving] > 0), day[moving]
@@ -178,8 +209,14 @@ def score(p: np.ndarray, y: np.ndarray, day: np.ndarray) -> dict[str, Any]:
     hit = (p[called] > 0.5) == up[called]
     k, n = int(hit.sum()), int(called.sum())
     per_day = [float(hit[day[called] == d].mean()) for d in np.unique(day[called])]
-    day_t = (float((np.mean(per_day) - 0.5) / (np.std(per_day, ddof=1) / math.sqrt(len(per_day))))
-             if len(per_day) > 1 and np.std(per_day, ddof=1) > 0 else math.nan)
+    day_t = _day_t(per_day, 0.5)
+    distance = np.abs(p[called] - 0.5)
+    confidence = []
+    for lo, hi in pairwise(CONFIDENCE_BANDS):
+        sel = (distance >= lo) & ((distance < hi) | (hi == CONFIDENCE_BANDS[-1]))
+        confidence.append({"band": f"{lo:.2f}-{hi:.2f}", "n": int(sel.sum()),
+                           "accuracy": float(hit[sel].mean()) if sel.any() else math.nan})
+    extra = strength(p[called], r[moving][called], day[called]) if r is not None else {}
     eps = 1e-12
     deciles = []
     for lo in np.arange(0, 1, 0.1):
@@ -194,7 +231,7 @@ def score(p: np.ndarray, y: np.ndarray, day: np.ndarray) -> dict[str, Any]:
         "days": len(per_day), "day_t": day_t,
         "brier": float(np.mean((p - up) ** 2)) if len(up) else math.nan,
         "log_loss": float(-np.mean(up * np.log(p + eps) + (~up) * np.log(1 - p + eps))) if len(up) else math.nan,
-        "calibration": deciles,
+        "calibration": deciles, "confidence": confidence, **extra,
     }
 
 
@@ -214,8 +251,10 @@ def walk_forward(data: dict, initial: int = INITIAL, refit: int = REFIT) -> dict
             for m in MODELS:
                 preds[m].append(predict(m, fit(m, X, y), Xt))
         y_all, d_all = np.concatenate(ys), np.concatenate(ds)
+        r_all = np.concatenate([returns(data, days[start:start + refit], h)
+                                for start in range(initial, len(days), refit)])
         for m in MODELS:
-            cells[f"{m} h{h}"] = score(np.concatenate(preds[m]), y_all, d_all)
+            cells[f"{m} h{h}"] = score(np.concatenate(preds[m]), y_all, d_all, r_all)
     bound = 0.05 / len(cells)
     for cell in cells.values():
         cell["bonferroni_significant"] = bool(cell["p_binomial"] < bound)
@@ -257,8 +296,9 @@ def score_frozen(frozen: dict, data: dict) -> dict:
     cells = {}
     for h in HORIZONS:
         X, y, d = stack(data, days, h)
+        r = returns(data, days, h)
         for m in MODELS:
-            cells[f"{m} h{h}"] = score(predict(m, from_json(m, frozen["models"][f"{m} h{h}"]), X), y, d)
+            cells[f"{m} h{h}"] = score(predict(m, from_json(m, frozen["models"][f"{m} h{h}"]), X), y, d, r)
     bound = 0.05 / len(cells)
     for cell in cells.values():
         cell["bonferroni_significant"] = bool(cell["p_binomial"] < bound)
@@ -287,13 +327,18 @@ def _history() -> Any:
 
 
 def _table(cells: dict, alpha: float) -> None:
-    print(f"{'cell':<12} {'flat':>5} {'n':>9} {'acc':>7} {'95% CI':>17} {'p':>8} {'day_t':>6} {'brier':>6}")
+    print(f"{'cell':<12} {'flat':>5} {'n':>9} {'acc':>7} {'95% CI':>17} {'p':>8} {'day_t':>6} {'brier':>6} "
+          f"{'wtd':>6} {'bp':>6} {'bp_t':>6} {'big':>6}")
     for name, c in cells.items():
         lo, hi = c["ci95"]
         print(f"{name:<12} {c['flat_share']:>5.0%} {c['called']:>9} {c['accuracy']:>7.2%} "
-              f"[{lo:.2%},{hi:.2%}] {c['p_binomial']:>8.1e} {c['day_t']:>6.2f} {c['brier']:>6.4f}"
+              f"[{lo:.2%},{hi:.2%}] {c['p_binomial']:>8.1e} {c['day_t']:>6.2f} {c['brier']:>6.4f} "
+              f"{c.get('magnitude_weighted', math.nan):>6.3f} {c.get('signed_return_bp', math.nan):>6.2f} "
+              f"{c.get('signed_return_day_t', math.nan):>6.2f} {c.get('large_move_accuracy', math.nan):>6.1%}"
               + (" *" if c["bonferroni_significant"] else ""))
     print(f"* p < {alpha:.4f} (Bonferroni over {len(cells)} cells); day_t treats each test day as one observation")
+    print("wtd: hits minus misses weighed by move size; bp: mean signed return per call before costs (bp_t by day); "
+          "big: accuracy on the largest quarter of moves")
 
 
 def main(argv: list[str] | None = None) -> int:
