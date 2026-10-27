@@ -107,3 +107,28 @@ def test_judgement_thresholds():
     assert not holdout.judge({**ok, "net_return": 0.0}, etf_mdd=0.10)["passed"]
     assert not holdout.judge({**ok, "t": 1.49}, etf_mdd=0.10)["passed"]
     assert not holdout.judge({**ok, "max_drawdown": 0.11}, etf_mdd=0.10)["passed"]
+
+
+def test_overnight_gets_report_only_comparisons_that_are_not_judged(tmp_path):
+    dev_days = weekdays(date(2026, 5, 25), 26)
+    hold_days = weekdays(date(2026, 7, 1), 10)
+    bars = tmp_path / "bars"
+    write_bars(bars, UNIVERSE, [d for d in dev_days if d <= "2026-06-30"] + hold_days)
+    path = tmp_path / "manifest.json"
+    holdout.freeze(["C5-A 069500"], UNIVERSE, path)
+    row = holdout.run(path, bars, tmp_path / "r.json")["rows"][0]
+    compare = row["report_only"]
+    assert set(compare) == {"intraday_only", "full_day"}
+    assert all("passed" not in c and "checks" not in c for c in compare.values())
+    # Prices only move overnight (+10 a day): holding through the day keeps the gaps, intraday-only pays costs.
+    assert compare["intraday_only"]["net_return"] < 0 < compare["full_day"]["net_return"]
+    assert compare["full_day"]["net_return"] > row["net_return"]
+
+
+def test_comparisons_hold_the_candidate_weights():
+    overnight = cand.Overnight(("069500", "229200"))
+    compare = holdout.comparisons(overnight)
+    intraday, full = compare["intraday_only"], compare["full_day"]
+    assert intraday.open_auction(None) == full.open_auction(None) == {"069500": 0.25, "229200": 0.25}
+    assert intraday.close_auction(None) is None and full.close_auction(None) == {"069500": 0.25, "229200": 0.25}
+    assert holdout.comparisons(cand.GapReversal("069500", 0.01)) == {}
