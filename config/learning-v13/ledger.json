@@ -1,0 +1,1670 @@
+{
+ "version": 1,
+ "trials": [
+  {
+   "id": "v11/C1 kospi 1450 all",
+   "study": "v11",
+   "family": "v11 C1",
+   "name": "C1 kospi 1450 all",
+   "kind": "strategy",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": -1.43,
+    "net_return": -0.0507,
+    "net_return_cost2x": -0.0984,
+    "max_drawdown": 0.0599,
+    "trade_days": 163,
+    "trades": 326,
+    "mean_daily": null
+   },
+   "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 §4 개발 구간 선정 탈락"
+    }
+   ]
+  },
+  {
+   "id": "v11/C1 kospi 1450 vol",
+   "study": "v11",
+   "family": "v11 C1",
+   "name": "C1 kospi 1450 vol",
+   "kind": "strategy",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": -0.06,
+    "net_return": -0.0016,
+    "net_return_cost2x": -0.0201,
+    "max_drawdown": 0.0252,
+    "trade_days": 51,
+    "trades": 102,
+    "mean_daily": null
+   },
+   "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 §4 개발 구간 선정 탈락"
+    }
+   ]
+  },
+  {
+   "id": "v11/C1 kospi 1500 all",
+   "study": "v11",
+   "family": "v11 C1",
+   "name": "C1 kospi 1500 all",
+   "kind": "strategy",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": -1.48,
+    "net_return": -0.0453,
+    "net_return_cost2x": -0.0948,
+    "max_drawdown": 0.0559,
+    "trade_days": 163,
+    "trades": 326,
+    "mean_daily": null
+   },
+   "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 §4 개발 구간 선정 탈락"
+    }
+   ]
+  },
+  {
+   "id": "v11/C1 kospi 1500 vol",
+   "study": "v11",
+   "family": "v11 C1",
+   "name": "C1 kospi 1500 vol",
+   "kind": "strategy",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": 0.06,
+    "net_return": 0.0009,
+    "net_return_cost2x": -0.0175,
+    "max_drawdown": 0.0144,
+    "trade_days": 51,
+    "trades": 102,
+    "mean_daily": null
+   },
+   "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 §4 개발 구간 선정 탈락"
+    }
+   ]
+  },
+  {
+   "id": "v11/C1 kosdaq 1450 all",
+   "study": "v11",
+   "family": "v11 C1",
+   "name": "C1 kosdaq 1450 all",
+   "kind": "strategy",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": -0.15,
+    "net_return": -0.007,
+    "net_return_cost2x": -0.0555,
+    "max_drawdown": 0.0439,
+    "trade_days": 161,
+    "trades": 325,
+    "mean_daily": null
+   },
+   "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 §4 개발 구간 선정 탈락"
+    }
+   ]
+  },
+  {
+   "id": "v11/C1 kosdaq 1450 vol",
+   "study": "v11",
+   "family": "v11 C1",
+   "name": "C1 kosdaq 1450 vol",
+   "kind": "strategy",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": -0.33,
+    "net_return": -0.012,
+    "net_return_cost2x": -0.0282,
+    "max_drawdown": 0.0343,
+    "trade_days": 45,
+    "trades": 90,
+    "mean_daily": null
+   },
+   "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 §4 개발 구간 선정 탈락"
+    }
+   ]
+  },
+  {
+   "id": "v11/C1 kosdaq 1500 all",
+   "study": "v11",
+   "family": "v11 C1",
+   "name": "C1 kosdaq 1500 all",
+   "kind": "strategy",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": -0.2,
+    "net_return": -0.0089,
+    "net_return_cost2x": -0.0624,
+    "max_drawdown": 0.0438,
+    "trade_days": 161,
+    "trades": 322,
+    "mean_daily": null
+   },
+   "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 §4 개발 구간 선정 탈락"
+    }
+   ]
+  },
+  {
+   "id": "v11/C1 kosdaq 1500 vol",
+   "study": "v11",
+   "family": "v11 C1",
+   "name": "C1 kosdaq 1500 vol",
+   "kind": "strategy",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": -0.36,
+    "net_return": -0.0129,
+    "net_return_cost2x": -0.0303,
+    "max_drawdown": 0.0328,
+    "trade_days": 45,
+    "trades": 90,
+    "mean_daily": null
+   },
+   "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 §4 개발 구간 선정 탈락"
+    }
+   ]
+  },
+  {
+   "id": "v11/C2 n5 k3",
+   "study": "v11",
+   "family": "v11 C2",
+   "name": "C2 n5 k3",
+   "kind": "strategy",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": -4.77,
+    "net_return": -0.6743,
+    "net_return_cost2x": -0.8864,
+    "max_drawdown": 0.6743,
+    "trade_days": 161,
+    "trades": 13349,
+    "mean_daily": null
+   },
+   "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 §4 개발 구간 선정 탈락"
+    }
+   ]
+  },
+  {
+   "id": "v11/C2 n5 k5",
+   "study": "v11",
+   "family": "v11 C2",
+   "name": "C2 n5 k5",
+   "kind": "strategy",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": -4.5,
+    "net_return": -0.6172,
+    "net_return_cost2x": -0.8574,
+    "max_drawdown": 0.6177,
+    "trade_days": 161,
+    "trades": 20608,
+    "mean_daily": null
+   },
+   "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 §4 개발 구간 선정 탈락"
+    }
+   ]
+  },
+  {
+   "id": "v11/C2 n20 k3",
+   "study": "v11",
+   "family": "v11 C2",
+   "name": "C2 n20 k3",
+   "kind": "strategy",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": -3.66,
+    "net_return": -0.6126,
+    "net_return_cost2x": -0.8296,
+    "max_drawdown": 0.6181,
+    "trade_days": 146,
+    "trades": 11523,
+    "mean_daily": null
+   },
+   "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 §4 개발 구간 선정 탈락"
+    }
+   ]
+  },
+  {
+   "id": "v11/C2 n20 k5",
+   "study": "v11",
+   "family": "v11 C2",
+   "name": "C2 n20 k5",
+   "kind": "strategy",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": -3.43,
+    "net_return": -0.5402,
+    "net_return_cost2x": -0.7962,
+    "max_drawdown": 0.5463,
+    "trade_days": 146,
+    "trades": 17930,
+    "mean_daily": null
+   },
+   "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 §4 개발 구간 선정 탈락"
+    }
+   ]
+  },
+  {
+   "id": "v11/C3 k3 hold30",
+   "study": "v11",
+   "family": "v11 C3",
+   "name": "C3 k3 hold30",
+   "kind": "strategy",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": -5.72,
+    "net_return": -0.6405,
+    "net_return_cost2x": -0.8785,
+    "max_drawdown": 0.6511,
+    "trade_days": 166,
+    "trades": 13419,
+    "mean_daily": null
+   },
+   "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 §4 개발 구간 선정 탈락"
+    }
+   ]
+  },
+  {
+   "id": "v11/C3 k3 hold60",
+   "study": "v11",
+   "family": "v11 C3",
+   "name": "C3 k3 hold60",
+   "kind": "strategy",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": -1.4,
+    "net_return": -0.251,
+    "net_return_cost2x": -0.5227,
+    "max_drawdown": 0.2957,
+    "trade_days": 166,
+    "trades": 6999,
+    "mean_daily": null
+   },
+   "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 §4 개발 구간 선정 탈락"
+    }
+   ]
+  },
+  {
+   "id": "v11/C3 k5 hold30",
+   "study": "v11",
+   "family": "v11 C3",
+   "name": "C3 k5 hold30",
+   "kind": "strategy",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": -5.68,
+    "net_return": -0.6373,
+    "net_return_cost2x": -0.8778,
+    "max_drawdown": 0.6523,
+    "trade_days": 166,
+    "trades": 20444,
+    "mean_daily": null
+   },
+   "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 §4 개발 구간 선정 탈락"
+    }
+   ]
+  },
+  {
+   "id": "v11/C3 k5 hold60",
+   "study": "v11",
+   "family": "v11 C3",
+   "name": "C3 k5 hold60",
+   "kind": "strategy",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": -1.81,
+    "net_return": -0.3105,
+    "net_return_cost2x": -0.5745,
+    "max_drawdown": 0.3635,
+    "trade_days": 166,
+    "trades": 10511,
+    "mean_daily": null
+   },
+   "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 §4 개발 구간 선정 탈락"
+    }
+   ]
+  },
+  {
+   "id": "v11/C4 z2 large8",
+   "study": "v11",
+   "family": "v11 C4",
+   "name": "C4 z2 large8",
+   "kind": "strategy",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": -2.81,
+    "net_return": -0.339,
+    "net_return_cost2x": -0.5296,
+    "max_drawdown": 0.3664,
+    "trade_days": 161,
+    "trades": 16442,
+    "mean_daily": null
+   },
+   "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 §4 개발 구간 선정 탈락"
+    }
+   ]
+  },
+  {
+   "id": "v11/C4 z2 all30",
+   "study": "v11",
+   "family": "v11 C4",
+   "name": "C4 z2 all30",
+   "kind": "strategy",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": -10.24,
+    "net_return": -0.8056,
+    "net_return_cost2x": -0.9622,
+    "max_drawdown": 0.8069,
+    "trade_days": 166,
+    "trades": 42541,
+    "mean_daily": null
+   },
+   "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 §4 개발 구간 선정 탈락"
+    }
+   ]
+  },
+  {
+   "id": "v11/C4 z3 large8",
+   "study": "v11",
+   "family": "v11 C4",
+   "name": "C4 z3 large8",
+   "kind": "strategy",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": -2.62,
+    "net_return": -0.3146,
+    "net_return_cost2x": -0.4958,
+    "max_drawdown": 0.3413,
+    "trade_days": 158,
+    "trades": 14677,
+    "mean_daily": null
+   },
+   "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 §4 개발 구간 선정 탈락"
+    }
+   ]
+  },
+  {
+   "id": "v11/C4 z3 all30",
+   "study": "v11",
+   "family": "v11 C4",
+   "name": "C4 z3 all30",
+   "kind": "strategy",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": -9.41,
+    "net_return": -0.774,
+    "net_return_cost2x": -0.9499,
+    "max_drawdown": 0.7762,
+    "trade_days": 166,
+    "trades": 40325,
+    "mean_daily": null
+   },
+   "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 §4 개발 구간 선정 탈락"
+    }
+   ]
+  },
+  {
+   "id": "v11/C5-A 069500",
+   "study": "v11",
+   "family": "v11 C5-A",
+   "name": "C5-A 069500",
+   "kind": "strategy",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": 1.88,
+    "net_return": 0.3312,
+    "net_return_cost2x": 0.2992,
+    "max_drawdown": 0.086,
+    "trade_days": 166,
+    "trades": 329,
+    "mean_daily": null
+   },
+   "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 §4 개발 구간 선정 탈락"
+    }
+   ]
+  },
+  {
+   "id": "v11/C5-A 229200",
+   "study": "v11",
+   "family": "v11 C5-A",
+   "name": "C5-A 229200",
+   "kind": "strategy",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": 2.18,
+    "net_return": 0.2797,
+    "net_return_cost2x": 0.2482,
+    "max_drawdown": 0.0546,
+    "trade_days": 166,
+    "trades": 331,
+    "mean_daily": null
+   },
+   "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-27",
+     "reason": "v11 §4 선정, v11 검증 구간 1회 실행 중 (v13 이전 규칙, v13 §10)"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 검증 구간 불통과: 순수익 -9.95%, t -1.17 (v11 §11)"
+    }
+   ]
+  },
+  {
+   "id": "v11/C5-A index4",
+   "study": "v11",
+   "family": "v11 C5-A",
+   "name": "C5-A index4",
+   "kind": "strategy",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": 2.1,
+    "net_return": 0.3358,
+    "net_return_cost2x": 0.3056,
+    "max_drawdown": 0.0762,
+    "trade_days": 166,
+    "trades": 1320,
+    "mean_daily": null
+   },
+   "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 §4 조건 통과했으나 같은 후보(C5) 중 t 최고 조합만 선정"
+    }
+   ]
+  },
+  {
+   "id": "v11/C5-B 069500 gap0.5%",
+   "study": "v11",
+   "family": "v11 C5-B",
+   "name": "C5-B 069500 gap0.5%",
+   "kind": "strategy",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": 0.32,
+    "net_return": 0.0237,
+    "net_return_cost2x": 0.015,
+    "max_drawdown": 0.0667,
+    "trade_days": 47,
+    "trades": 94,
+    "mean_daily": null
+   },
+   "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 §4 개발 구간 선정 탈락"
+    }
+   ]
+  },
+  {
+   "id": "v11/C5-B 229200 gap0.5%",
+   "study": "v11",
+   "family": "v11 C5-B",
+   "name": "C5-B 229200 gap0.5%",
+   "kind": "strategy",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": -0.91,
+    "net_return": -0.0928,
+    "net_return_cost2x": -0.102,
+    "max_drawdown": 0.1157,
+    "trade_days": 35,
+    "trades": 70,
+    "mean_daily": null
+   },
+   "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 §4 개발 구간 선정 탈락"
+    }
+   ]
+  },
+  {
+   "id": "v11/C5-B 069500 gap1.0%",
+   "study": "v11",
+   "family": "v11 C5-B",
+   "name": "C5-B 069500 gap1.0%",
+   "kind": "strategy",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": -0.2,
+    "net_return": -0.0193,
+    "net_return_cost2x": -0.0255,
+    "max_drawdown": 0.0817,
+    "trade_days": 35,
+    "trades": 70,
+    "mean_daily": null
+   },
+   "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 §4 개발 구간 선정 탈락"
+    }
+   ]
+  },
+  {
+   "id": "v11/C5-B 229200 gap1.0%",
+   "study": "v11",
+   "family": "v11 C5-B",
+   "name": "C5-B 229200 gap1.0%",
+   "kind": "strategy",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": -0.8,
+    "net_return": -0.0758,
+    "net_return_cost2x": -0.083,
+    "max_drawdown": 0.1126,
+    "trade_days": 27,
+    "trades": 54,
+    "mean_daily": null
+   },
+   "cost_version": "v11 (1 tick + 1.5bp, auctions 0 tick)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-27",
+     "reason": "v11 §4 개발 구간 선정 탈락"
+    }
+   ]
+  },
+  {
+   "id": "v12/BASE h1",
+   "study": "v12",
+   "family": "v12 direction",
+   "name": "BASE h1",
+   "kind": "forecast",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": 1.5,
+    "accuracy": 0.5044,
+    "mean_daily": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered; freeze pending (PR #138)"
+    }
+   ]
+  },
+  {
+   "id": "v12/MARKOV1 h1",
+   "study": "v12",
+   "family": "v12 direction",
+   "name": "MARKOV1 h1",
+   "kind": "forecast",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": 7.63,
+    "accuracy": 0.5159,
+    "mean_daily": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered; freeze pending (PR #138)"
+    }
+   ]
+  },
+  {
+   "id": "v12/MARKOV2 h1",
+   "study": "v12",
+   "family": "v12 direction",
+   "name": "MARKOV2 h1",
+   "kind": "forecast",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": 8.22,
+    "accuracy": 0.5182,
+    "mean_daily": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered; freeze pending (PR #138)"
+    }
+   ]
+  },
+  {
+   "id": "v12/MARKOV3 h1",
+   "study": "v12",
+   "family": "v12 direction",
+   "name": "MARKOV3 h1",
+   "kind": "forecast",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": 13.05,
+    "accuracy": 0.5238,
+    "mean_daily": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered; freeze pending (PR #138)"
+    }
+   ]
+  },
+  {
+   "id": "v12/LOGIT h1",
+   "study": "v12",
+   "family": "v12 direction",
+   "name": "LOGIT h1",
+   "kind": "forecast",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": 25.46,
+    "accuracy": 0.5394,
+    "mean_daily": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered; freeze pending (PR #138)"
+    }
+   ]
+  },
+  {
+   "id": "v12/BASE h5",
+   "study": "v12",
+   "family": "v12 direction",
+   "name": "BASE h5",
+   "kind": "forecast",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": -1.06,
+    "accuracy": 0.495,
+    "mean_daily": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered; freeze pending (PR #138)"
+    }
+   ]
+  },
+  {
+   "id": "v12/MARKOV1 h5",
+   "study": "v12",
+   "family": "v12 direction",
+   "name": "MARKOV1 h5",
+   "kind": "forecast",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": 2.78,
+    "accuracy": 0.5052,
+    "mean_daily": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered; freeze pending (PR #138)"
+    }
+   ]
+  },
+  {
+   "id": "v12/MARKOV2 h5",
+   "study": "v12",
+   "family": "v12 direction",
+   "name": "MARKOV2 h5",
+   "kind": "forecast",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": 6.58,
+    "accuracy": 0.5125,
+    "mean_daily": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered; freeze pending (PR #138)"
+    }
+   ]
+  },
+  {
+   "id": "v12/MARKOV3 h5",
+   "study": "v12",
+   "family": "v12 direction",
+   "name": "MARKOV3 h5",
+   "kind": "forecast",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": 9.21,
+    "accuracy": 0.5128,
+    "mean_daily": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered; freeze pending (PR #138)"
+    }
+   ]
+  },
+  {
+   "id": "v12/LOGIT h5",
+   "study": "v12",
+   "family": "v12 direction",
+   "name": "LOGIT h5",
+   "kind": "forecast",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": 11.43,
+    "accuracy": 0.5268,
+    "mean_daily": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered; freeze pending (PR #138)"
+    }
+   ]
+  },
+  {
+   "id": "v12/BASE h30",
+   "study": "v12",
+   "family": "v12 direction",
+   "name": "BASE h30",
+   "kind": "forecast",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": 0.32,
+    "accuracy": 0.5031,
+    "mean_daily": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered; freeze pending (PR #138)"
+    }
+   ]
+  },
+  {
+   "id": "v12/MARKOV1 h30",
+   "study": "v12",
+   "family": "v12 direction",
+   "name": "MARKOV1 h30",
+   "kind": "forecast",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": 1.31,
+    "accuracy": 0.5094,
+    "mean_daily": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered; freeze pending (PR #138)"
+    }
+   ]
+  },
+  {
+   "id": "v12/MARKOV2 h30",
+   "study": "v12",
+   "family": "v12 direction",
+   "name": "MARKOV2 h30",
+   "kind": "forecast",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": 1.04,
+    "accuracy": 0.5063,
+    "mean_daily": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered; freeze pending (PR #138)"
+    }
+   ]
+  },
+  {
+   "id": "v12/MARKOV3 h30",
+   "study": "v12",
+   "family": "v12 direction",
+   "name": "MARKOV3 h30",
+   "kind": "forecast",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": 1.58,
+    "accuracy": 0.5115,
+    "mean_daily": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered; freeze pending (PR #138)"
+    }
+   ]
+  },
+  {
+   "id": "v12/LOGIT h30",
+   "study": "v12",
+   "family": "v12 direction",
+   "name": "LOGIT h30",
+   "kind": "forecast",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": 3.22,
+    "accuracy": 0.5179,
+    "mean_daily": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered; freeze pending (PR #138)"
+    }
+   ]
+  },
+  {
+   "id": "v12b/ZERO h1",
+   "study": "v12b",
+   "family": "v12b return",
+   "name": "ZERO h1",
+   "kind": "forecast",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "ic": null,
+    "r2": 0.0,
+    "mean_daily": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered; dev eval pending (PR #140)"
+    }
+   ]
+  },
+  {
+   "id": "v12b/MEAN h1",
+   "study": "v12b",
+   "family": "v12b return",
+   "name": "MEAN h1",
+   "kind": "forecast",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "ic": null,
+    "r2": -1e-05,
+    "mean_daily": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered; dev eval pending (PR #140)"
+    }
+   ]
+  },
+  {
+   "id": "v12b/RIDGE h1",
+   "study": "v12b",
+   "family": "v12b return",
+   "name": "RIDGE h1",
+   "kind": "forecast",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": 26.6,
+    "ic": 0.0904,
+    "r2": 0.00621,
+    "mean_daily": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered; dev eval pending (PR #140)"
+    }
+   ]
+  },
+  {
+   "id": "v12b/SIZE h1",
+   "study": "v12b",
+   "family": "v12b return",
+   "name": "SIZE h1",
+   "kind": "forecast",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": 41.41,
+    "ic": 0.2177,
+    "r2": 0.23794,
+    "mean_daily": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered; dev eval pending (PR #140)"
+    }
+   ]
+  },
+  {
+   "id": "v12b/ZERO h5",
+   "study": "v12b",
+   "family": "v12b return",
+   "name": "ZERO h5",
+   "kind": "forecast",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "ic": null,
+    "r2": 0.0,
+    "mean_daily": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered; dev eval pending (PR #140)"
+    }
+   ]
+  },
+  {
+   "id": "v12b/MEAN h5",
+   "study": "v12b",
+   "family": "v12b return",
+   "name": "MEAN h5",
+   "kind": "forecast",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "ic": null,
+    "r2": -6e-05,
+    "mean_daily": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered; dev eval pending (PR #140)"
+    }
+   ]
+  },
+  {
+   "id": "v12b/RIDGE h5",
+   "study": "v12b",
+   "family": "v12b return",
+   "name": "RIDGE h5",
+   "kind": "forecast",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": 11.25,
+    "ic": 0.0427,
+    "r2": 0.00174,
+    "mean_daily": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered; dev eval pending (PR #140)"
+    }
+   ]
+  },
+  {
+   "id": "v12b/SIZE h5",
+   "study": "v12b",
+   "family": "v12b return",
+   "name": "SIZE h5",
+   "kind": "forecast",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": 36.56,
+    "ic": 0.226,
+    "r2": 0.25904,
+    "mean_daily": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered; dev eval pending (PR #140)"
+    }
+   ]
+  },
+  {
+   "id": "v12b/ZERO h30",
+   "study": "v12b",
+   "family": "v12b return",
+   "name": "ZERO h30",
+   "kind": "forecast",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "ic": null,
+    "r2": 0.0,
+    "mean_daily": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered; dev eval pending (PR #140)"
+    }
+   ]
+  },
+  {
+   "id": "v12b/MEAN h30",
+   "study": "v12b",
+   "family": "v12b return",
+   "name": "MEAN h30",
+   "kind": "forecast",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "ic": null,
+    "r2": -0.00024,
+    "mean_daily": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered; dev eval pending (PR #140)"
+    }
+   ]
+  },
+  {
+   "id": "v12b/RIDGE h30",
+   "study": "v12b",
+   "family": "v12b return",
+   "name": "RIDGE h30",
+   "kind": "forecast",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": -1.93,
+    "ic": -0.0159,
+    "r2": 0.00141,
+    "mean_daily": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered; dev eval pending (PR #140)"
+    }
+   ]
+  },
+  {
+   "id": "v12b/SIZE h30",
+   "study": "v12b",
+   "family": "v12b return",
+   "name": "SIZE h30",
+   "kind": "forecast",
+   "registered": "2026-10-27",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": 17.04,
+    "ic": 0.1613,
+    "r2": 0.23371,
+    "mean_daily": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-27",
+     "reason": "registered; dev eval pending (PR #140)"
+    }
+   ]
+  }
+ ],
+ "curve": []
+}

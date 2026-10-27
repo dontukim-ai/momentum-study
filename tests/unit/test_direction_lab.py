@@ -109,3 +109,31 @@ def test_forward_scoring_keeps_the_holdout_sealed(tmp_path):
     import pytest
     with pytest.raises(SystemExit, match="sealed"):
         lab.forward_bars(tmp_path, "069500", "2026-10-23")
+
+
+def test_targets_carry_the_realised_return():
+    prices = [100] * 100 + [101] * (lab.GRID - 100)
+    s = lab.day_samples(*lab.grid(rows_from(prices)), None)
+    k = 99 - lab.WARM
+    assert math.isclose(s["r1"][k], 0.01) and s["r1"][k + 1] == 0
+    assert np.array_equal(np.sign(s["r5"][~np.isnan(s["r5"])]), s["y5"][~np.isnan(s["y5"])])
+
+
+def test_strength_metrics_weigh_hits_by_move_size_and_by_confidence():
+    p = np.array([0.7, 0.7, 0.52, 0.48, 0.6, 0.5])
+    r = np.array([0.004, -0.001, 0.001, 0.001, 0.0, 0.002])
+    y, day = np.sign(r), np.array([0, 0, 0, 1, 1, 1])
+    s = lab.score(p, y, day, r)
+    # Called on moves: +4 hit, -1 miss, +1 hit, +1 miss (0.48 says down) -> (4 - 1 + 1 - 1) / 7
+    assert math.isclose(s["magnitude_weighted"], 3 / 7)
+    assert math.isclose(s["signed_return_bp"], (40 - 10 + 10 - 10) / 4)
+    buckets = {b["band"]: b for b in s["confidence"]}
+    assert buckets["0.00-0.02"]["n"] == 0
+    assert (buckets["0.02-0.05"]["n"], buckets["0.02-0.05"]["accuracy"]) == (2, 0.5)
+    assert (buckets["0.10-0.50"]["n"], buckets["0.10-0.50"]["accuracy"]) == (2, 0.5)
+    assert s["large_move_accuracy"] == 1.0          # the largest quarter of moves: the +4 call
+
+
+def test_score_without_returns_leaves_strength_out():
+    s = lab.score(np.array([0.6, 0.4]), np.array([1, 1]), np.array([0, 0]))
+    assert "magnitude_weighted" not in s and "confidence" in s
