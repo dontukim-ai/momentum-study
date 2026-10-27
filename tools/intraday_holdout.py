@@ -16,6 +16,11 @@ WARMUP development days go in first so candidates have their history, but
 no candidate trades before HOLDOUT_START and only holdout days are scored.
 Verdict per candidate, fixed in §4: net > 0, t >= 1.5 and max drawdown no
 worse than holding 069500 at 95% over the same days.
+
+Report only (added before the freeze, after the development run, never
+judged): an overnight candidate (C5-A) also runs with the same weights held
+open-to-close only and held all day, so the overnight gain can be told apart
+from simply holding a rising market.
 """
 
 from __future__ import annotations
@@ -106,6 +111,35 @@ class Gated(candidates.Base):
         return self.inner.close_auction(view) if self._live(view) else {}
 
 
+class IntradayOnly(candidates.Base):
+    """Report only: the candidate's weights bought at the open auction and sold at the close auction."""
+
+    def __init__(self, weights: dict[str, float]):
+        self.weights = weights
+
+    def open_auction(self, view: Any) -> Any:
+        return self.weights
+
+
+class FullDay(IntradayOnly):
+    """Report only: the candidate's weights held through the day and the night."""
+
+    def close_auction(self, view: Any) -> Any:
+        return self.weights
+
+
+def comparisons(strategy: Any) -> dict[str, Any]:
+    if not isinstance(strategy, candidates.Overnight):
+        return {}
+    return {"intraday_only": IntradayOnly(strategy.weights), "full_day": FullDay(strategy.weights)}
+
+
+def _holdout_metrics(days: Any, strategy: Any) -> tuple[dict, list]:
+    result = engine.run(days, Gated(strategy))
+    result.daily = [d for d in result.daily if d["day"] >= HOLDOUT_START.isoformat()]
+    return dev.metrics(result), result.trades
+
+
 def judge(row: dict, etf_mdd: float) -> dict:
     checks = {"net_positive": row["net_return"] > 0, "t_at_least_1_5": row["t"] >= 1.5,
               "mdd_within_etf": row["max_drawdown"] <= etf_mdd}
@@ -129,12 +163,14 @@ def run(manifest_path: Path, bars_root: Path, record: Path) -> dict:
     configs = {c.name: c for c in candidates.configs(universe)}
     rows, trades = [], {}
     for name in manifest["selected"]:
-        result = engine.run(days, Gated(configs[name].make()))
-        result.daily = [d for d in result.daily if d["day"] >= HOLDOUT_START.isoformat()]
-        row = {"name": name, **dev.metrics(result)}
+        strategy = configs[name].make()
+        measured, trades[name] = _holdout_metrics(days, strategy)
+        row = {"name": name, **measured}
         row.update(judge(row, etf["max_drawdown"]))
+        compare = {label: _holdout_metrics(days, other)[0] for label, other in comparisons(strategy).items()}
+        if compare:
+            row["report_only"] = compare
         rows.append(row)
-        trades[name] = result.trades
     output = {"manifest_sha256": _sha(manifest_path), "days": [hold[0], hold[-1]], "rows": rows,
               "benchmark_069500_95": etf, "trades": trades}
     record.parent.mkdir(parents=True, exist_ok=True)
@@ -171,6 +207,8 @@ def main(argv: list[str] | None = None) -> int:
     for row in result["rows"]:
         print(f"{row['name']:<28} net {row['net_return']:+.2%} t {row['t']:.2f} MDD {row['max_drawdown']:.2%} "
               f"days {row['days']} -> {'PASS' if row['passed'] else 'FAIL'} {row['checks']}")
+        for label, c in row.get("report_only", {}).items():
+            print(f"  report only {label:<14} net {c['net_return']:+.2%} t {c['t']:.2f} MDD {c['max_drawdown']:.2%}")
     print(json.dumps({k: v for k, v in result.items() if k != "trades"}, default=str, sort_keys=True))
     return 0
 
