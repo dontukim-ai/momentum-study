@@ -1919,6 +1919,96 @@
      "reason": "보고 전용 측정 완료: 기울기 -0.80, t -39.1"
     }
    ]
+  },
+  {
+   "id": "v16/D1",
+   "study": "v16",
+   "family": "v16 D1",
+   "name": "한국 MAX 효과, 회전율 상위 3분위 안",
+   "kind": "strategy",
+   "registered": "2026-10-28",
+   "development": [
+    "2020-02",
+    "2023-12"
+   ],
+   "dev": {
+    "t": -1.766,
+    "mean_daily": null
+   },
+   "cost_version": "비용 전(가설 검정)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-28",
+     "reason": "registered; dev run pending (v16)"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-29",
+     "reason": "개발 탈락: 회전율 상위 -2.11%/월, t -1.77"
+    }
+   ]
+  },
+  {
+   "id": "v16/D2",
+   "study": "v16",
+   "family": "v16 D2",
+   "name": "축소 공분산 대 표본 공분산 최소분산 실현분산",
+   "kind": "strategy",
+   "registered": "2026-10-28",
+   "development": [
+    "2021-01",
+    "2023-12"
+   ],
+   "dev": {
+    "t": 0.641,
+    "mean_daily": null
+   },
+   "cost_version": "비용 전(가설 검정)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-28",
+     "reason": "registered; dev run pending (v16)"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-29",
+     "reason": "개발 탈락: 축소-표본 실현분산 차이 없음, t 0.64"
+    }
+   ]
+  },
+  {
+   "id": "v16/D3",
+   "study": "v16",
+   "family": "v16 D3",
+   "name": "코스피200 ETF 흐름 승수(보고 전용)",
+   "kind": "forecast",
+   "registered": "2026-10-28",
+   "development": [
+    "2020-01",
+    "2023-12"
+   ],
+   "dev": {
+    "t": -20.49,
+    "mean_daily": null
+   },
+   "cost_version": "비용 전(가설 검정)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-28",
+     "reason": "registered; dev run pending (v16)"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-29",
+     "reason": "보고 전용 측정 완료: 흐름 3세션 전 지수 하락(t -20.5), 동시 승수 -2.8(t -1.0)"
+    }
+   ]
   }
  ],
  "curve": []
