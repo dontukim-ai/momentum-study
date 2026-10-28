@@ -3,7 +3,6 @@
 import copy
 import importlib.util
 import json
-import math
 import sys
 from pathlib import Path
 
@@ -117,4 +116,4 @@ def test_the_committed_ledger_is_valid_and_counts_every_trial():
     studies = {t["study"] for t in book["trials"]}
     assert {"v11", "v12", "v12b"} <= studies
     assert sum(t["study"] == "v11" for t in book["trials"]) == 27
-    assert math.isclose(L.threshold(len(book["trials"])), L.threshold(54))
+    assert len(book["trials"]) >= 54                                  # the ledger only grows (v15 added 4 on 2026-10-28)
