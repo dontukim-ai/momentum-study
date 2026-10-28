@@ -1799,6 +1799,126 @@
      "reason": "동결 config/return-v12b/model.json sha256 f371eb82…, 2026-10-26부터 전진 채점"
     }
    ]
+  },
+  {
+   "id": "v15/H1a",
+   "study": "v15",
+   "family": "v15 H1a",
+   "name": "ETF 유입 상위 대 하위 이후 20세션 수익 차(역신호)",
+   "kind": "strategy",
+   "registered": "2026-10-28",
+   "development": [
+    "2020-02",
+    "2023-12"
+   ],
+   "dev": {
+    "t": 0.566,
+    "mean_daily": null
+   },
+   "cost_version": "H2: 수수료 왕복 3bp, 동시호가 체결; 그 외 비용 전",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-28",
+     "reason": "registered; dev run pending (v15)"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-29",
+     "reason": "개발 탈락: +0.18%/월, t 0.57"
+    }
+   ]
+  },
+  {
+   "id": "v15/H1b",
+   "study": "v15",
+   "family": "v15 H1b",
+   "name": "코스피200 인버스 ETF 유입 → 069500 이후 20세션",
+   "kind": "strategy",
+   "registered": "2026-10-28",
+   "development": [
+    "2020-02",
+    "2023-12"
+   ],
+   "dev": {
+    "t": 1.189,
+    "mean_daily": null
+   },
+   "cost_version": "H2: 수수료 왕복 3bp, 동시호가 체결; 그 외 비용 전",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-28",
+     "reason": "registered; dev run pending (v15)"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-29",
+     "reason": "개발 탈락: t 1.19"
+    }
+   ]
+  },
+  {
+   "id": "v15/H2",
+   "study": "v15",
+   "family": "v15 H2",
+   "name": "종가 동시호가 움직임 → 다음 날 시가 되돌림",
+   "kind": "strategy",
+   "registered": "2026-10-28",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": -1.289,
+    "mean_daily": null
+   },
+   "cost_version": "H2: 수수료 왕복 3bp, 동시호가 체결; 그 외 비용 전",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-28",
+     "reason": "registered; dev run pending (v15)"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-29",
+     "reason": "개발 탈락: 기울기 -0.61, t -1.29 (경제적 크기는 큼, v15 결과 절)"
+    }
+   ]
+  },
+  {
+   "id": "v15/H3",
+   "study": "v15",
+   "family": "v15 H3",
+   "name": "코스피200 형제 ETF 합의가 대비 어긋남 → 5분 상대 수익(보고 전용)",
+   "kind": "forecast",
+   "registered": "2026-10-28",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "t": -39.14,
+    "mean_daily": null
+   },
+   "cost_version": "H2: 수수료 왕복 3bp, 동시호가 체결; 그 외 비용 전",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-28",
+     "reason": "registered; dev run pending (v15)"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-29",
+     "reason": "보고 전용 측정 완료: 기울기 -0.80, t -39.1"
+    }
+   ]
   }
  ],
  "curve": []
