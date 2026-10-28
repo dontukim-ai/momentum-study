@@ -1899,6 +1899,81 @@
      "reason": "registered; dev run pending (v15)"
     }
    ]
+  },
+  {
+   "id": "v16/D1",
+   "study": "v16",
+   "family": "v16 D1",
+   "name": "한국 MAX 효과, 회전율 상위 3분위 안",
+   "kind": "strategy",
+   "registered": "2026-10-28",
+   "development": [
+    "2020-02",
+    "2023-12"
+   ],
+   "dev": {
+    "t": null,
+    "mean_daily": null
+   },
+   "cost_version": "비용 전(가설 검정)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-28",
+     "reason": "registered; dev run pending (v16)"
+    }
+   ]
+  },
+  {
+   "id": "v16/D2",
+   "study": "v16",
+   "family": "v16 D2",
+   "name": "축소 공분산 대 표본 공분산 최소분산 실현분산",
+   "kind": "strategy",
+   "registered": "2026-10-28",
+   "development": [
+    "2021-01",
+    "2023-12"
+   ],
+   "dev": {
+    "t": null,
+    "mean_daily": null
+   },
+   "cost_version": "비용 전(가설 검정)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-28",
+     "reason": "registered; dev run pending (v16)"
+    }
+   ]
+  },
+  {
+   "id": "v16/D3",
+   "study": "v16",
+   "family": "v16 D3",
+   "name": "코스피200 ETF 흐름 승수(보고 전용)",
+   "kind": "forecast",
+   "registered": "2026-10-28",
+   "development": [
+    "2020-01",
+    "2023-12"
+   ],
+   "dev": {
+    "t": null,
+    "mean_daily": null
+   },
+   "cost_version": "비용 전(가설 검정)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-28",
+     "reason": "registered; dev run pending (v16)"
+    }
+   ]
   }
  ],
  "curve": []
