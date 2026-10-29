@@ -180,8 +180,10 @@ v9 전진 기록 월간 갱신(`tools/forward_update.py`)과 같은 날, 맥에�
 2. **방향 예측 채점(v12 §8):** `uv run python tools/direction_lab.py score --universe data/kis/etf-universe-v2.json --model config/direction-v12/model.json`
 3. **수익률 예측 채점(v12b §4):** `uv run python tools/return_lab.py score --universe data/kis/etf-universe-v2.json --model config/return-v12b/model.json`
    - v12b 동결 모형이 저장소에 들어간 뒤부터 한다.
-4. 결과는 각 문서의 기록 절과 시험 장부(`tools/learning_ledger.py`)에 남긴다.
-   - 판정 시점 전에는 보고만 한다. v12는 40거래일, v9는 2027-10이다.
+4. **5분봉 패턴 채점(v19 §5):** `uv run python tools/pattern_lab.py score --bars data/kis/minute-history --model data/kis/pattern-v19/model.json`
+   - 모형 파일은 저장소가 아니라 맥 `data/`에 있다(KNN 학습 표본, 재배포 금지). 채점 전에 sha256이 v19 §9의 기록과 같은지 확인하고, 다르면 채점하지 않는다.
+5. 결과는 각 문서의 기록 절과 시험 장부(`tools/learning_ledger.py`)에 남긴다.
+   - 판정 시점 전에는 보고만 한다. v12는 40거래일, v19는 60거래일, v9는 2027-10이다.
 
 v11 분봉 전략은 검증을 통과한 후보가 없어 월간 기록 대상이 없다(v11 §11).
 

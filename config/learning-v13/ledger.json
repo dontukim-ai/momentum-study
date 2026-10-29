@@ -2027,12 +2027,17 @@
     "t": 0.16
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "date": "2026-10-29",
      "reason": "registered; dev run and freeze pending (v19, 069500)",
      "stage": "S0"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-29",
+     "reason": "동결 data/kis/pattern-v19/model.json sha256 d8667088…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -2053,12 +2058,17 @@
     "t": 0.99
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "date": "2026-10-29",
      "reason": "registered; dev run and freeze pending (v19, 069500)",
      "stage": "S0"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-29",
+     "reason": "동결 data/kis/pattern-v19/model.json sha256 d8667088…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -2079,12 +2089,17 @@
     "t": 2.51
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "date": "2026-10-29",
      "reason": "registered; dev run and freeze pending (v19, 069500)",
      "stage": "S0"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-29",
+     "reason": "동결 data/kis/pattern-v19/model.json sha256 d8667088…, 2026-10-26부터 전진 채점"
     }
    ]
   },
@@ -2105,12 +2120,17 @@
     "t": 0.47
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "date": "2026-10-29",
      "reason": "registered; dev run and freeze pending (v19, 069500)",
      "stage": "S0"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-29",
+     "reason": "동결 data/kis/pattern-v19/model.json sha256 d8667088…, 2026-10-26부터 전진 채점"
     }
    ]
   }
