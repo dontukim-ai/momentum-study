@@ -2009,6 +2009,110 @@
      "reason": "보고 전용 측정 완료: 흐름 3세션 전 지수 하락(t -20.5), 동시 승수 -2.8(t -1.0)"
     }
    ]
+  },
+  {
+   "id": "v19/BASE h5",
+   "study": "v19",
+   "family": "v19 pattern",
+   "name": "BASE h5",
+   "kind": "forecast",
+   "registered": "2026-10-29",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "accuracy": null,
+    "mean_daily": null,
+    "t": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "date": "2026-10-29",
+     "reason": "registered; dev run and freeze pending (v19, 069500)",
+     "stage": "S0"
+    }
+   ]
+  },
+  {
+   "id": "v19/PATTERN h5",
+   "study": "v19",
+   "family": "v19 pattern",
+   "name": "PATTERN h5",
+   "kind": "forecast",
+   "registered": "2026-10-29",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "accuracy": null,
+    "mean_daily": null,
+    "t": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "date": "2026-10-29",
+     "reason": "registered; dev run and freeze pending (v19, 069500)",
+     "stage": "S0"
+    }
+   ]
+  },
+  {
+   "id": "v19/LOGIT h5",
+   "study": "v19",
+   "family": "v19 pattern",
+   "name": "LOGIT h5",
+   "kind": "forecast",
+   "registered": "2026-10-29",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "accuracy": null,
+    "mean_daily": null,
+    "t": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "date": "2026-10-29",
+     "reason": "registered; dev run and freeze pending (v19, 069500)",
+     "stage": "S0"
+    }
+   ]
+  },
+  {
+   "id": "v19/KNN h5",
+   "study": "v19",
+   "family": "v19 pattern",
+   "name": "KNN h5",
+   "kind": "forecast",
+   "registered": "2026-10-29",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "accuracy": null,
+    "mean_daily": null,
+    "t": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "date": "2026-10-29",
+     "reason": "registered; dev run and freeze pending (v19, 069500)",
+     "stage": "S0"
+    }
+   ]
   }
  ],
  "curve": []
