@@ -6,7 +6,8 @@ Read-only KIS real-account market data (FHKST03010230). Run on the Mac:
         --start 2025-10-27 --end 2026-10-23
 
 Each symbol-day becomes <out>/<symbol>/<YYYY-MM-DD>.json, written whole once
-every bar from 15:30 back to 09:00 has arrived (120 per read). A finished day
+every bar from 15:30 back to 09:00 has arrived (120 per read). Today can be
+collected from 15:40 KST, once the closing auction has printed. A finished day
 is never fetched again, so a rerun resumes. Days without bars (holidays, or
 outside what KIS keeps) are saved as empty. A response with a credential stops
 the run; 30 failures in a row stop it. Data stay in data/kis (no Git, no
@@ -36,6 +37,7 @@ KST = ZoneInfo("Asia/Seoul")
 DEVELOPMENT_END = date(2026, 6, 30)
 HOLDOUT_START = date(2026, 7, 1)
 OPEN, CLOSE = "090000", "153000"
+SETTLED = (15, 40)  # a day's bars are complete once the closing auction has printed
 MAX_FAILURES = 30
 SECRET_NAMES = ("KIS_APP_KEY", "KIS_APP_SECRET", "KIS_ACCOUNT")
 
@@ -107,6 +109,13 @@ class Collector:
         return "empty" if not bars else "fetched"
 
 
+def last_collectable(now: datetime) -> date:
+    """The latest day whose bars are complete: today from 15:40 KST, otherwise yesterday."""
+    local = now.astimezone(KST)
+    settled = (local.hour, local.minute) >= SETTLED
+    return local.date() if settled else local.date() - timedelta(days=1)
+
+
 def development_bars(root: Path, symbol: str) -> dict[str, list[dict]]:
     """Saved bars by day, development days only (holdout days stay unread)."""
     days = {}
@@ -125,8 +134,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--end", type=date.fromisoformat, required=True)
     parser.add_argument("--out", type=Path, default=Path("data/kis/minute-history"))
     args = parser.parse_args(argv)
-    if args.end < args.start or args.end >= datetime.now(KST).date():
-        print("kis-minute-history: STOP: need start <= end < today")
+    if args.end < args.start or args.end > last_collectable(datetime.now(KST)):
+        print("kis-minute-history: STOP: need start <= end, and end before today (today only from 15:40 KST)")
         return 1
     symbols = [row["symbol"] for row in json.loads(args.universe.read_text(encoding="utf-8"))["symbols"]]
     from trading_agent.kis_real import KisRealReadOnly

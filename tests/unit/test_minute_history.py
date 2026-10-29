@@ -136,3 +136,11 @@ def test_universe_can_require_quotes_over_the_whole_collection_window(tmp_path):
     result = universe.select(pages, top=2, presence=presence)
     assert [r["symbol"] for r in result["symbols"]] == ["069500", "102110"]
     assert result["dropped"]["not quoted since the collection start"] == 1
+
+
+def test_today_is_collectable_only_after_the_close_settles():
+    today = date(2026, 10, 29)
+    before = datetime(2026, 10, 29, 15, 39, tzinfo=history.KST)
+    after = datetime(2026, 10, 29, 15, 40, tzinfo=history.KST)
+    assert history.last_collectable(before) == date(2026, 10, 28)
+    assert history.last_collectable(after) == today
