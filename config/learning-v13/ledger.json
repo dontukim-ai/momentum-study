@@ -2146,17 +2146,22 @@
     "2026-06-30"
    ],
    "dev": {
-    "accuracy": null,
+    "accuracy": 0.506,
     "mean_daily": null,
-    "t": null
+    "t": 2.61
    },
    "cost_version": "none (forecast)",
-   "stage": "S0",
+   "stage": "S1",
    "history": [
     {
      "date": "2026-10-29",
      "reason": "registered; dev run pending (v19 §10, online pattern record with size and volume)",
      "stage": "S0"
+    },
+    {
+     "stage": "S1",
+     "date": "2026-10-29",
+     "reason": "개발 실행 완료; 전진 시작 기록 sha256 de14cf0a…, 2026-10-26부터 매일 갱신(v19 §10.5)"
     }
    ]
   }
