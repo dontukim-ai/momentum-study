@@ -1,0 +1,12 @@
+v19b daily 2026-10-29, run 2026-10-29 16:25:09 KST, main 01e97f4
+Using CPython 3.12.14
+Creating virtual environment at: .venv
+   Building momentum @ file:///Users/dongchulkim/dev/quant/wt-v19b-daily
+   Building kis-self-improving-agent @ file:///Users/dongchulkim/dev/quant/wt-v19b-daily/apps/kis-agent
+      Built momentum @ file:///Users/dongchulkim/dev/quant/wt-v19b-daily
+      Built kis-self-improving-agent @ file:///Users/dongchulkim/dev/quant/wt-v19b-daily/apps/kis-agent
+Installed 32 packages in 239ms
+kis-minute-history: STOP: need start <= end < today
+collect_exit=1
+no forward day yet
+score_exit=1
