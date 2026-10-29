@@ -2022,9 +2022,9 @@
     "2026-06-30"
    ],
    "dev": {
-    "accuracy": null,
+    "accuracy": 0.5013,
     "mean_daily": null,
-    "t": null
+    "t": 0.16
    },
    "cost_version": "none (forecast)",
    "stage": "S0",
@@ -2048,9 +2048,9 @@
     "2026-06-30"
    ],
    "dev": {
-    "accuracy": null,
+    "accuracy": 0.5031,
     "mean_daily": null,
-    "t": null
+    "t": 0.99
    },
    "cost_version": "none (forecast)",
    "stage": "S0",
@@ -2074,9 +2074,9 @@
     "2026-06-30"
    ],
    "dev": {
-    "accuracy": null,
+    "accuracy": 0.5094,
     "mean_daily": null,
-    "t": null
+    "t": 2.51
    },
    "cost_version": "none (forecast)",
    "stage": "S0",
@@ -2100,9 +2100,9 @@
     "2026-06-30"
    ],
    "dev": {
-    "accuracy": null,
+    "accuracy": 0.5014,
     "mean_daily": null,
-    "t": null
+    "t": 0.47
    },
    "cost_version": "none (forecast)",
    "stage": "S0",
