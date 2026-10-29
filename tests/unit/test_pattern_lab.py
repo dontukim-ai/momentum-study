@@ -111,3 +111,53 @@ def test_freeze_round_trips_and_score_refuses_days_before_forward(tmp_path):
     assert result["cells"]["PATTERN h5"]["called"] > 0
     with pytest.raises(SystemExit):
         lab.direction_lab.forward_bars(tmp_path, lab.SYMBOL, "2026-10-23")
+
+
+def test_rich_bar_types_by_hand():
+    X = np.zeros((1, 25))
+    X[0, 0::5] = [5, -3, 0, 2, -1]                 # returns in bp, baseline 2bp
+    X[0, 4::5] = [0.5, 0.5, -0.1, 0.2, 0.0]        # log volume vs baseline
+    # big up/high, big down/high, flat/low, small up/high (2 is not above 2), small down/low
+    assert lab.bar_types(X, np.array([2.0])).tolist() == [[9, 1, 4, 7, 2]]
+
+
+def test_magnitude_baseline_is_the_median_of_nonzero_moves_before_the_bars():
+    path = [10000] * GRID
+    for m, step in ((80, 2), (85, -4), (90, 6)):       # three moves in the window 77..95 of minute 100
+        for k in range(m, GRID):
+            path[k] += step
+    s = lab.day_samples(*lab.ohlcv([bar(i, p, p, p, p) for i, p in enumerate(path)]))
+    k = 100 - lab.START
+    assert s["mag"][k] == pytest.approx(np.median([2 / 10000, 4 / 10002, 6 / 9998]) * 1e4)
+
+
+def test_online_record_registers_new_patterns_and_backs_off():
+    rec = lab.OnlineRecord(minimum=2)
+    a, b = (1, 2, 3, 4, 5), (9, 9, 9, 4, 5)
+    assert rec.prob(a) == 0.5                         # never seen: no call
+    rec.add(a, 1)
+    rec.add(a, 1)
+    rec.add(a, -1)
+    assert rec.prob(a) == pytest.approx((2 + 1) / (3 + 2))
+    assert rec.prob(b) == pytest.approx((2 + 1) / (3 + 2))   # unseen, falls back to the shared last two bars
+    rec.add(a, 0)                                     # flat outcomes are not counted
+    assert rec.prob(a) == pytest.approx(3 / 5)
+
+
+def test_online_never_uses_an_outcome_before_it_is_known():
+    data = planted_days(6)
+    base = lab.online(data, initial=4)
+    day = list(data)[4]
+    i = 50
+    changed = {d: {key: v.copy() for key, v in s.items()} for d, s in data.items()}
+    changed[day]["y5"][i] = -changed[day]["y5"][i] if changed[day]["y5"][i] else 1
+    other = lab.online(changed, initial=4)
+    n = len(data[day]["y5"])
+    # sample i's outcome is known only at minute i + 5 (sample i + 5): every earlier prediction is unchanged
+    assert np.array_equal(base["p"][:i + 5], other["p"][:i + 5])
+    assert base["p"].shape[0] == n + len(data[list(data)[5]]["y5"])
+
+
+def test_online_learns_a_planted_pattern():
+    result = lab.online(planted_days(8), initial=4)
+    assert result["cell"]["accuracy"] > 0.6
