@@ -6,13 +6,13 @@
 # Runs in its own worktree (../wt-v19b-daily, data linked to the main checkout) so it never switches the
 # main folder's branch. Collects 069500 minute bars from 2026-10-26 to the day (finished days are not
 # fetched again), re-runs the online record from the development seed through every forward day, writes
-# one summary txt and adds it to the branch results/v19b-daily (one file per day, never force-pushed).
+# one summary txt beside the checkout and adds it to the branch results/v19b-daily (one file per day, never force-pushed).
 # Read-only market data; no orders. A failed step is written to the txt as it is and not retried.
 set -u
 REPO=${REPO:?set REPO to the repository checkout}
 DAY=${1:-$(TZ=Asia/Seoul date +%F)}
 WT="$REPO/../wt-v19b-daily"
-OUT="$REPO/v19b-daily-$DAY.txt"
+OUT="$REPO/../v19b-daily-$DAY.txt"   # beside the checkout, like the other result txts (never inside it)
 BRANCH=results/v19b-daily
 
 cd "$REPO" || exit 1
