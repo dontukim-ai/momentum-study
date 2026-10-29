@@ -2133,6 +2133,32 @@
      "reason": "동결 data/kis/pattern-v19/model.json sha256 d8667088…, 2026-10-26부터 전진 채점"
     }
    ]
+  },
+  {
+   "id": "v19b/ONLINE h5",
+   "study": "v19b",
+   "family": "v19b pattern online",
+   "name": "ONLINE h5",
+   "kind": "forecast",
+   "registered": "2026-10-29",
+   "development": [
+    "2025-10-27",
+    "2026-06-30"
+   ],
+   "dev": {
+    "accuracy": null,
+    "mean_daily": null,
+    "t": null
+   },
+   "cost_version": "none (forecast)",
+   "stage": "S0",
+   "history": [
+    {
+     "date": "2026-10-29",
+     "reason": "registered; dev run pending (v19 §10, online pattern record with size and volume)",
+     "stage": "S0"
+    }
+   ]
   }
  ],
  "curve": []

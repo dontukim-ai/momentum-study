@@ -21,6 +21,7 @@ Statistics only, no trading (docs/blueprint/pattern-lab-v19.md, fixed before any
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import sys
@@ -50,6 +51,7 @@ START, H, BARS, BASELINE = 30, 5, 5, 20          # 09:30, five minutes ahead, fi
 CLIP_BP, CLIP_VOL, K = 100.0, 5.0, 200
 MODELS = ("BASE", "PATTERN", "LOGIT", "KNN")
 CHUNK = 200
+ONLINE_MIN = 20                                  # v19b: a pattern speaks once seen this many times
 
 
 def ohlcv(rows: list[dict]) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -64,7 +66,7 @@ def ohlcv(rows: list[dict]) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndar
 
 
 def day_samples(o: np.ndarray, h: np.ndarray, low: np.ndarray, c: np.ndarray, v: np.ndarray) -> dict[str, np.ndarray]:
-    rows, targets, moves = [], [], []
+    rows, targets, moves, minutes, mags = [], [], [], [], []
     for i in range(START, GRID - H):
         if np.isnan(c[i - BARS]) or np.isnan(c[i - BASELINE - BARS + 1:i + 1]).any():
             continue
@@ -78,16 +80,86 @@ def day_samples(o: np.ndarray, h: np.ndarray, low: np.ndarray, c: np.ndarray, v:
                     np.clip((bottom - low[j]) / o[j] * 1e4, -CLIP_BP, CLIP_BP),
                     np.clip(np.log((v[j] + 1) / (base + 1)), -CLIP_VOL, CLIP_VOL)]
         rows.append(row)
+        window = (c[i - BASELINE - BARS + 2:i - BARS + 1] / c[i - BASELINE - BARS + 1:i - BARS] - 1) * 1e4  # i-23..i-5
+        nonzero = np.abs(window[window != 0])
+        mags.append(float(np.median(nonzero)) if len(nonzero) else 0.0)
+        minutes.append(i)
         move = c[i + H] / c[i] - 1
         targets.append(np.sign(move))
         moves.append(move)
     return {"X": np.array(rows, dtype=float).reshape(-1, 5 * BARS),
-            f"y{H}": np.array(targets, dtype=float), f"r{H}": np.array(moves, dtype=float)}
+            f"y{H}": np.array(targets, dtype=float), f"r{H}": np.array(moves, dtype=float),
+            "i": np.array(minutes, dtype=int), "mag": np.array(mags, dtype=float)}
 
 
 def states(X: np.ndarray) -> np.ndarray:
     """Five return signs, then 1 if the five bars' mean log volume is above the baseline."""
     return np.c_[np.sign(X[:, 0::5]), (X[:, 4::5].mean(axis=1) > 0).astype(float)].astype(int)
+
+
+def bar_types(X: np.ndarray, mag: np.ndarray) -> np.ndarray:
+    """v19b §10.1: each of the five bars as one of 10 types, (move level + 2) * 2 + high volume."""
+    ret, vol = X[:, 0::5], X[:, 4::5]
+    level = np.sign(ret) * (1 + (np.abs(ret) > mag[:, None]))
+    return ((level + 2) * 2 + (vol > 0)).astype(int)
+
+
+class OnlineRecord:
+    """Up/down counts per pattern of the last 1..5 bar types; the longest pattern seen ``minimum`` times speaks."""
+
+    def __init__(self, minimum: int = ONLINE_MIN) -> None:
+        self.minimum = minimum
+        self.counts: list[dict[tuple, list[int]]] = [{} for _ in range(BARS)]
+
+    def add(self, types: tuple, outcome: float) -> None:
+        if outcome == 0:
+            return
+        for k in range(1, BARS + 1):
+            c = self.counts[k - 1].setdefault(tuple(types[-k:]), [0, 0])
+            c[0 if outcome > 0 else 1] += 1
+
+    def prob(self, types: tuple) -> float:
+        for k in range(BARS, 0, -1):
+            c = self.counts[k - 1].get(tuple(types[-k:]))
+            if c and sum(c) >= self.minimum:
+                return (c[0] + 1) / (sum(c) + 2)
+        return 0.5
+
+    def digest(self) -> str:
+        text = json.dumps([sorted((",".join(map(str, key)), c) for key, c in level.items()) for level in self.counts])
+        return hashlib.sha256(text.encode()).hexdigest()
+
+
+def online(data: dict, initial: int, minimum: int = ONLINE_MIN) -> dict[str, Any]:
+    """v19b §10.2: seed the record with the first ``initial`` days, then predict each minute and add each
+    outcome once it is known (sample at minute i at minute i + 5; a day's remaining outcomes at its close)."""
+    days = list(data)
+    if len(days) <= initial:
+        raise SystemExit(f"need more than {initial} days, have {len(days)}")
+    rec = OnlineRecord(minimum)
+    for day in days[:initial]:
+        s = data[day]
+        for pattern, y in zip(map(tuple, bar_types(s["X"], s["mag"])), s[f"y{H}"], strict=True):
+            rec.add(pattern, y)
+    seed = rec.digest()
+    ps, ys, rs, ds = [], [], [], []
+    for n, day in enumerate(days[initial:], start=initial):
+        s = data[day]
+        types = list(map(tuple, bar_types(s["X"], s["mag"])))
+        pending = 0
+        for k, minute in enumerate(s["i"]):
+            while pending < k and s["i"][pending] + H <= minute:
+                rec.add(types[pending], s[f"y{H}"][pending])
+                pending += 1
+            ps.append(rec.prob(types[k]))
+        for k in range(pending, len(types)):
+            rec.add(types[k], s[f"y{H}"][k])
+        ys.append(s[f"y{H}"])
+        rs.append(s[f"r{H}"])
+        ds.append(np.full(len(types), n))
+    p, y, r, d = np.array(ps), np.concatenate(ys), np.concatenate(rs), np.concatenate(ds)
+    return {"days": [days[initial], days[-1]], "seed_days": [days[0], days[initial - 1]], "seed_sha256": seed,
+            "p": p, "cell": direction_lab.score(p, y, d, r)}
 
 
 def fit(model: str, X: np.ndarray, y: np.ndarray, k: int = K) -> Any:
@@ -202,11 +274,13 @@ def build(bars: dict[str, list[dict]]) -> dict[str, dict[str, np.ndarray]]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("action", choices=("eval", "freeze", "score"))
+    parser.add_argument("action", choices=("eval", "freeze", "score", "online-eval", "online-score"))
     parser.add_argument("--bars", type=Path, default=Path("data/kis/minute-history"))
     parser.add_argument("--model", type=Path, help="freeze: output; score: the frozen model")
     parser.add_argument("--from", dest="first", default=direction_lab.FORWARD_FROM, help="score: first forward day")
     args = parser.parse_args(argv)
+    if args.action.startswith("online"):
+        return _online(args)
     if args.action == "score":
         if args.model is None:
             raise SystemExit("score needs --model")
@@ -230,6 +304,39 @@ def main(argv: list[str] | None = None) -> int:
               f"(train first {direction_lab.INITIAL}, refit every {direction_lab.REFIT})")
     direction_lab._table(result["cells"], result["bonferroni_alpha"])
     print(json.dumps(result, sort_keys=True, default=float))
+    return 0
+
+
+def _development(root: Path) -> dict:
+    history = _load("kis_minute_history")
+    data = build(history.development_bars(root, SYMBOL))
+    if not data or max(data) > history.DEVELOPMENT_END.isoformat():
+        raise SystemExit("no development days, or a holdout day in development input")
+    return data
+
+
+def _online(args: argparse.Namespace) -> int:
+    """v19b: online-eval over development days; online-score continues from every development day."""
+    dev = _development(args.bars)
+    full = OnlineRecord()
+    for s in dev.values():
+        for pattern, y in zip(map(tuple, bar_types(s["X"], s["mag"])), s[f"y{H}"], strict=True):
+            full.add(pattern, y)
+    if args.action == "online-eval":
+        result = online(dev, direction_lab.INITIAL)
+        label = f"development {result['days'][0]}~{result['days'][1]} (record seeded by the first {direction_lab.INITIAL} days)"
+    else:
+        forward = build(direction_lab.forward_bars(args.bars, SYMBOL, args.first))
+        if not forward:
+            raise SystemExit("no forward day yet")
+        result = online({**dev, **forward}, len(dev))
+        label = f"forward {result['days'][0]}~{result['days'][1]} (record seeded by every development day)"
+    print(f"v19b ONLINE, {SYMBOL}, {label}")
+    print(f"forward seed sha256 {full.digest()}")
+    cells = {f"ONLINE h{H}": result["cell"]}
+    direction_lab._table(cells, _bonferroni(cells))
+    print(json.dumps({key: v for key, v in result.items() if key != "p"} | {"forward_seed_sha256": full.digest()},
+                     sort_keys=True, default=float))
     return 0
 
 
