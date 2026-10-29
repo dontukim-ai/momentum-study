@@ -173,6 +173,7 @@ E2 통과 champion → ObservationRelease(주문 권한 없음) → E3 관찰 �
 | [세부 개발 계획](implementation-plan.md) | 작업 ID·선행 조건·완료 조건 |
 | [운영 설계·절차](operations.md) | 실행·장애·복구·버전 전환·단계 전환 |
 | [연구 지도 v17](research-map-v17.md) | 여덟 갈래 문헌 조사와 v2~v16 시험의 대응, 다음 후보 순위 |
+| [위험 관리 층 v18](risk-layer-v18.md) | v14.1 배분 위 10개월 추세·12개월 절대모멘텀 층 사전 등록 |
 | [5분봉 패턴 v19](pattern-lab-v19.md) | 069500 분봉 5개·거래량으로 다음 5분 방향 학습(통계 실험) |
 | [기존 실행 안내](../automatic-research-agent.md) | 현재 CLI 사용 예와 입력 형식 |
 
