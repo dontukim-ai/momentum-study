@@ -2164,6 +2164,32 @@
      "reason": "개발 실행 완료; 전진 시작 기록 sha256 de14cf0a…, 2026-10-26부터 매일 갱신(v19 §10.5)"
     }
    ]
+  },
+  {
+   "id": "v20/GCDC 20-60",
+   "study": "v20",
+   "family": "v20 GCDC",
+   "name": "골든크로스 매수·데드크로스 매도 20/60, 거래대금 상위 300",
+   "kind": "strategy",
+   "registered": "2026-10-30",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-30",
+     "reason": "registered"
+    }
+   ]
   }
  ],
  "curve": []
