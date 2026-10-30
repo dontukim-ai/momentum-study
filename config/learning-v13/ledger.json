@@ -2208,17 +2208,22 @@
     "2023-06-30"
    ],
    "dev": {
-    "t": null,
+    "t": -1.72,
     "net_return": null,
     "mean_daily": null
    },
    "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-30",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "E1 불통과: 연 −4.1%(앞)·−5.6%(뒤) vs 069500 +12.4%·+32.7%, 손절 967·익절 281"
     }
    ]
   }
