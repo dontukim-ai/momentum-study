@@ -71,9 +71,9 @@ def audit(data: Any) -> dict[str, Any]:
 
 
 def text(result: dict[str, Any], limit: int = 60) -> str:
-    lines = [f"{result['symbols']} symbols, {result['bars']} bars: {len(result['jumps'])} unexplained jumps "
-             f"(beyond +-{ma.JUMP_LIMIT:.0%}, no share action) in {result['symbols_with_jumps']} symbols, "
-             f"{result['after_a_gap']} of them right after a gap in quotes"]
+    lines = [(f"{result['symbols']} symbols, {result['bars']} bars: {len(result['jumps'])} unexplained jumps "
+              f"(beyond +-{ma.JUMP_LIMIT:.0%}, no share action) in {result['symbols_with_jumps']} symbols, "
+              f"{result['after_a_gap']} of them right after a gap in quotes")]
     for f in result["jumps"][:limit]:
         open_part = f"open x{f['open_ratio']:.3f} " if f["open_ratio"] is not None else ""
         lines.append(f"  {f['symbol']}{'' if f['common_stock'] else ' (not common)'} {f['last_day']} -> {f['day']} "
