@@ -1,0 +1,46 @@
+ma screen 2026-10-28, run 2026-10-30 11:30:08 KST, main 2a8d086
+Using CPython 3.12.14
+Creating virtual environment at: .venv
+   Building momentum @ file:///Users/dongchulkim/dev/quant/wt-ma-screen
+   Building kis-self-improving-agent @ file:///Users/dongchulkim/dev/quant/wt-ma-screen/apps/kis-agent
+      Built momentum @ file:///Users/dongchulkim/dev/quant/wt-ma-screen
+      Built kis-self-improving-agent @ file:///Users/dongchulkim/dev/quant/wt-ma-screen/apps/kis-agent
+Installed 32 packages in 181ms
+fsc-collect: stock 2026-10-26 page 1: HTTP 200, 274325 bytes
+fsc-collect: stock 2026-10-26 page 2: HTTP 200, 274313 bytes
+fsc-collect: stock 2026-10-26 page 3: HTTP 200, 239105 bytes
+fsc-collect: stock 2026-10-27 page 1: HTTP 200, 272976 bytes
+fsc-collect: stock 2026-10-27 page 2: HTTP 200, 273060 bytes
+fsc-collect: stock 2026-10-27 page 3: HTTP 200, 238636 bytes
+fsc-collect: stock 2026-10-28 page 1: HTTP 200, 273178 bytes
+fsc-collect: stock 2026-10-28 page 2: HTTP 200, 273437 bytes
+fsc-collect: stock 2026-10-28 page 3: HTTP 200, 238564 bytes
+fsc-collect: 3 fetched, 0 skipped, 0 errors
+collect_exit=0
+saved 2026-10-26 (2871 rows)
+saved 2026-10-27 (2872 rows)
+saved 2026-10-28 (2871 rows)
+이평선 조회 2026-10-28 (금융위 종가, 거래대금 상위 300종목)
+정배열 18종목, 역배열 98종목 | 이력 부족 제외 19, 기준가 조정 반영 17
+
+[골든크로스 (20일선이 60일선 위로)] 0종목
+
+[데드크로스 (20일선이 60일선 아래로)] 3종목
+  삼성전기(009150) 종가 1,306,000 MA20 1,348,400 MA60 1,354,067 거래대금 9,482억
+  제주반도체(080220) 종가 69,500 MA20 74,475 MA60 74,730 거래대금 1,070억
+  테크윙(089030) 종가 41,000 MA20 46,972 MA60 47,095 거래대금 360억
+
+[정배열 새 진입 (5>20>60>120)] 3종목
+  삼성E&A(028050) 종가 64,200 MA20 49,772 MA60 48,795 거래대금 1,687억
+  샌즈랩(411080) 종가 8,750 MA20 7,103 MA60 5,490 거래대금 255억
+  엑시콘(092870) 종가 67,000 MA20 52,800 MA60 34,658 거래대금 254억
+
+[역배열 새 진입 (5<20<60<120)] 4종목
+  삼성전기(009150) 종가 1,306,000 MA20 1,348,400 MA60 1,354,067 거래대금 9,482억
+  제주반도체(080220) 종가 69,500 MA20 74,475 MA60 74,730 거래대금 1,070억
+  테크윙(089030) 종가 41,000 MA20 46,972 MA60 47,095 거래대금 360억
+  휴젤(145020) 종가 181,500 MA20 179,840 MA60 221,330 거래대금 91억
+
+조회 도구이며 매매 신호가 아니다(v20 B).
+{"adjusted": 17, "bear": 98, "bear_new": [{"close": 1306000.0, "code": "009150", "ma20": 1348400.0, "ma60": 1354066.6666666667, "name": "삼성전기", "value_20d": 948174874714.35}, {"close": 69500.0, "code": "080220", "ma20": 74475.0, "ma60": 74730.0, "name": "제주반도체", "value_20d": 106968147905.0}, {"close": 41000.0, "code": "089030", "ma20": 46972.5, "ma60": 47095.0, "name": "테크윙", "value_20d": 36042329356.25}, {"close": 181500.0, "code": "145020", "ma20": 179840.0, "ma60": 221330.0, "name": "휴젤", "value_20d": 9082782290.0}], "bull": 18, "bull_new": [{"close": 64200.0, "code": "028050", "ma20": 49772.5, "ma60": 48795.0, "name": "삼성E&A", "value_20d": 168736206945.55}, {"close": 8750.0, "code": "411080", "ma20": 7103.0, "ma60": 5490.166666666667, "name": "샌즈랩", "value_20d": 25487342302.0}, {"close": 67000.0, "code": "092870", "ma20": 52800.0, "ma60": 34657.666666666664, "name": "엑시콘", "value_20d": 25405326451.25}], "day": "2026-10-28", "dead": [{"close": 1306000.0, "code": "009150", "ma20": 1348400.0, "ma60": 1354066.6666666667, "name": "삼성전기", "value_20d": 948174874714.35}, {"close": 69500.0, "code": "080220", "ma20": 74475.0, "ma60": 74730.0, "name": "제주반도체", "value_20d": 106968147905.0}, {"close": 41000.0, "code": "089030", "ma20": 46972.5, "ma60": 47095.0, "name": "테크윙", "value_20d": 36042329356.25}], "golden": [], "quoted_today": 2550, "short_history": 19, "universe": 300}
+screen_exit=0
