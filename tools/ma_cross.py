@@ -209,7 +209,8 @@ def backtest(data: Any, cost_bps: float) -> dict[str, Any]:
     bench = Ledger(CAPITAL, cfg, money_quantum=Decimal(1), fractional_split="drop")
     closes: dict[str, list[tuple[date, float]]] = defaultdict(list)
     counts = {"golden_in_top": 0, "dead_exits": 0, "entries_skipped_full": 0, "forced_exits": 0,
-              "written_off": 0, "orders_waiting_no_adv": 0}
+              "written_off": 0, "orders_waiting_no_adv": 0,
+              "orders_deferred_action": 0}
     out: dict[str, Any] = {"days": [], "nav": [], "bench": []}
     pending: list[TargetOrder] = []
     bench_pending: list[TargetOrder] = []
@@ -230,6 +231,13 @@ def backtest(data: Any, cost_bps: float) -> dict[str, Any]:
             counts["orders_waiting_no_adv"] += sum(o.security_id not in adv for o in pending)
             waited |= {o.security_id for o in pending if o.security_id not in adv}
             pending = [o for o in pending if o.security_id in adv]
+            # a split, bonus issue or capital reduction applied this morning changes the shares an order was
+            # sized for (the ledger applies actions before fills): such orders wait a session; sells come back
+            # through ``exiting`` sized on the new holding, a deferred buy is not repeated
+            reshaped = {a.security_id for a in actions_by_day.get(day, [])
+                        if a.ex_date == day and a.action_type in ("split", "bonus_issue", "capital_reduction")}
+            counts["orders_deferred_action"] += sum(o.security_id in reshaped for o in pending)
+            pending = [o for o in pending if o.security_id not in reshaped]
             book.step_session(day, prev, actions_by_day.get(day, []), pending, opens, adv, close_px)
             bench.step_session(day, prev, [], bench_pending, opens, _adv(bars, lookback, bench_pending), close_px)
         for s, b in today.items():
