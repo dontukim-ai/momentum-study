@@ -152,3 +152,24 @@ def test_report_needs_both_halves():
     assert rep["e1_pass"] is True
     rep = ma.report({"days": days, "nav": flat, "bench": up, "fills": [], "counts": {}, "fractions_dropped": 0})
     assert rep["e1_pass"] is False
+
+
+def test_a_long_suspension_defers_the_sell_until_trading_resumes():
+    path = path_down_up_down(220)
+    sessions = weekdays(220)
+    marks = golden_and_dead_days(path, sessions)
+    gap = range(marks["golden"] + 5, marks["golden"] + 30)          # 25 sessions without bars while held
+    states = {"005930": state("005930"), "069500": state("069500", "ETF")}
+    data, _ = make_data({"005930": path, "069500": [10000] * 220}, states=states)
+    data.snapshot.bars = [b for b in data.snapshot.bars
+                          if not (b.symbol == "005930" and sessions.index(b.session) in gap)]
+    suspended = {"005930": state("005930", status="SUSPENDED"), "069500": state("069500", "ETF")}
+    first, last = sessions[gap[0]], sessions[gap[-1]]
+    data.securities = SimpleNamespace(
+        states=lambda at: suspended if first <= at.date() <= last else states)
+    result = ma.backtest(data, 36.5)                                 # no "no ADV data" error
+    fills = [f for f in result["fills"] if f.security_id == "005930" and f.shares > 0]
+    assert [f.side for f in fills] == ["buy", "sell"]
+    # the first resumed close gives the order a volume to size against; it fills at the next open
+    assert fills[1].session_date == sessions[gap[-1] + 2]
+    assert result["counts"]["orders_waiting_no_adv"] > 0

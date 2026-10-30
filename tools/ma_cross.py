@@ -208,11 +208,13 @@ def backtest(data: Any, cost_bps: float) -> dict[str, Any]:
     book = Ledger(CAPITAL, cfg, money_quantum=Decimal(1), fractional_split="drop")
     bench = Ledger(CAPITAL, cfg, money_quantum=Decimal(1), fractional_split="drop")
     closes: dict[str, list[tuple[date, float]]] = defaultdict(list)
-    counts = {"golden_in_top": 0, "dead_exits": 0, "entries_skipped_full": 0, "forced_exit_orders": 0,
-              "written_off": 0}
+    counts = {"golden_in_top": 0, "dead_exits": 0, "entries_skipped_full": 0, "forced_exits": 0,
+              "written_off": 0, "orders_waiting_no_adv": 0}
     out: dict[str, Any] = {"days": [], "nav": [], "bench": []}
     pending: list[TargetOrder] = []
     bench_pending: list[TargetOrder] = []
+    exiting: set[str] = set()
+    waited: set[str] = set()                     # names whose orders waited for volume (long suspensions)
     need = LONG + 1                                # a 20/60 cross needs 61 consecutive sessions
     for k, day in enumerate(sessions):
         today = bars.get(day, {})
@@ -222,8 +224,13 @@ def backtest(data: Any, cost_bps: float) -> dict[str, Any]:
             prev = sessions[k - 1]
 
             lookback = sessions[max(0, k - ADV_DAYS):k]
-            book.step_session(day, prev, actions_by_day.get(day, []), pending, opens,
-                              _adv(bars, lookback, pending), close_px)
+            adv = _adv(bars, lookback, pending)
+            # no volume in the last 20 sessions (a long suspension): the engine cannot size the cap, so the
+            # order waits; the next decision issues it again
+            counts["orders_waiting_no_adv"] += sum(o.security_id not in adv for o in pending)
+            waited |= {o.security_id for o in pending if o.security_id not in adv}
+            pending = [o for o in pending if o.security_id in adv]
+            book.step_session(day, prev, actions_by_day.get(day, []), pending, opens, adv, close_px)
             bench.step_session(day, prev, [], bench_pending, opens, _adv(bars, lookback, bench_pending), close_px)
         for s, b in today.items():
             closes[s].append((day, float(b.close)))
@@ -241,13 +248,14 @@ def backtest(data: Any, cost_bps: float) -> dict[str, Any]:
                 if book.write_off(s, day):
                     counts["written_off"] += 1
                 held.pop(s)
+        exiting &= set(held)                       # sold names leave; the rest keep their sell order
         candidates = []
         for s in set(held) | {s for s in today if common_stock(s)}:
+            if s in held and s not in exiting and not _eligible(states.get(s)):
+                exiting.add(s)
+                counts["forced_exits"] += 1
             series = closes.get(s, [])
             if not series or series[-1][0] != day or len(series) < need or series[-need][0] != sessions[k - need + 1]:
-                if s in held and not _eligible(states.get(s)):
-                    pending.append(TargetOrder(s, "sell", held[s], -1))
-                    counts["forced_exit_orders"] += 1
                 continue
             window = series[-need:]
             known = [(ex, f) for ex, avail, f in factor_at.get(s, []) if avail <= _decision(day) and ex <= day]
@@ -256,20 +264,19 @@ def backtest(data: Any, cost_bps: float) -> dict[str, Any]:
             signal = cross(sma(adjusted[:-1], SHORT), sma(adjusted[:-1], LONG),  # type: ignore[arg-type]
                            sma(adjusted, SHORT), sma(adjusted, LONG))  # type: ignore[arg-type]
             if s in held:
-                if signal == "dead":
-                    pending.append(TargetOrder(s, "sell", held[s], -1))
+                if signal == "dead" and s not in exiting:
+                    exiting.add(s)
                     counts["dead_exits"] += 1
-                elif not _eligible(states.get(s)):
-                    pending.append(TargetOrder(s, "sell", held[s], -1))
-                    counts["forced_exit_orders"] += 1
             elif signal == "golden" and _eligible(states.get(s)):
                 candidates.append(s)
+        # a sell stays on the book until it fills: a missing open or a long suspension only delays it
+        pending += [TargetOrder(s, "sell", held[s], -1) for s in sorted(exiting)]
         if trading and candidates:
             values = _universe(bars, sessions, k, states)
             top = set(sorted(values, key=values.__getitem__, reverse=True)[:TOP])
             ranked = sorted((s for s in candidates if s in top), key=values.__getitem__, reverse=True)
             counts["golden_in_top"] += len(ranked)
-            free = SLOTS - len(held) + sum(o.side == "sell" for o in pending)
+            free = SLOTS - len(held)                 # a sell frees its slot once it has filled
             investable = book.nav * (Decimal(1) - Decimal(str(cfg.cash_buffer)))
             for rank, s in enumerate(ranked):
                 if free <= 0:
@@ -287,6 +294,7 @@ def backtest(data: Any, cost_bps: float) -> dict[str, Any]:
     out["counts"] = counts
     out["fractions_dropped"] = len(book.fractions_dropped)
     out["held_at_end"] = sum(1 for q in book.positions.values() if q > 0)
+    out["waited_symbols"] = sorted(waited)
     return out
 
 
@@ -299,6 +307,7 @@ def report(result: dict[str, Any]) -> dict[str, Any]:
                  for h in ("first_half", "second_half"))
     return {"periods": table, "trades": _trades(result["fills"], days), "counts": result["counts"],
             "fractions_dropped": result["fractions_dropped"], "e1_pass": passed,
+            "waited_symbols": result.get("waited_symbols", []),
             "dev_excess_t": table["first_half"].get("excess_t")}
 
 
