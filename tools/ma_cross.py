@@ -187,8 +187,11 @@ def _universe(bars: dict, sessions: list[date], k: int, states: dict) -> dict[st
             for s in common if common_stock(s) and _eligible(states.get(s))}
 
 
-def backtest(data: Any, cost_bps: float) -> dict[str, Any]:
-    """Run A on a ResearchInput: daily NAVs of the strategy and the 069500 benchmark, fills and counts."""
+def backtest(data: Any, cost_bps: float, trace: list | None = None) -> dict[str, Any]:
+    """Run A on a ResearchInput: daily NAVs of the strategy and the 069500 benchmark, fills and counts.
+
+    With ``trace``, each session after the open appends (day, NAV, {symbol: (shares, mark, close or None)})
+    for the diagnosis; the run itself is the same with or without it."""
     sessions = list(data.sessions)
     bars: dict[date, dict[str, Any]] = defaultdict(dict)
     for bar in data.snapshot.bars:
@@ -294,6 +297,10 @@ def backtest(data: Any, cost_bps: float) -> dict[str, Any]:
                 if qty > 0:
                     pending.append(TargetOrder(s, "buy", qty, rank))
                     free -= 1
+        if trace is not None and day >= FIRST_TRADE:
+            trace.append((day, float(book.nav), {s: (q, float(book.marks.get(s, 0)), float(today[s].close)
+                                                     if s in today else None)
+                                                 for s, q in book.positions.items() if q > 0}))
         if day >= FIRST_TRADE:
             out["days"].append(day)
             out["nav"].append(float(book.nav))
