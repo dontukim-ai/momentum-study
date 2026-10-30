@@ -2846,6 +2846,58 @@
      "reason": "v22 개발 격자에서 선택되지 않음"
     }
    ]
+  },
+  {
+   "study": "v23",
+   "family": "v23 entry event study",
+   "kind": "strategy",
+   "registered": "2026-10-30",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "왕복 73bp(편도 36.5bp ×2)",
+   "id": "v23/golden_bull_h20",
+   "name": "골든크로스+정배열 사건, 20세션 069500 대비 순초과",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-30",
+     "reason": "registered"
+    }
+   ]
+  },
+  {
+   "study": "v23",
+   "family": "v23 entry event study",
+   "kind": "strategy",
+   "registered": "2026-10-30",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "왕복 73bp(편도 36.5bp ×2)",
+   "id": "v23/golden_h20",
+   "name": "골든크로스 사건, 20세션 069500 대비 순초과",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-30",
+     "reason": "registered"
+    }
+   ]
   }
  ],
  "curve": []
