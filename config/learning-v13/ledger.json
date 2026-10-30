@@ -2244,12 +2244,17 @@
     "mean_daily": null
    },
    "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-30",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "안전장치 정지: 기록 없는 주식 수 변화 보유(024810 또는 017670), 평가 불가"
     }
    ]
   },
@@ -2270,12 +2275,17 @@
     "mean_daily": null
    },
    "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-30",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "안전장치 정지: 기록 없는 주식 수 변화 보유(024810 또는 017670), 평가 불가"
     }
    ]
   },
@@ -2296,12 +2306,17 @@
     "mean_daily": null
    },
    "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-30",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "안전장치 정지: 기록 없는 주식 수 변화 보유(024810 또는 017670), 평가 불가"
     }
    ]
   },
@@ -2322,12 +2337,17 @@
     "mean_daily": null
    },
    "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-30",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "안전장치 정지: 기록 없는 주식 수 변화 보유(024810 또는 017670), 평가 불가"
     }
    ]
   },
@@ -2348,12 +2368,17 @@
     "mean_daily": null
    },
    "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-30",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "안전장치 정지: 기록 없는 주식 수 변화 보유(024810 또는 017670), 평가 불가"
     }
    ]
   },
@@ -2369,17 +2394,22 @@
     "2023-06-30"
    ],
    "dev": {
-    "t": null,
+    "t": -1.72,
     "net_return": null,
     "mean_daily": null
    },
    "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-30",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "v22 개발 격자에서 선택되지 않음"
     }
    ]
   },
@@ -2400,12 +2430,17 @@
     "mean_daily": null
    },
    "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-30",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "안전장치 정지: 기록 없는 주식 수 변화 보유(024810 또는 017670), 평가 불가"
     }
    ]
   },
@@ -2426,12 +2461,17 @@
     "mean_daily": null
    },
    "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-30",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "안전장치 정지: 기록 없는 주식 수 변화 보유(024810 또는 017670), 평가 불가"
     }
    ]
   },
@@ -2452,12 +2492,17 @@
     "mean_daily": null
    },
    "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-30",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "안전장치 정지: 기록 없는 주식 수 변화 보유(024810 또는 017670), 평가 불가"
     }
    ]
   },
@@ -2478,12 +2523,17 @@
     "mean_daily": null
    },
    "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-30",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "안전장치 정지: 기록 없는 주식 수 변화 보유(024810 또는 017670), 평가 불가"
     }
    ]
   },
@@ -2504,12 +2554,17 @@
     "mean_daily": null
    },
    "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-30",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "안전장치 정지: 기록 없는 주식 수 변화 보유(024810 또는 017670), 평가 불가"
     }
    ]
   },
@@ -2530,12 +2585,17 @@
     "mean_daily": null
    },
    "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-30",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "안전장치 정지: 기록 없는 주식 수 변화 보유(024810 또는 017670), 평가 불가"
     }
    ]
   },
@@ -2556,12 +2616,17 @@
     "mean_daily": null
    },
    "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-30",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "안전장치 정지: 기록 없는 주식 수 변화 보유(024810 또는 017670), 평가 불가"
     }
    ]
   },
@@ -2577,17 +2642,22 @@
     "2023-06-30"
    ],
    "dev": {
-    "t": null,
+    "t": -1.86,
     "net_return": null,
     "mean_daily": null
    },
    "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-30",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "v22 개발 격자에서 선택되지 않음"
     }
    ]
   },
@@ -2603,17 +2673,22 @@
     "2023-06-30"
    ],
    "dev": {
-    "t": null,
+    "t": -2.12,
     "net_return": null,
     "mean_daily": null
    },
    "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-30",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "v22 개발 격자에서 선택되지 않음"
     }
    ]
   },
@@ -2629,7 +2704,7 @@
     "2023-06-30"
    ],
    "dev": {
-    "t": null,
+    "t": -1.38,
     "net_return": null,
     "mean_daily": null
    },
@@ -2660,12 +2735,17 @@
     "mean_daily": null
    },
    "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-30",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "안전장치 정지: 기록 없는 주식 수 변화 보유(024810 또는 017670), 평가 불가"
     }
    ]
   },
@@ -2681,17 +2761,22 @@
     "2023-06-30"
    ],
    "dev": {
-    "t": null,
+    "t": -2.25,
     "net_return": null,
     "mean_daily": null
    },
    "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-30",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "v22 개발 격자에서 선택되지 않음"
     }
    ]
   },
@@ -2707,17 +2792,22 @@
     "2023-06-30"
    ],
    "dev": {
-    "t": null,
+    "t": -2.56,
     "net_return": null,
     "mean_daily": null
    },
    "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-30",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "v22 개발 격자에서 선택되지 않음"
     }
    ]
   },
@@ -2733,17 +2823,22 @@
     "2023-06-30"
    ],
    "dev": {
-    "t": null,
+    "t": -2.43,
     "net_return": null,
     "mean_daily": null
    },
    "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-30",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "v22 개발 격자에서 선택되지 않음"
     }
    ]
   }

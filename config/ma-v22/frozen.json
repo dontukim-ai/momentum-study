@@ -1,0 +1,1 @@
+{"cell": "v22 s10 t50", "development": ["2020-04-01", "2023-06-30"], "forward_from": "2026-10-21", "rule": {"entry": "golden_bull", "exit": "stop_take", "name": "v21", "stop": 0.1, "take": 0.5}, "stop": 0.1, "take": 0.5}
