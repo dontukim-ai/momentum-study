@@ -1,0 +1,12 @@
+v19b daily 2026-10-30, run 2026-10-30 16:11:11 KST, main 886eb30
+kis-minute-history: 069500 done {'skipped': 4, 'fetched': 1} 2s
+kis-minute-history: 1 symbols 2026-10-26~2026-10-30 {'skipped': 4, 'fetched': 1}
+collect_exit=0
+v19b ONLINE, 069500, forward 2026-10-26~2026-10-30 (record seeded by every development day)
+forward seed sha256 de14cf0a585caf0bf3d4475aff703cb94a8beedb3983a4c4148db94964e016ad
+cell          flat         n     acc            95% CI        p  day_t  brier    wtd     bp   bp_t    big
+ONLINE h5       1%      1629  48.00% [45.59%,50.43%]  9.5e-01  -1.85 0.2576 -0.047  -0.91  -4.00  46.3%
+* p < 0.0500 (Bonferroni over 1 cells); day_t treats each test day as one observation
+wtd: hits minus misses weighed by move size; bp: mean signed return per call before costs (bp_t by day); big: accuracy on the largest quarter of moves
+{"cell": {"accuracy": 0.480049109883364, "bonferroni_significant": false, "brier": 0.2575563389704483, "calibration": [[0.2, 2, 0.21845174973488865, 0.5], [0.3, 79, 0.361936076059083, 0.5063291139240507], [0.4, 701, 0.4600217503114124, 0.5192582025677603], [0.5, 767, 0.5400419757351654, 0.48239895697522817], [0.6, 123, 0.6289715001876598, 0.44715447154471544], [0.7, 5, 0.7349783549783551, 0.8]], "called": 1629, "ci95": [0.45586295516064723, 0.5043291418559892], "confidence": [{"accuracy": 0.49266862170087977, "band": "0.00-0.02", "n": 341}, {"accuracy": 0.4946236559139785, "band": "0.02-0.05", "n": 558}, {"accuracy": 0.45873320537428025, "band": "0.05-0.10", "n": 521}, {"accuracy": 0.47368421052631576, "band": "0.10-0.50", "n": 209}], "coverage": 0.9582352941176471, "day_t": -1.8493778029041015, "days": 5, "flat_share": 0.014492753623188406, "large_move_accuracy": 0.4632352941176471, "log_loss": 0.7086140475283288, "magnitude_weighted": -0.04703443792974761, "moving": 1700, "p_binomial": 0.9490160465253861, "samples": 1725, "signed_return_bp": -0.9059194139995356, "signed_return_day_t": -3.9979630772344357}, "days": ["2026-10-26", "2026-10-30"], "forward_seed_sha256": "de14cf0a585caf0bf3d4475aff703cb94a8beedb3983a4c4148db94964e016ad", "seed_days": ["2025-10-27", "2026-06-30"], "seed_sha256": "de14cf0a585caf0bf3d4475aff703cb94a8beedb3983a4c4148db94964e016ad"}
+score_exit=0
