@@ -103,6 +103,18 @@ def action_factor(action: CorporateAction) -> float | None:
     return None
 
 
+JUMP_LIMIT = 0.30                            # KRX daily price limit since 2015-06
+SHARE_ACTIONS = ("split", "bonus_issue", "capital_reduction")
+
+
+def unexplained(ratio: float, kinds: Sequence[str]) -> bool:
+    """A move beyond the daily limit with no share action in between: an unrecorded split, merger or error.
+
+    A limit-up or limit-down day can print a hair past 30% of the previous close (the limit is taken on the
+    exchange's base price and rounded to the tick), so the line sits half a point beyond the limit."""
+    return abs(ratio - 1) > JUMP_LIMIT + 0.005 and not any(k in SHARE_ACTIONS for k in kinds)
+
+
 def common_stock(symbol: str) -> bool:
     return len(symbol) == 6 and symbol.isdigit() and symbol.endswith("0")
 
@@ -187,19 +199,27 @@ def _universe(bars: dict, sessions: list[date], k: int, states: dict) -> dict[st
             for s in common if common_stock(s) and _eligible(states.get(s))}
 
 
-def backtest(data: Any, cost_bps: float, trace: list | None = None) -> dict[str, Any]:
+def backtest(data: Any, cost_bps: float, trace: list | None = None, strict: bool = True) -> dict[str, Any]:
     """Run A on a ResearchInput: daily NAVs of the strategy and the 069500 benchmark, fills and counts.
 
-    With ``trace``, each session after the open appends (day, NAV, {symbol: (shares, mark, close or None)})
-    for the diagnosis; the run itself is the same with or without it."""
+    With ``trace``, each session appends (day, NAV, {symbol: (shares, mark, close, open)}) for every name
+    held into or out of that session (close/open None without a bar) for the diagnosis; the run itself is
+    the same with or without it.
+
+    ``strict``: a held name whose open (or close) moves beyond the daily limit from its last close with no
+    split, bonus issue or capital reduction in between stops the run (rule 3: an unrecorded share change
+    must not be booked as profit or loss). The diagnosis passes False and gets the cases in ``jumps``."""
     sessions = list(data.sessions)
     bars: dict[date, dict[str, Any]] = defaultdict(dict)
     for bar in data.snapshot.bars:
         bars[bar.session][bar.symbol] = bar
     actions_by_day: dict[date, list[CorporateAction]] = defaultdict(list)
+    data_actions: dict[str, list[CorporateAction]] = defaultdict(list)
+    jumps: list[dict[str, Any]] = []
     factor_at: dict[str, list[tuple[date, datetime, float]]] = defaultdict(list)
     for announced in data.actions:
         a = announced.action
+        data_actions[a.security_id].append(a)
         actions_by_day[a.ex_date].append(a)
         if a.pay_date is not None and a.pay_date != a.ex_date and a.action_type in ("cash_dividend", "bonus_issue"):
             actions_by_day[a.pay_date].append(a)
@@ -224,6 +244,7 @@ def backtest(data: Any, cost_bps: float, trace: list | None = None) -> dict[str,
         today = bars.get(day, {})
         opens = {s: b.open for s, b in today.items() if b.open > 0}
         close_px = {s: b.close for s, b in today.items() if b.close > 0}
+        held_open = {s for s, q in book.positions.items() if q > 0}   # for the trace: names held into today
         if k > 0:
             prev = sessions[k - 1]
 
@@ -241,6 +262,17 @@ def backtest(data: Any, cost_bps: float, trace: list | None = None) -> dict[str,
                         if a.ex_date == day and a.action_type in ("split", "bonus_issue", "capital_reduction")}
             counts["orders_deferred_action"] += sum(o.security_id in reshaped for o in pending)
             pending = [o for o in pending if o.security_id not in reshaped]
+            for s in sorted(q for q, n in book.positions.items() if n > 0 and q in today):
+                last_day, last_close = closes[s][-1]
+                px = float(today[s].open) if today[s].open > 0 else float(today[s].close)
+                kinds = [a.action_type for a in data_actions.get(s, []) if last_day < a.ex_date <= day]
+                if unexplained(px / last_close, kinds):
+                    jumps.append({"symbol": s, "last_day": last_day.isoformat(), "day": day.isoformat(),
+                                  "ratio": px / last_close})
+                    if strict:
+                        raise SpecUndefinedError(
+                            f"held {s} moved x{px / last_close:.3f} from {last_day} to {day} with no recorded "
+                            "share action: an unrecorded split, merger or data error (rule 3, not booked)")
             book.step_session(day, prev, actions_by_day.get(day, []), pending, opens, adv, close_px)
             bench.step_session(day, prev, [], bench_pending, opens, _adv(bars, lookback, bench_pending), close_px)
         for s, b in today.items():
@@ -298,9 +330,12 @@ def backtest(data: Any, cost_bps: float, trace: list | None = None) -> dict[str,
                     pending.append(TargetOrder(s, "buy", qty, rank))
                     free -= 1
         if trace is not None and day >= FIRST_TRADE:
-            trace.append((day, float(book.nav), {s: (q, float(book.marks.get(s, 0)), float(today[s].close)
-                                                     if s in today else None)
-                                                 for s, q in book.positions.items() if q > 0}))
+            names = held_open | {s for s, q in book.positions.items() if q > 0}
+            trace.append((day, float(book.nav),
+                          {s: (book.positions.get(s, 0), float(book.marks.get(s, 0)),
+                               float(today[s].close) if s in today else None,
+                               float(today[s].open) if s in today and today[s].open > 0 else None)
+                           for s in names}))
         if day >= FIRST_TRADE:
             out["days"].append(day)
             out["nav"].append(float(book.nav))
@@ -310,6 +345,7 @@ def backtest(data: Any, cost_bps: float, trace: list | None = None) -> dict[str,
     out["fractions_dropped"] = len(book.fractions_dropped)
     out["held_at_end"] = sum(1 for q in book.positions.values() if q > 0)
     out["waited_symbols"] = sorted(waited)
+    out["jumps"] = jumps
     return out
 
 
