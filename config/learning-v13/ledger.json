@@ -2857,19 +2857,24 @@
     "2023-06-30"
    ],
    "dev": {
-    "t": null,
+    "t": -0.48,
     "net_return": null,
     "mean_daily": null
    },
    "cost_version": "왕복 73bp(편도 36.5bp ×2)",
    "id": "v23/golden_bull_h20",
    "name": "골든크로스+정배열 사건, 20세션 069500 대비 순초과",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-30",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "우위 없음: 개발 묶음 평균 −0.56%, 확인 −4.78%"
     }
    ]
   },
@@ -2883,19 +2888,24 @@
     "2023-06-30"
    ],
    "dev": {
-    "t": null,
+    "t": -1.74,
     "net_return": null,
     "mean_daily": null
    },
    "cost_version": "왕복 73bp(편도 36.5bp ×2)",
    "id": "v23/golden_h20",
    "name": "골든크로스 사건, 20세션 069500 대비 순초과",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-10-30",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "우위 없음: 개발 묶음 평균 −1.88%, 확인 −5.34%"
     }
    ]
   }

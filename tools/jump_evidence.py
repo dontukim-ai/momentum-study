@@ -7,7 +7,7 @@ Mac, read-only, writes nothing (FSC quotes and OpenDART lists already collected 
 
 For every jump ``tools/input_audit.py`` finds, two independent pieces of evidence:
 - the listed share count (FSC ``lstgStCnt``) on the last bar before the jump and on the jump bar;
-- OpenDART filings of that stock (any collected list type) from 183 days before the last bar to the jump
+- OpenDART filings of that stock (list types B and I) from 183 days before the last bar to the jump
   bar whose title names a share-changing event (merger, split, reduction, bonus issue, relisting ...).
 Each jump gets one label:
 - ``share_change_consistent``: the share count changed and price x shares moved within the daily limit,
@@ -105,6 +105,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--fsc-root", type=Path, default=Path("data/krx/raw/fsc"))
     parser.add_argument("--dart-root", type=Path, default=Path("data/krx/raw"))
+    parser.add_argument("--types", default="B,I",
+                        help="OpenDART list types: B (major events) and I (exchange) carry the share-changing "
+                             "decisions and are the ones the action pipelines already parse")
     args = parser.parse_args(argv)
     from momentum.agent.cli import read_input
     from momentum.krx.dart_collect import list_pages
@@ -126,7 +129,7 @@ def main(argv: list[str] | None = None) -> int:
                     int(count) if re.fullmatch(r"\d+", count) and int(count) > 0 else None)
         return cache[day].get(symbol)
 
-    kinds = sorted(p.name for p in (args.dart_root / "dart_list").glob("*") if p.is_dir())
+    kinds = [k for k in args.types.split(",") if (args.dart_root / "dart_list" / k).is_dir()]
     events = parse_list_pages([page for kind in kinds for page in list_pages(args.dart_root, kind)])
     print(f"OpenDART list types read: {', '.join(kinds) or 'none'} ({len(events)} filings)")
     result = evidence(data, shares_at, events)
