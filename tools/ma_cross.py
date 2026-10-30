@@ -108,8 +108,11 @@ SHARE_ACTIONS = ("split", "bonus_issue", "capital_reduction")
 
 
 def unexplained(ratio: float, kinds: Sequence[str]) -> bool:
-    """A move beyond the daily limit with no share action in between: an unrecorded split, merger or error."""
-    return abs(ratio - 1) > JUMP_LIMIT and not any(k in SHARE_ACTIONS for k in kinds)
+    """A move beyond the daily limit with no share action in between: an unrecorded split, merger or error.
+
+    A limit-up or limit-down day can print a hair past 30% of the previous close (the limit is taken on the
+    exchange's base price and rounded to the tick), so the line sits half a point beyond the limit."""
+    return abs(ratio - 1) > JUMP_LIMIT + 0.005 and not any(k in SHARE_ACTIONS for k in kinds)
 
 
 def common_stock(symbol: str) -> bool:
@@ -199,8 +202,9 @@ def _universe(bars: dict, sessions: list[date], k: int, states: dict) -> dict[st
 def backtest(data: Any, cost_bps: float, trace: list | None = None, strict: bool = True) -> dict[str, Any]:
     """Run A on a ResearchInput: daily NAVs of the strategy and the 069500 benchmark, fills and counts.
 
-    With ``trace``, each session after the open appends (day, NAV, {symbol: (shares, mark, close or None)})
-    for the diagnosis; the run itself is the same with or without it.
+    With ``trace``, each session appends (day, NAV, {symbol: (shares, mark, close, open)}) for every name
+    held into or out of that session (close/open None without a bar) for the diagnosis; the run itself is
+    the same with or without it.
 
     ``strict``: a held name whose open (or close) moves beyond the daily limit from its last close with no
     split, bonus issue or capital reduction in between stops the run (rule 3: an unrecorded share change
@@ -240,6 +244,7 @@ def backtest(data: Any, cost_bps: float, trace: list | None = None, strict: bool
         today = bars.get(day, {})
         opens = {s: b.open for s, b in today.items() if b.open > 0}
         close_px = {s: b.close for s, b in today.items() if b.close > 0}
+        held_open = {s for s, q in book.positions.items() if q > 0}   # for the trace: names held into today
         if k > 0:
             prev = sessions[k - 1]
 
@@ -325,9 +330,12 @@ def backtest(data: Any, cost_bps: float, trace: list | None = None, strict: bool
                     pending.append(TargetOrder(s, "buy", qty, rank))
                     free -= 1
         if trace is not None and day >= FIRST_TRADE:
-            trace.append((day, float(book.nav), {s: (q, float(book.marks.get(s, 0)), float(today[s].close)
-                                                     if s in today else None)
-                                                 for s, q in book.positions.items() if q > 0}))
+            names = held_open | {s for s, q in book.positions.items() if q > 0}
+            trace.append((day, float(book.nav),
+                          {s: (book.positions.get(s, 0), float(book.marks.get(s, 0)),
+                               float(today[s].close) if s in today else None,
+                               float(today[s].open) if s in today and today[s].open > 0 else None)
+                           for s in names}))
         if day >= FIRST_TRADE:
             out["days"].append(day)
             out["nav"].append(float(book.nav))
