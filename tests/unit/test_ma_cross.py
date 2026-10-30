@@ -270,3 +270,46 @@ def test_an_unrecorded_share_change_on_a_held_name_stops_the_run():
     assert [(j["symbol"], j["day"]) for j in loose["jumps"]] == [("005930", sessions[jump_at].isoformat())]
     assert ma.unexplained(45.0, []) and not ma.unexplained(45.0, ["capital_reduction"])
     assert not ma.unexplained(1.29, []) and ma.unexplained(0.69, ["cash_dividend"])
+
+
+def rising_after_dip(n, then):
+    """Long uptrend with a dip so MA20 falls under MA60, then a recovery that crosses back while MA5>20>60>120,
+    followed by ``then`` (a list of closes)."""
+    base = [100 + k * 0.5 for k in range(160)]                      # MA120 well below by the end
+    dip = [base[-1] - 1.0 * k for k in range(1, 21)]                # MA20 dips under MA60, MA60 stays above MA120
+    up = [dip[-1] + 2.0 * k for k in range(1, 60)]                  # recovery: golden cross while aligned
+    path = base + dip + up
+    return (path + then + [then[-1]] * n)[:n]
+
+
+def first_golden_bull(path):
+    for k in range(ma.HISTORY, len(path)):
+        sig = ma.signals(path[:k + 1])
+        if sig["cross"] == "golden" and sig["alignment"] == "bull":
+            return k
+    return None
+
+
+@pytest.mark.parametrize(("move", "kind"), [(-0.051, "stop_exits"), (0.21, "take_exits")])
+def test_v21_buys_a_golden_cross_in_bull_alignment_and_exits_on_stop_or_take(move, kind):
+    probe = rising_after_dip(300, [200.0])
+    k_gc = first_golden_bull(probe)
+    assert k_gc is not None
+    entry = probe[k_gc + 1]                                          # the open after the cross (open = close here)
+    path = probe[:k_gc + 4] + [entry * (1 + move)] * (300 - k_gc - 4)
+    sessions = weekdays(300)
+    data, _ = make_data({"005930": path, "069500": [10000] * 300}, n=300)
+    result = ma.backtest(data, 36.5, rule=ma.RULES["v21"])
+    fills = [f for f in result["fills"] if f.security_id == "005930" and f.shares > 0]
+    assert [f.side for f in fills] == ["buy", "sell"]
+    assert fills[0].session_date == sessions[k_gc + 1]
+    assert fills[1].session_date == sessions[k_gc + 5]               # decided on the first close past the line
+    assert result["counts"][kind] == 1 and result["counts"]["dead_exits"] == 0
+
+
+def test_v21_ignores_a_golden_cross_without_bull_alignment():
+    path = path_down_up_down(220)                                    # crosses while MA120 is still above
+    data, _ = make_data({"005930": path, "069500": [10000] * 220})
+    result = ma.backtest(data, 36.5, rule=ma.RULES["v21"])
+    assert not [f for f in result["fills"] if f.security_id == "005930" and f.shares > 0]
+    assert ma.backtest(make_data({"005930": path, "069500": [10000] * 220})[0], 36.5)["counts"]["dead_exits"] == 1

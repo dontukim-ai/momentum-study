@@ -1,9 +1,10 @@
-"""v20 A: buy on a 20/60 golden cross, sell on the dead cross (docs/blueprint/ma-cross-v20.md).
+"""v20 A: buy on a 20/60 golden cross, sell on the dead cross; v21: buy the cross only in MA5>20>60>120
+alignment, sell at a close 5% below or 20% above the entry fill (docs/blueprint/ma-cross-v20.md).
 
 Mac, read-only, run once (a record file stops a second run):
 
     uv run --extra agent python tools/ma_cross.py --input data/krx/research-fwd-full \
-        --record data/krx/ma-cross-v20/run.json
+        --record data/krx/ma-cross-v20/run.json            (--variant v21 --record data/krx/ma-cross-v21/run.json)
 
 Moving averages use closes divided back through confirmed splits, bonus
 issues and capital reductions (actions published by the decision). Each
@@ -23,6 +24,7 @@ import math
 import statistics
 from collections import defaultdict
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import date, datetime, time
 from decimal import ROUND_FLOOR, Decimal
 from itertools import pairwise
@@ -103,6 +105,17 @@ def action_factor(action: CorporateAction) -> float | None:
     return None
 
 
+@dataclass(frozen=True)
+class Rule:
+    """Entry and exit of one preregistered variant; the engine, universe, sizing and costs are shared."""
+    name: str
+    entry: str = "golden"          # "golden": 20/60 golden cross; "golden_bull": the cross on a day MA5>20>60>120
+    exit: str = "dead"             # "dead": the 20/60 dead cross; "stop_take": close vs entry price
+    stop: float = 0.05             # stop_take: sell once the close is more than 5% below the entry price
+    take: float = 0.20             # stop_take: sell once the close is 20% or more above it
+
+
+RULES = {"v20": Rule("v20"), "v21": Rule("v21", entry="golden_bull", exit="stop_take")}
 JUMP_LIMIT = 0.30                            # KRX daily price limit since 2015-06
 SHARE_ACTIONS = ("split", "bonus_issue", "capital_reduction")
 
@@ -199,7 +212,8 @@ def _universe(bars: dict, sessions: list[date], k: int, states: dict) -> dict[st
             for s in common if common_stock(s) and _eligible(states.get(s))}
 
 
-def backtest(data: Any, cost_bps: float, trace: list | None = None, strict: bool = True) -> dict[str, Any]:
+def backtest(data: Any, cost_bps: float, trace: list | None = None, strict: bool = True,
+             rule: Rule = RULES["v20"]) -> dict[str, Any]:
     """Run A on a ResearchInput: daily NAVs of the strategy and the 069500 benchmark, fills and counts.
 
     With ``trace``, each session appends (day, NAV, {symbol: (shares, mark, close, open)}) for every name
@@ -233,13 +247,14 @@ def backtest(data: Any, cost_bps: float, trace: list | None = None, strict: bool
     closes: dict[str, list[tuple[date, float]]] = defaultdict(list)
     counts = {"golden_in_top": 0, "dead_exits": 0, "entries_skipped_full": 0, "forced_exits": 0,
               "written_off": 0, "orders_waiting_no_adv": 0,
-              "orders_deferred_action": 0}
+              "orders_deferred_action": 0, "stop_exits": 0, "take_exits": 0}
     out: dict[str, Any] = {"days": [], "nav": [], "bench": []}
     pending: list[TargetOrder] = []
     bench_pending: list[TargetOrder] = []
     exiting: set[str] = set()
     waited: set[str] = set()                     # names whose orders waited for volume (long suspensions)
-    need = LONG + 1                                # a 20/60 cross needs 61 consecutive sessions
+    need = HISTORY if rule.entry == "golden_bull" else LONG + 1   # 121 for MA120 alignment, 61 for the cross
+    entry_px: dict[str, float] = {}                # stop_take: fill price, rescaled by share actions
     for k, day in enumerate(sessions):
         today = bars.get(day, {})
         opens = {s: b.open for s, b in today.items() if b.open > 0}
@@ -273,7 +288,17 @@ def backtest(data: Any, cost_bps: float, trace: list | None = None, strict: bool
                         raise SpecUndefinedError(
                             f"held {s} moved x{px / last_close:.3f} from {last_day} to {day} with no recorded "
                             "share action: an unrecorded split, merger or data error (rule 3, not booked)")
+            before = len(book.fills)
             book.step_session(day, prev, actions_by_day.get(day, []), pending, opens, adv, close_px)
+            for a in actions_by_day.get(day, []):
+                f = action_factor(a)
+                if a.ex_date == day and f and a.security_id in entry_px:
+                    entry_px[a.security_id] /= f
+            for fill in book.fills[before:]:
+                if fill.side == "buy" and fill.shares > 0:
+                    entry_px[fill.security_id] = float(fill.price)
+            for s_ in [s_ for s_ in entry_px if not book.positions.get(s_)]:
+                entry_px.pop(s_)
             bench.step_session(day, prev, [], bench_pending, opens, _adv(bars, lookback, bench_pending), close_px)
         for s, b in today.items():
             closes[s].append((day, float(b.close)))
@@ -298,6 +323,13 @@ def backtest(data: Any, cost_bps: float, trace: list | None = None, strict: bool
                 exiting.add(s)
                 counts["forced_exits"] += 1
             series = closes.get(s, [])
+            if rule.exit == "stop_take" and s in held:
+                if s not in exiting and series and series[-1][0] == day and s in entry_px:
+                    move = series[-1][1] / entry_px[s] - 1
+                    if move < -rule.stop or move >= rule.take:
+                        exiting.add(s)
+                        counts["stop_exits" if move < 0 else "take_exits"] += 1
+                continue
             if not series or series[-1][0] != day or len(series) < need or series[-need][0] != sessions[k - need + 1]:
                 continue
             window = series[-need:]
@@ -306,6 +338,8 @@ def backtest(data: Any, cost_bps: float, trace: list | None = None, strict: bool
             adjusted = adjust([c for _, c in window], factors)
             signal = cross(sma(adjusted[:-1], SHORT), sma(adjusted[:-1], LONG),  # type: ignore[arg-type]
                            sma(adjusted, SHORT), sma(adjusted, LONG))  # type: ignore[arg-type]
+            if rule.entry == "golden_bull" and signal == "golden" and signals(adjusted)["alignment"] != "bull":
+                signal = None
             if s in held:
                 if signal == "dead" and s not in exiting:
                     exiting.add(s)
@@ -366,15 +400,18 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--record", type=Path, required=True, help="written once; an existing record stops the run")
+    parser.add_argument("--variant", choices=sorted(RULES), default="v20")
     args = parser.parse_args(argv)
     if args.record.exists():
-        raise SpecUndefinedError(f"{args.record} exists: the v20 backtest is recorded once")
+        raise SpecUndefinedError(f"{args.record} exists: the {args.variant} backtest is recorded once")
     from momentum.agent.cli import read_input
 
     root = args.input
     data = read_input(root / "prices.csv", root / "securities.jsonl", root / "actions.json", root / "sessions.json",
                       securities_mode="session-confirmed")
-    out = {name: report(backtest(data, bps)) for name, bps in COSTS.items()}
+    rule = RULES[args.variant]
+    out = {name: report(backtest(data, bps, rule=rule)) for name, bps in COSTS.items()}
+    print(f"variant {rule}")
     for name, rep in out.items():
         print(f"== {name} ({COSTS[name]} bp one way)  E1 pass: {rep['e1_pass']}  dev excess t {rep['dev_excess_t']:.2f}")
         for period, row in rep["periods"].items():
@@ -383,7 +420,8 @@ def main(argv: list[str] | None = None) -> int:
                   f"MDD {row['069500_mdd']:.2%} | excess t {row['excess_t']:.2f}")
         print(f"trades {rep['trades']}  counts {rep['counts']}")
     args.record.parent.mkdir(parents=True, exist_ok=True)
-    args.record.write_text(json.dumps(out, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    args.record.write_text(json.dumps({"variant": args.variant, **out}, sort_keys=True, default=str) + "\n",
+                           encoding="utf-8")
     print(json.dumps(out, sort_keys=True, default=str))
     return 0
 
