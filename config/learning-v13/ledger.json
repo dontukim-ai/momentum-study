@@ -2226,6 +2226,626 @@
      "reason": "E1 불통과: 연 −4.1%(앞)·−5.6%(뒤) vs 069500 +12.4%·+32.7%, 손절 967·익절 281"
     }
    ]
+  },
+  {
+   "id": "v22/s3t10",
+   "study": "v22",
+   "family": "v22 grid",
+   "name": "골든크로스+정배열, 손절 3%·익절 10%",
+   "kind": "strategy",
+   "registered": "2026-10-30",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-30",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "안전장치 정지: 기록 없는 주식 수 변화 보유(024810 또는 017670), 평가 불가"
+    }
+   ]
+  },
+  {
+   "id": "v22/s3t20",
+   "study": "v22",
+   "family": "v22 grid",
+   "name": "골든크로스+정배열, 손절 3%·익절 20%",
+   "kind": "strategy",
+   "registered": "2026-10-30",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-30",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "안전장치 정지: 기록 없는 주식 수 변화 보유(024810 또는 017670), 평가 불가"
+    }
+   ]
+  },
+  {
+   "id": "v22/s3t30",
+   "study": "v22",
+   "family": "v22 grid",
+   "name": "골든크로스+정배열, 손절 3%·익절 30%",
+   "kind": "strategy",
+   "registered": "2026-10-30",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-30",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "안전장치 정지: 기록 없는 주식 수 변화 보유(024810 또는 017670), 평가 불가"
+    }
+   ]
+  },
+  {
+   "id": "v22/s3t50",
+   "study": "v22",
+   "family": "v22 grid",
+   "name": "골든크로스+정배열, 손절 3%·익절 50%",
+   "kind": "strategy",
+   "registered": "2026-10-30",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-30",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "안전장치 정지: 기록 없는 주식 수 변화 보유(024810 또는 017670), 평가 불가"
+    }
+   ]
+  },
+  {
+   "id": "v22/s5t10",
+   "study": "v22",
+   "family": "v22 grid",
+   "name": "골든크로스+정배열, 손절 5%·익절 10%",
+   "kind": "strategy",
+   "registered": "2026-10-30",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-30",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "안전장치 정지: 기록 없는 주식 수 변화 보유(024810 또는 017670), 평가 불가"
+    }
+   ]
+  },
+  {
+   "id": "v22/s5t20",
+   "study": "v22",
+   "family": "v22 grid",
+   "name": "골든크로스+정배열, 손절 5%·익절 20%",
+   "kind": "strategy",
+   "registered": "2026-10-30",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": -1.72,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-30",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "v22 개발 격자에서 선택되지 않음"
+    }
+   ]
+  },
+  {
+   "id": "v22/s5t30",
+   "study": "v22",
+   "family": "v22 grid",
+   "name": "골든크로스+정배열, 손절 5%·익절 30%",
+   "kind": "strategy",
+   "registered": "2026-10-30",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-30",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "안전장치 정지: 기록 없는 주식 수 변화 보유(024810 또는 017670), 평가 불가"
+    }
+   ]
+  },
+  {
+   "id": "v22/s5t50",
+   "study": "v22",
+   "family": "v22 grid",
+   "name": "골든크로스+정배열, 손절 5%·익절 50%",
+   "kind": "strategy",
+   "registered": "2026-10-30",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-30",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "안전장치 정지: 기록 없는 주식 수 변화 보유(024810 또는 017670), 평가 불가"
+    }
+   ]
+  },
+  {
+   "id": "v22/s7t10",
+   "study": "v22",
+   "family": "v22 grid",
+   "name": "골든크로스+정배열, 손절 7%·익절 10%",
+   "kind": "strategy",
+   "registered": "2026-10-30",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-30",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "안전장치 정지: 기록 없는 주식 수 변화 보유(024810 또는 017670), 평가 불가"
+    }
+   ]
+  },
+  {
+   "id": "v22/s7t20",
+   "study": "v22",
+   "family": "v22 grid",
+   "name": "골든크로스+정배열, 손절 7%·익절 20%",
+   "kind": "strategy",
+   "registered": "2026-10-30",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-30",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "안전장치 정지: 기록 없는 주식 수 변화 보유(024810 또는 017670), 평가 불가"
+    }
+   ]
+  },
+  {
+   "id": "v22/s7t30",
+   "study": "v22",
+   "family": "v22 grid",
+   "name": "골든크로스+정배열, 손절 7%·익절 30%",
+   "kind": "strategy",
+   "registered": "2026-10-30",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-30",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "안전장치 정지: 기록 없는 주식 수 변화 보유(024810 또는 017670), 평가 불가"
+    }
+   ]
+  },
+  {
+   "id": "v22/s7t50",
+   "study": "v22",
+   "family": "v22 grid",
+   "name": "골든크로스+정배열, 손절 7%·익절 50%",
+   "kind": "strategy",
+   "registered": "2026-10-30",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-30",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "안전장치 정지: 기록 없는 주식 수 변화 보유(024810 또는 017670), 평가 불가"
+    }
+   ]
+  },
+  {
+   "id": "v22/s10t10",
+   "study": "v22",
+   "family": "v22 grid",
+   "name": "골든크로스+정배열, 손절 10%·익절 10%",
+   "kind": "strategy",
+   "registered": "2026-10-30",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-30",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "안전장치 정지: 기록 없는 주식 수 변화 보유(024810 또는 017670), 평가 불가"
+    }
+   ]
+  },
+  {
+   "id": "v22/s10t20",
+   "study": "v22",
+   "family": "v22 grid",
+   "name": "골든크로스+정배열, 손절 10%·익절 20%",
+   "kind": "strategy",
+   "registered": "2026-10-30",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": -1.86,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-30",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "v22 개발 격자에서 선택되지 않음"
+    }
+   ]
+  },
+  {
+   "id": "v22/s10t30",
+   "study": "v22",
+   "family": "v22 grid",
+   "name": "골든크로스+정배열, 손절 10%·익절 30%",
+   "kind": "strategy",
+   "registered": "2026-10-30",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": -2.12,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-30",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "v22 개발 격자에서 선택되지 않음"
+    }
+   ]
+  },
+  {
+   "id": "v22/s10t50",
+   "study": "v22",
+   "family": "v22 grid",
+   "name": "골든크로스+정배열, 손절 10%·익절 50%",
+   "kind": "strategy",
+   "registered": "2026-10-30",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": -1.38,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-30",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "확인 불통과, 사용자 결정으로 전진 기록 중단"
+    }
+   ]
+  },
+  {
+   "id": "v22/s15t10",
+   "study": "v22",
+   "family": "v22 grid",
+   "name": "골든크로스+정배열, 손절 15%·익절 10%",
+   "kind": "strategy",
+   "registered": "2026-10-30",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-30",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "안전장치 정지: 기록 없는 주식 수 변화 보유(024810 또는 017670), 평가 불가"
+    }
+   ]
+  },
+  {
+   "id": "v22/s15t20",
+   "study": "v22",
+   "family": "v22 grid",
+   "name": "골든크로스+정배열, 손절 15%·익절 20%",
+   "kind": "strategy",
+   "registered": "2026-10-30",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": -2.25,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-30",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "v22 개발 격자에서 선택되지 않음"
+    }
+   ]
+  },
+  {
+   "id": "v22/s15t30",
+   "study": "v22",
+   "family": "v22 grid",
+   "name": "골든크로스+정배열, 손절 15%·익절 30%",
+   "kind": "strategy",
+   "registered": "2026-10-30",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": -2.56,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-30",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "v22 개발 격자에서 선택되지 않음"
+    }
+   ]
+  },
+  {
+   "id": "v22/s15t50",
+   "study": "v22",
+   "family": "v22 grid",
+   "name": "골든크로스+정배열, 손절 15%·익절 50%",
+   "kind": "strategy",
+   "registered": "2026-10-30",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": -2.43,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-30",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "v22 개발 격자에서 선택되지 않음"
+    }
+   ]
   }
  ],
  "curve": []
