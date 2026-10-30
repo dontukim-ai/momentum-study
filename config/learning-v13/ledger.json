@@ -2195,6 +2195,37 @@
      "reason": "E1 불통과: 앞 절반 낙폭 68.7%>35.0%, 뒤 절반 연 +5.2% < 069500 +32.7%. 변동성 이상(122%)으로 진단 중"
     }
    ]
+  },
+  {
+   "id": "v21/GCBULL SL5 TP20",
+   "study": "v21",
+   "family": "v21 GCBULL",
+   "name": "골든크로스+정배열 매수, 종가 −5% 손절·+20% 익절, 상위 300",
+   "kind": "strategy",
+   "registered": "2026-10-30",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": -1.72,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-10-30",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-10-30",
+     "reason": "E1 불통과: 연 −4.1%(앞)·−5.6%(뒤) vs 069500 +12.4%·+32.7%, 손절 967·익절 281"
+    }
+   ]
   }
  ],
  "curve": []
