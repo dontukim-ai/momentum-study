@@ -213,7 +213,8 @@ def _universe(bars: dict, sessions: list[date], k: int, states: dict) -> dict[st
 
 
 def backtest(data: Any, cost_bps: float, trace: list | None = None, strict: bool = True,
-             rule: Rule = RULES["v20"]) -> dict[str, Any]:
+             rule: Rule = RULES["v20"], first_trade: date = FIRST_TRADE,
+             last_day: date | None = None) -> dict[str, Any]:
     """Run A on a ResearchInput: daily NAVs of the strategy and the 069500 benchmark, fills and counts.
 
     With ``trace``, each session appends (day, NAV, {symbol: (shares, mark, close, open)}) for every name
@@ -223,10 +224,13 @@ def backtest(data: Any, cost_bps: float, trace: list | None = None, strict: bool
     ``strict``: a held name whose open (or close) moves beyond the daily limit from its last close with no
     split, bonus issue or capital reduction in between stops the run (rule 3: an unrecorded share change
     must not be booked as profit or loss). The diagnosis passes False and gets the cases in ``jumps``."""
-    sessions = list(data.sessions)
+    # ``first_trade``: no order fills before it (a forward record starts here); ``last_day``: sessions after it
+    # are never read (a development-only run cannot see the validation half)
+    sessions = [d for d in data.sessions if last_day is None or d <= last_day]
     bars: dict[date, dict[str, Any]] = defaultdict(dict)
     for bar in data.snapshot.bars:
-        bars[bar.session][bar.symbol] = bar
+        if last_day is None or bar.session <= last_day:
+            bars[bar.session][bar.symbol] = bar
     actions_by_day: dict[date, list[CorporateAction]] = defaultdict(list)
     data_actions: dict[str, list[CorporateAction]] = defaultdict(list)
     jumps: list[dict[str, Any]] = []
@@ -304,7 +308,7 @@ def backtest(data: Any, cost_bps: float, trace: list | None = None, strict: bool
             closes[s].append((day, float(b.close)))
         pending, bench_pending = [], []
         nxt = sessions[k + 1] if k + 1 < len(sessions) else None
-        trading = nxt is not None and nxt >= FIRST_TRADE
+        trading = nxt is not None and nxt >= first_trade
         if trading and not bench.positions.get(MARKET_ETF) and MARKET_ETF in today:
             qty = int((CAPITAL * Decimal("0.95") / today[MARKET_ETF].close).to_integral_value(ROUND_FLOOR))
             bench_pending = [TargetOrder(MARKET_ETF, "buy", qty, 0)]
@@ -363,14 +367,14 @@ def backtest(data: Any, cost_bps: float, trace: list | None = None, strict: bool
                 if qty > 0:
                     pending.append(TargetOrder(s, "buy", qty, rank))
                     free -= 1
-        if trace is not None and day >= FIRST_TRADE:
+        if trace is not None and day >= first_trade:
             names = held_open | {s for s, q in book.positions.items() if q > 0}
             trace.append((day, float(book.nav),
                           {s: (book.positions.get(s, 0), float(book.marks.get(s, 0)),
                                float(today[s].close) if s in today else None,
                                float(today[s].open) if s in today and today[s].open > 0 else None)
                            for s in names}))
-        if day >= FIRST_TRADE:
+        if day >= first_trade:
             out["days"].append(day)
             out["nav"].append(float(book.nav))
             out["bench"].append(float(bench.nav))
