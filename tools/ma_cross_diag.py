@@ -42,8 +42,8 @@ def _load(name: str) -> Any:
 
 
 ma = _load("ma_cross")
-LIMIT, TOP_DAYS, TOP_NAMES = 0.30, 20, 3
-SHARE_ACTIONS = ("split", "bonus_issue", "capital_reduction")
+TOP_DAYS, TOP_NAMES = 20, 3
+LIMIT, SHARE_ACTIONS = ma.JUMP_LIMIT, ma.SHARE_ACTIONS
 
 
 def diagnose(trace: list, actions: list) -> dict[str, Any]:
@@ -107,7 +107,7 @@ def main(argv: list[str] | None = None) -> int:
     data = read_input(root / "prices.csv", root / "securities.jsonl", root / "actions.json", root / "sessions.json",
                       securities_mode="session-confirmed")
     trace: list = []
-    ma.backtest(data, ma.COSTS["base"], trace)
+    ma.backtest(data, ma.COSTS["base"], trace, strict=False)
     result = diagnose(trace, list(data.actions))
     print(text(result))
     print(json.dumps(result, sort_keys=True, default=str))

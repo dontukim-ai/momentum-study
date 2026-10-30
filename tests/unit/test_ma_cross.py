@@ -255,3 +255,18 @@ def _random_market(seed):
 def test_random_markets_run_through_without_an_engine_refusal(seed):
     result = ma.backtest(_random_market(seed), 36.5)
     assert result["nav"] and all(v > 0 for v in result["nav"])
+
+
+def test_an_unrecorded_share_change_on_a_held_name_stops_the_run():
+    path = path_down_up_down(220)
+    sessions = weekdays(220)
+    marks = golden_and_dead_days(path, sessions)
+    jump_at = marks["golden"] + 5
+    raw = [p * 45 if k >= jump_at else p for k, p in enumerate(path)]   # a 45:1 merger nobody recorded
+    data, _ = make_data({"005930": raw, "069500": [10000] * 220})
+    with pytest.raises(ma.SpecUndefinedError, match="no recorded share action"):
+        ma.backtest(data, 36.5)
+    loose = ma.backtest(make_data({"005930": raw, "069500": [10000] * 220})[0], 36.5, strict=False)
+    assert [(j["symbol"], j["day"]) for j in loose["jumps"]] == [("005930", sessions[jump_at].isoformat())]
+    assert ma.unexplained(45.0, []) and not ma.unexplained(45.0, ["capital_reduction"])
+    assert not ma.unexplained(1.29, []) and ma.unexplained(0.69, ["cash_dividend"])
