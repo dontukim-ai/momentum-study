@@ -12,6 +12,14 @@ Anything that does not reconcile cleanly (no prior disclosure, preferred
 shares whose filing is under the common code, a ratio that is not a finite
 decimal) is reported and produces no action, so its price jump stays
 quarantined as an unexplained return.
+
+User decision 2026-11-01 (docs/blueprint/ma-cross-v20.md): a detection whose
+shares and base price do not agree on one ratio (``OTHER``) is no longer
+dropped silently. With a prior split or reverse-split filing in the
+direction of the move, the exchange's base-price ratio (a simple fraction
+within one tick) is taken when the listed-share ratio lies within 30% of it
+(odd lots, conversions and issues on the same day move the count); every
+other ``OTHER`` detection is reported as unresolved.
 """
 
 from __future__ import annotations
@@ -33,6 +41,13 @@ MAX_LEAD = timedelta(days=180)
 RATIO_BASIS = (
     "fsc listed shares and exchange base price agree (FIN-02a); filing text not parsed"
 )
+BASE_RATIO_BASIS = (
+    "exchange base price is a simple ratio; listed shares within 30% of it "
+    "(user decision 2026-11-01); filing text not parsed"
+)
+SHARE_BAND = Decimal("0.30")
+_TICK = Decimal("0.005")
+_MAX_DENOMINATOR = 10
 
 
 @dataclass(frozen=True)
@@ -51,6 +66,32 @@ def _finite_decimal(ratio: Fraction) -> Decimal | None:
     return Decimal(ratio.numerator) / Decimal(ratio.denominator)
 
 
+def _base_ratio(factor: Decimal) -> Fraction | None:
+    """The simple ratio the exchange base price moved by, within one tick (as FIN-02a)."""
+    if factor <= 0:
+        return None
+    upward = factor if factor >= 1 else 1 / factor
+    ratio = Fraction(str(upward)).limit_denominator(_MAX_DENOMINATOR)
+    if ratio == 1:
+        return None
+    ratio = ratio if factor >= 1 else 1 / ratio
+    target = Decimal(ratio.numerator) / Decimal(ratio.denominator)
+    return ratio if abs(factor - target) <= _TICK * target else None
+
+
+def _other(item: Adjustment, prior: list[DisclosureEvent]) -> tuple[str, str | None]:
+    """(reason, ratio) for an OTHER detection: a ratio only when the shares confirm the base price."""
+    if not prior:
+        return "other adjustment with no split filing", None
+    ratio = _base_ratio(item.factor)
+    if ratio is None:
+        return "base price is not a simple ratio", None
+    target = Decimal(ratio.numerator) / Decimal(ratio.denominator)
+    if item.share_ratio is None or abs(item.share_ratio - target) > SHARE_BAND * target:
+        return "listed shares do not confirm the base-price ratio", None
+    return "", str(ratio)
+
+
 def reconcile(
     adjustments: Iterable[Adjustment], disclosures: Iterable[DisclosureEvent]
 ) -> Reconciliation:
@@ -60,9 +101,13 @@ def reconcile(
             by_code.setdefault(event.stock_code, []).append(event)
     actions, unresolved = [], []
     for item in adjustments:
-        if item.kind not in {"SPLIT_LIKE", "REVERSE_SPLIT_LIKE"} or item.ratio is None:
+        other = item.kind == "OTHER"
+        if not other and (item.kind not in {"SPLIT_LIKE", "REVERSE_SPLIT_LIKE"} or item.ratio is None):
             continue
-        wanted = "STOCK_SPLIT" if item.kind == "SPLIT_LIKE" else "REVERSE_SPLIT"
+        if other:
+            wanted = "STOCK_SPLIT" if item.factor > 1 else "REVERSE_SPLIT"
+        else:
+            wanted = "STOCK_SPLIT" if item.kind == "SPLIT_LIKE" else "REVERSE_SPLIT"
         opening = KRX.open_at(item.session)
         prior = sorted(
             (
@@ -82,7 +127,17 @@ def reconcile(
             "kind": item.kind,
             "ratio": item.ratio,
         }
-        ratio = _finite_decimal(Fraction(item.ratio))
+        basis, chosen = RATIO_BASIS, item.ratio
+        if other:
+            reason, agreed = _other(item, prior)
+            if agreed is None:
+                unresolved.append({**base, "reason": reason, "factor": str(item.factor),
+                                   "share_ratio": None if item.share_ratio is None else str(item.share_ratio),
+                                   "disclosures": [e.rcept_no for e in prior]})
+                continue
+            base["ratio"], basis, chosen = agreed, BASE_RATIO_BASIS, agreed
+        assert chosen is not None
+        ratio = _finite_decimal(Fraction(chosen))
         if not prior:
             later = [
                 e.rcept_no
@@ -114,7 +169,7 @@ def reconcile(
                     "previous_close": str(item.previous_close),
                     "adjusted_base": str(item.adjusted_base),
                     "share_ratio": str(item.share_ratio),
-                    "ratio_basis": RATIO_BASIS,
+                    "ratio_basis": basis,
                 },
             }
         )

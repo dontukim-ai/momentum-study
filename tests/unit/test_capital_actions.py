@@ -347,3 +347,18 @@ def test_bonus_confirmed_by_whole_company_growth_when_treasury_excluded(tmp_path
     del details["20240314000001"]["nstk_ostk_cnt"]
     again = build(events(tmp_path), details, moved, SESSIONS, CONFIRMED)
     assert not [a for a in again.actions if a["action_type"] == "bonus_issue"]
+
+
+def test_reduction_confirmed_when_shares_and_price_sit_within_30pct_of_the_filing(tmp_path):
+    # 024810 2021-05-24: filing 10:1 (0.1), base moved 0.113964, shares 0.103480 (old 0.5% rule left it out)
+    loose = [dict(a) for a in ADJUSTMENTS]
+    loose[2] = {"session": "2024-05-22", "symbol": "049470", "factor": "0.113964", "share_ratio": "0.103480"}
+    result = build(events(tmp_path), DETAILS, loose, SESSIONS, CONFIRMED)
+    (reduction,) = [a for a in result.actions if a["action_type"] == "capital_reduction"]
+    assert D(reduction["split_ratio"]) == D("0.1")
+    assert reduction["ex_date"] == "2024-05-22" and "30%" in reduction["evidence"]["confirmed_by"]
+    # shares 20% off but the price five times off the filing: not this reduction
+    far = [dict(a) for a in ADJUSTMENTS]
+    far[2] = {"session": "2024-05-22", "symbol": "049470", "factor": "0.500000", "share_ratio": "0.120000"}
+    result = build(events(tmp_path), DETAILS, far, SESSIONS, CONFIRMED)
+    assert not [a for a in result.actions if a["action_type"] == "capital_reduction"]

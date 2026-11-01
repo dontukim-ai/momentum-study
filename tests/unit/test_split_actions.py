@@ -300,3 +300,41 @@ def test_preferred_class_inherits_common_split_of_same_issuer(tmp_path):
     assert by_code["001465"]["evidence"]["isin"] == preferred
     # Another issuer with no filing is not adopted.
     assert [u["symbol"] for u in result.unresolved] == ["009990"]
+
+
+def _adjustment(code, factor, share_ratio, day=date(2021, 5, 21)):
+    from momentum.krx.fsc_adjustments import Adjustment
+
+    return Adjustment(day, code, "KR7" + code + "000", date(2021, 4, 28), D(330),
+                      D(330) / D(factor), D(factor), None if share_ratio is None else D(share_ratio), "OTHER")
+
+
+def _filed(code, kind, day=date(2021, 3, 12)):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(stock_code=code, report_kind=kind, report_nm="주식병합결정", rcept_no=day.strftime("%Y%m%d") + "000001",
+                           is_correction=False, available_at=datetime(day.year, day.month, day.day, 18, tzinfo=KRX.timezone))
+
+
+def test_other_adjustment_takes_the_base_price_ratio_when_shares_confirm_it_within_30pct():
+    # 221610 2021-05-21: base 1/50 (factor 0.020000), listed shares x0.023091 (merger with other share changes)
+    result = reconcile([_adjustment("221610", "0.020000", "0.023091")], [_filed("221610", "REVERSE_SPLIT")])
+    (action,) = result.actions
+    assert action["split_ratio"] == "0.02" and action["ex_date"] == "2021-05-21"
+    assert action["available_at"] == datetime(2021, 3, 12, 18, tzinfo=KRX.timezone).isoformat()
+    assert "30%" in action["evidence"]["ratio_basis"]
+    # 060900 2023-06-01: base exactly 1/10, shares x1.011 apart
+    (exact,) = reconcile([_adjustment("060900", "0.100000", "0.101088")], [_filed("060900", "REVERSE_SPLIT")]).actions
+    assert exact["split_ratio"] == "0.1"
+
+
+def test_other_adjustments_that_do_not_confirm_are_reported_not_dropped():
+    # 017670 2021-11-29: split filing, base 5.79588 (29/5) but shares x3.04 (a spin-off too): outside the band
+    spun = reconcile([_adjustment("017670", "5.795880", "3.036813")], [_filed("017670", "STOCK_SPLIT")])
+    assert spun.actions == [] and spun.unresolved[0]["reason"] == "listed shares do not confirm the base-price ratio"
+    noisy = reconcile([_adjustment("000001", "0.731234", "0.700000")], [_filed("000001", "REVERSE_SPLIT")])
+    assert noisy.unresolved[0]["reason"] == "base price is not a simple ratio"
+    unfiled = reconcile([_adjustment("000002", "1.250000", "1.250000")], [])
+    assert unfiled.actions == [] and unfiled.unresolved[0]["reason"] == "other adjustment with no split filing"
+    missing = reconcile([_adjustment("000003", "0.100000", None)], [_filed("000003", "REVERSE_SPLIT")])
+    assert missing.unresolved[0]["reason"] == "listed shares do not confirm the base-price ratio"

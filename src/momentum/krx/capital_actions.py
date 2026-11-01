@@ -24,6 +24,11 @@ ratio the price does not confirm stays unresolved (2024: SNT에너지 announced
   0.1, base moved 0.1045; 031860 0.10 -> 0.0762). Treasury-share
   cancellations move no price and produce nothing; paid reductions (cash
   refunds) are not supported and stay unresolved.
+  User decision 2026-11-01: the share count also drifts on a relisting day
+  (odd lots, conversions; 024810 2021 0.1 -> 0.1035, 139050 2023 0.0667 ->
+  0.0738), so a day whose share ratio and base-price move both lie within
+  ``BAND`` (30%) of the filed fraction confirms it too; the filed fraction
+  is what the ledger applies.
 
 Subsidiary filings and filings without a listed stock code are ignored.
 """
@@ -46,6 +51,7 @@ from .dart_dividends import ex_dividend_date
 from .dart_events import DisclosureEvent
 
 TOLERANCE = Decimal("0.005")
+BAND = Decimal("0.30")
 # A reduction relists weeks after its record date (2024: 비트플래닛 record
 # 04-29, relisting planned 05-22); a price move later than this is not taken
 # as its effect.
@@ -291,9 +297,17 @@ def _reduction(
         if symbol == code and record <= day <= record + MAX_RELISTING_LAG
     )
 
-    def confirms(day: date) -> bool:
+    def strict(day: date) -> bool:
         ratio = shares.get((code, day))
         return ratio is not None and _close(ratio, remaining) and moves[(code, day)] < 1
+
+    def banded(day: date) -> bool:
+        ratio, move = shares.get((code, day)), moves[(code, day)]
+        return (ratio is not None and abs(ratio - remaining) <= BAND * remaining
+                and abs(move - remaining) <= BAND * remaining)
+
+    def confirms(day: date) -> bool:
+        return strict(day) or banded(day)
 
     candidates = [day for day in window if confirms(day)]
     if not candidates:
@@ -332,6 +346,8 @@ def _reduction(
             "planned_listing": latest.get("crsc_nstklstprd"),
             "price_factor": str(moves[(code, relisting)]),
             "share_ratio": str(shares[(code, relisting)]),
+            "confirmed_by": "listed shares within 0.5%" if strict(relisting)
+            else "listed shares and base price within 30% (user decision 2026-11-01)",
             "filings": base["filings"],
         },
     }
