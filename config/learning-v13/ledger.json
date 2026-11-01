@@ -3012,19 +3012,24 @@
     "2023-06-30"
    ],
    "dev": {
-    "t": null,
+    "t": -0.12,
     "net_return": null,
     "mean_daily": null
    },
    "cost_version": "편도 5bp(ETF, 매도세 없음)",
    "id": "v24b/ma60",
    "name": "069500 종가 > MA60이면 보유, 아니면 현금(2020-07 출발)",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-11-01",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-11-01",
+     "reason": "E1 불통과: 연수익 +6.32%·+32.13% vs 069500 +6.43%·+32.85%, 낙폭 24%·25% vs 35%·41%"
     }
    ]
   },
@@ -3038,19 +3043,24 @@
     "2023-06-30"
    ],
    "dev": {
-    "t": null,
+    "t": 0.92,
     "net_return": null,
     "mean_daily": null
    },
    "cost_version": "편도 5bp(ETF, 매도세 없음)",
    "id": "v24b/ma120",
    "name": "069500 종가 > MA120이면 보유, 아니면 현금(2020-07 출발)",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-11-01",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-11-01",
+     "reason": "E1 불통과: 뒤 절반 연수익 +24.55% vs +32.85%, 낙폭 47.8% vs 41.2%"
     }
    ]
   },
@@ -3064,19 +3074,24 @@
     "2023-06-30"
    ],
    "dev": {
-    "t": null,
+    "t": -0.64,
     "net_return": null,
     "mean_daily": null
    },
    "cost_version": "편도 5bp(ETF, 매도세 없음)",
    "id": "v24b/ma20_60",
    "name": "069500 MA20 > MA60이면 보유, 아니면 현금(2020-07 출발)",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-11-01",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-11-01",
+     "reason": "E1 불통과: 연수익 +2.68%·+30.74% vs +6.43%·+32.85%"
     }
    ]
   }
