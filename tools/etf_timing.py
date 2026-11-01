@@ -70,7 +70,8 @@ def hold(closes: Sequence[float], variant: str) -> bool | None:
     return closes[-1] > statistics.fmean(closes[-n:])
 
 
-def backtest(data: Any, variant: str, cost_bps: float, trace: list | None = None) -> dict[str, Any]:
+def backtest(data: Any, variant: str, cost_bps: float, trace: list | None = None,
+             first_trade: date = FIRST_TRADE) -> dict[str, Any]:
     """With ``trace``, each traded session appends (day, NAV, benchmark NAV, shares held, 069500 close) for the
     diagnosis; the run is the same with or without it."""
     if variant not in VARIANTS:
@@ -110,7 +111,7 @@ def backtest(data: Any, variant: str, cost_bps: float, trace: list | None = None
             closes.append((day, float(bar.close)))
         pending, bench_pending = [], []
         nxt = sessions[k + 1] if k + 1 < len(sessions) else None
-        if nxt is not None and nxt >= FIRST_TRADE and bar is not None:
+        if nxt is not None and nxt >= first_trade and bar is not None:
             if not bench.positions.get(ETF):
                 qty = int((ma.CAPITAL * INVESTED / bar.close).to_integral_value(ROUND_FLOOR))
                 bench_pending = [TargetOrder(ETF, "buy", qty, 0)]
@@ -121,7 +122,7 @@ def backtest(data: Any, variant: str, cost_bps: float, trace: list | None = None
             if want is None:
                 # no rule on the first trading decision would leave the variant in cash while the benchmark is
                 # invested; the input must start early enough instead
-                raise SpecUndefinedError(f"{variant} needs {NEED[variant]} closes before {FIRST_TRADE}, "
+                raise SpecUndefinedError(f"{variant} needs {NEED[variant]} closes before {first_trade}, "
                                          f"has {len(adjusted)} on {day}")
             held = book.positions.get(ETF, 0)
             if want and not held:
@@ -131,7 +132,7 @@ def backtest(data: Any, variant: str, cost_bps: float, trace: list | None = None
             elif want is False and held:
                 pending = [TargetOrder(ETF, "sell", held, -1)]
                 out["switches"] += 1
-        if day >= FIRST_TRADE:
+        if day >= first_trade:
             out["days"].append(day)
             out["nav"].append(float(book.nav))
             out["bench"].append(float(bench.nav))
@@ -155,11 +156,34 @@ def report(result: dict[str, Any]) -> dict[str, Any]:
             "dev_excess_t": table["first_half"].get("excess_t")}
 
 
+FORWARD_VARIANT = "ma60"                     # v25: the one variant recorded forward (docs, v25)
+FORWARD_FROM = date(2026, 11, 2)             # first session after the v25 registration
+
+
+def forward_report(data: Any, variant: str, cost_bps: float, start: date) -> dict[str, Any]:
+    """Both books start on ``start``; the window is ``start`` to the input's last session (v25)."""
+    run = backtest(data, variant, cost_bps, first_trade=start)
+    days = run["days"]
+    if len(days) < 2:
+        raise SpecUndefinedError(f"no forward sessions after {start}")
+    row = ma._stats(run["nav"], run["bench"], days, days[0], days[-1])
+    return {"variant": variant, "cost_bps": cost_bps, "from": days[0].isoformat(), "to": days[-1].isoformat(),
+            "sessions": len(days), "switches": run["switches"],
+            "time_in_market": run["held_sessions"] / len(days), "period": row,
+            "pass": row["strategy_cagr"] >= row["069500_cagr"] and row["strategy_mdd"] <= row["069500_mdd"]}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--input", type=Path, required=True)
-    parser.add_argument("--record", type=Path, required=True, help="written once; an existing record stops the run")
+    parser.add_argument("--record", type=Path, help="written once; an existing record stops the run")
+    parser.add_argument("--forward-from", type=date.fromisoformat,
+                        help="v25 forward record of ma60 from this day (2026-11-02); prints only, writes nothing")
     args = parser.parse_args(argv)
+    if args.forward_from is not None:
+        return _forward(args.input, args.forward_from)
+    if args.record is None:
+        parser.error("--record is required without --forward-from")
     if args.record.exists():
         raise SpecUndefinedError(f"{args.record} exists: v24b is recorded once")
     from momentum.agent.cli import read_input
@@ -180,6 +204,21 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps(out, sort_keys=True, default=str))
     return 0
 
+
+def _forward(root: Path, start: date) -> int:
+    from momentum.agent.cli import read_input
+
+    data = read_input(root / "prices.csv", root / "securities.jsonl", root / "actions.json", root / "sessions.json",
+                      securities_mode="session-confirmed")
+    out = {c: forward_report(data, FORWARD_VARIANT, bps, start) for c, bps in COSTS.items()}
+    for name, rep in out.items():
+        row = rep["period"]
+        print(f"== v25 forward {FORWARD_VARIANT}/{name} {rep['from']}..{rep['to']} ({rep['sessions']} sessions), "
+              f"switches {rep['switches']}, in market {rep['time_in_market']:.0%}, report only until the verdict")
+        print(f"strategy CAGR {row['strategy_cagr']:+.2%} MDD {row['strategy_mdd']:.2%} | 069500 CAGR "
+              f"{row['069500_cagr']:+.2%} MDD {row['069500_mdd']:.2%} | excess t {row['excess_t']:.2f}")
+    print(json.dumps(out, sort_keys=True, default=str))
+    return 0
 
 if __name__ == "__main__":
     raise SystemExit(main())
