@@ -24,6 +24,8 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
+from momentum.krx.market_events import MarketEvents
+
 TOOLS = Path(__file__).resolve().parent
 
 
@@ -41,7 +43,11 @@ def _load(name: str) -> Any:
 ma = _load("ma_cross")
 
 
-def audit(data: Any) -> dict[str, Any]:
+def audit(data: Any, events: MarketEvents | None = None) -> dict[str, Any]:
+    """Every unexplained jump; with market events (momentum.krx.market_events), jumps inside a filed
+    liquidation are counted as real prices, and each remaining jump says whether a restructuring filing
+    quarantined the stock at the last bar before it (a strategy would not hold it)."""
+    events = events or MarketEvents([])
     sessions = list(data.sessions)
     index = {d: k for k, d in enumerate(sessions)}
     bars: dict[str, list] = defaultdict(list)
@@ -50,7 +56,7 @@ def audit(data: Any) -> dict[str, Any]:
     actions: dict[str, list] = defaultdict(list)
     for announced in data.actions:
         actions[announced.action.security_id].append(announced.action)
-    found = []
+    found, liquidation = [], 0
     for symbol, series in bars.items():
         series.sort(key=lambda b: b.session)
         for b0, b1 in pairwise(series):
@@ -59,26 +65,34 @@ def audit(data: Any) -> dict[str, Any]:
             kinds = [a.action_type for a in actions.get(symbol, []) if b0.session < a.ex_date <= b1.session]
             ratios = {"open": float(b1.open / b0.close) if b1.open > 0 else None, "close": float(b1.close / b0.close)}
             worst = max((r for r in ratios.values() if r is not None), key=lambda r: abs(math.log(r)))
-            if ma.unexplained(worst, kinds):
-                found.append({"symbol": symbol, "last_day": b0.session.isoformat(), "day": b1.session.isoformat(),
-                              "gap_sessions": index[b1.session] - index[b0.session] - 1,
-                              "open_ratio": ratios["open"], "close_ratio": ratios["close"],
-                              "common_stock": ma.common_stock(symbol), "other_actions": kinds})
+            if not ma.unexplained(worst, kinds):
+                continue
+            if events.liquidating(symbol, b1.session):
+                liquidation += 1
+                continue
+            found.append({"symbol": symbol, "last_day": b0.session.isoformat(), "day": b1.session.isoformat(),
+                          "gap_sessions": index[b1.session] - index[b0.session] - 1,
+                          "open_ratio": ratios["open"], "close_ratio": ratios["close"],
+                          "common_stock": ma.common_stock(symbol), "other_actions": kinds,
+                          "quarantined": events.quarantined(symbol, ma._decision(b0.session))})
     found.sort(key=lambda f: -abs(math.log(f["close_ratio"])))
     return {"symbols": len(bars), "bars": sum(map(len, bars.values())), "jumps": found,
             "symbols_with_jumps": len({f["symbol"] for f in found}),
-            "after_a_gap": sum(f["gap_sessions"] > 0 for f in found)}
+            "after_a_gap": sum(f["gap_sessions"] > 0 for f in found), "liquidation": liquidation,
+            "quarantined": sum(f["quarantined"] for f in found)}
 
 
 def text(result: dict[str, Any], limit: int = 60) -> str:
     lines = [(f"{result['symbols']} symbols, {result['bars']} bars: {len(result['jumps'])} unexplained jumps "
               f"(beyond +-{ma.JUMP_LIMIT:.0%}, no share action) in {result['symbols_with_jumps']} symbols, "
-              f"{result['after_a_gap']} of them right after a gap in quotes")]
+              f"{result['after_a_gap']} of them right after a gap in quotes; {result['quarantined']} quarantined by a "
+              f"restructuring filing, {result['liquidation']} more inside a filed liquidation (real prices)")]
     for f in result["jumps"][:limit]:
         open_part = f"open x{f['open_ratio']:.3f} " if f["open_ratio"] is not None else ""
         lines.append(f"  {f['symbol']}{'' if f['common_stock'] else ' (not common)'} {f['last_day']} -> {f['day']} "
                      f"gap {f['gap_sessions']} {open_part}close x{f['close_ratio']:.3f}"
-                     f"{' ' + '/'.join(f['other_actions']) if f['other_actions'] else ''}")
+                     f"{' ' + '/'.join(f['other_actions']) if f['other_actions'] else ''}"
+                     f"{' quarantined' if f['quarantined'] else ''}")
     if len(result["jumps"]) > limit:
         lines.append(f"  ... {len(result['jumps']) - limit} more in the JSON line")
     return "\n".join(lines)
@@ -87,13 +101,14 @@ def text(result: dict[str, Any], limit: int = 60) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--input", type=Path, required=True)
+    parser.add_argument("--events", type=Path, help="market events from tools/market_events.py")
     args = parser.parse_args(argv)
     from momentum.agent.cli import read_input
 
     root = args.input
     data = read_input(root / "prices.csv", root / "securities.jsonl", root / "actions.json", root / "sessions.json",
                       securities_mode="session-confirmed")
-    result = audit(data)
+    result = audit(data, MarketEvents.load(args.events) if args.events else None)
     print(text(result))
     print(json.dumps(result, sort_keys=True))
     return 0

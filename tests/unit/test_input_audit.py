@@ -41,3 +41,24 @@ def test_a_merger_across_a_suspension_is_found_and_a_recorded_split_is_not():
 def test_a_limit_up_day_is_not_a_jump():
     data, _ = t.make_data({"005930": [100.0] * 10 + [129.0] * 10}, n=20)
     assert audit.audit(data)["jumps"] == []
+
+
+def test_market_events_explain_liquidation_and_mark_quarantined_jumps():
+    from momentum.krx.market_events import MarketEvents
+    n = 40
+    sessions = t.weekdays(n)
+    paths = {"111110": [1000.0] * 20 + [50.0] * 20,              # 정리매매 crash, filed
+             "222220": [1000.0] * 20 + [4000.0] * 20,            # relisted after a filed merger
+             "333330": [1000.0] * 20 + [30.0] * 20}              # nothing filed
+    data, _ = t.make_data(paths, n=n)
+
+    def row(symbol, kind, k):
+        return {"symbol": symbol, "kind": kind, "rcept_date": sessions[k].isoformat(),
+                "available_at": datetime.combine(sessions[k], datetime.min.time(), t.KST).replace(hour=18).isoformat(),
+                "title": kind}
+
+    events = MarketEvents([row("111110", "liquidation", 18), row("222220", "restructuring", 5)])
+    result = audit.audit(data, events)
+    assert [(f["symbol"], f["quarantined"]) for f in result["jumps"]] == [("333330", False), ("222220", True)]
+    assert result["liquidation"] == 1 and result["quarantined"] == 1
+    assert len(audit.audit(data)["jumps"]) == 3                      # without events: as before

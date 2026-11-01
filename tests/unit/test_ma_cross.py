@@ -313,3 +313,45 @@ def test_v21_ignores_a_golden_cross_without_bull_alignment():
     result = ma.backtest(data, 36.5, rule=ma.RULES["v21"])
     assert not [f for f in result["fills"] if f.security_id == "005930" and f.shares > 0]
     assert ma.backtest(make_data({"005930": path, "069500": [10000] * 220})[0], 36.5)["counts"]["dead_exits"] == 1
+
+
+def _events(*rows):
+    from momentum.krx import market_events as me
+    return me.MarketEvents([{"symbol": s, "kind": k, "rcept_date": d.isoformat(),
+                             "available_at": datetime.combine(d, datetime.min.time(), KST).replace(hour=18).isoformat(),
+                             "title": k} for s, k, d in rows])
+
+
+def test_a_liquidation_trading_crash_is_a_real_loss_not_a_stop():
+    path = path_down_up_down(220)
+    sessions = weekdays(220)
+    marks = golden_and_dead_days(path, sessions)
+    crash_at = marks["golden"] + 5
+    raw = [p * 0.05 if k >= crash_at else p for k, p in enumerate(path)]   # x0.05 in 정리매매 (no price limit)
+    data, _ = make_data({"005930": raw, "069500": [10000] * 220})
+    with pytest.raises(ma.SpecUndefinedError, match="no recorded share action"):
+        ma.backtest(data, 36.5)                                             # without the filing it stops, as before
+    filed = _events(("005930", "liquidation", sessions[crash_at - 2]))
+    result = ma.backtest(data, 36.5, events=filed)
+    buy = next(f for f in result["fills"] if f.security_id == "005930" and f.side == "buy")
+    k = result["days"].index(sessions[crash_at])
+    drop = result["nav"][k - 1] - result["nav"][k]                          # marked at the crash close
+    assert result["jumps"] == [] and drop == pytest.approx(buy.shares * (raw[crash_at - 1] - raw[crash_at]))
+    assert ma.unexplained(0.05, []) and not ma.unexplained(0.05, [], liquidating=True)
+
+
+def test_a_restructuring_filing_blocks_the_entry_and_sells_a_holding():
+    path = path_down_up_down(220)
+    sessions = weekdays(220)
+    marks = golden_and_dead_days(path, sessions)
+    data, _ = make_data({"005930": path, "069500": [10000] * 220})
+    before = _events(("005930", "restructuring", sessions[marks["golden"] - 3]))
+    result = ma.backtest(data, 36.5, events=before)
+    assert not [f for f in result["fills"] if f.security_id == "005930" and f.shares > 0]
+    filed_at = marks["golden"] + 4                                          # held by then
+    after = _events(("005930", "restructuring", sessions[filed_at]))
+    result = ma.backtest(data, 36.5, events=after)
+    fills = [f for f in result["fills"] if f.security_id == "005930" and f.shares > 0]
+    assert [f.side for f in fills] == ["buy", "sell"]
+    assert fills[1].session_date == sessions[filed_at + 1]                  # sold at the next open
+    assert result["counts"]["quarantine_exits"] == 1
