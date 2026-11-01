@@ -1,9 +1,9 @@
-"""v24: hold 069500 or cash by its own moving average (docs/blueprint/ma-cross-v20.md, v24).
+"""v24b: hold 069500 or cash by its own moving average (docs/blueprint/ma-cross-v20.md, v24 and v24b).
 
 Mac, read-only, run once (a record file stops a second run):
 
     uv run --extra agent python tools/etf_timing.py --input data/krx/v2-2026-11-01d/research \
-        --record data/krx/etf-v24/run.json
+        --record data/krx/etf-v24b/run.json
 
 Each variant only says, from 069500's own closes up to a session's close, whether to hold it:
 - ``ma60`` / ``ma120``: hold while the close is above its 60 / 120-session simple average;
@@ -24,6 +24,7 @@ import statistics
 import sys
 from collections import defaultdict
 from collections.abc import Sequence
+from datetime import date
 from decimal import ROUND_FLOOR, Decimal
 from pathlib import Path
 from typing import Any
@@ -53,6 +54,10 @@ NEED = {"ma60": 60, "ma120": 120, "ma20_60": 60}
 COSTS = {"base": 5.0, "stress": 10.0}     # bp one way: 1.5 commission + half the measured 1.1bp spread, rounded up; x2
 INVESTED = Decimal("0.95")
 ADV_DAYS = ma.ADV_DAYS
+# v24b (user decision 2026-11-01, before any result): the research input's 069500 starts in 2020-01, so MA120
+# exists only from late June 2020; every variant and the benchmark start trading on the same day instead
+FIRST_TRADE = date(2020, 7, 1)
+HALVES = ((date(2020, 7, 1), date(2023, 6, 30)), (date(2023, 7, 1), date(2026, 10, 20)))
 
 
 def hold(closes: Sequence[float], variant: str) -> bool | None:
@@ -103,7 +108,7 @@ def backtest(data: Any, variant: str, cost_bps: float) -> dict[str, Any]:
             closes.append((day, float(bar.close)))
         pending, bench_pending = [], []
         nxt = sessions[k + 1] if k + 1 < len(sessions) else None
-        if nxt is not None and nxt >= ma.FIRST_TRADE and bar is not None:
+        if nxt is not None and nxt >= FIRST_TRADE and bar is not None:
             if not bench.positions.get(ETF):
                 qty = int((ma.CAPITAL * INVESTED / bar.close).to_integral_value(ROUND_FLOOR))
                 bench_pending = [TargetOrder(ETF, "buy", qty, 0)]
@@ -114,7 +119,7 @@ def backtest(data: Any, variant: str, cost_bps: float) -> dict[str, Any]:
             if want is None:
                 # no rule on the first trading decision would leave the variant in cash while the benchmark is
                 # invested; the input must start early enough instead
-                raise SpecUndefinedError(f"{variant} needs {NEED[variant]} closes before {ma.FIRST_TRADE}, "
+                raise SpecUndefinedError(f"{variant} needs {NEED[variant]} closes before {FIRST_TRADE}, "
                                          f"has {len(adjusted)} on {day}")
             held = book.positions.get(ETF, 0)
             if want and not held:
@@ -124,7 +129,7 @@ def backtest(data: Any, variant: str, cost_bps: float) -> dict[str, Any]:
             elif want is False and held:
                 pending = [TargetOrder(ETF, "sell", held, -1)]
                 out["switches"] += 1
-        if day >= ma.FIRST_TRADE:
+        if day >= FIRST_TRADE:
             out["days"].append(day)
             out["nav"].append(float(book.nav))
             out["bench"].append(float(bench.nav))
@@ -135,7 +140,7 @@ def backtest(data: Any, variant: str, cost_bps: float) -> dict[str, Any]:
 
 def report(result: dict[str, Any]) -> dict[str, Any]:
     days, nav, bench = result["days"], result["nav"], result["bench"]
-    periods = {"full": (days[0], days[-1]), "first_half": ma.HALVES[0], "second_half": ma.HALVES[1]}
+    periods = {"full": (days[0], days[-1]), "first_half": HALVES[0], "second_half": HALVES[1]}
     table = {name: ma._stats(nav, bench, days, lo, hi) for name, (lo, hi) in periods.items()}
     passed = all(table[h].get("strategy_cagr", -1) >= table[h].get("069500_cagr", 0)
                  and table[h].get("strategy_mdd", 1) <= table[h].get("069500_mdd", 0)
@@ -151,7 +156,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--record", type=Path, required=True, help="written once; an existing record stops the run")
     args = parser.parse_args(argv)
     if args.record.exists():
-        raise SpecUndefinedError(f"{args.record} exists: v24 is recorded once")
+        raise SpecUndefinedError(f"{args.record} exists: v24b is recorded once")
     from momentum.agent.cli import read_input
 
     root = args.input
