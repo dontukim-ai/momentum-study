@@ -129,9 +129,12 @@ def build(
     sessions: tuple[date, ...],
     confirmed_through: date,
     existing: Iterable[Mapping[str, Any]] = (),
+    candidates: Iterable[dict[str, Any]] = (),
 ) -> CapitalActions:
     """``details`` maps rcept_no to its detail item; ``existing`` are actions
-    already made elsewhere (splits), whose day a reduction must not repeat."""
+    already made elsewhere (splits), whose day a reduction must not repeat;
+    ``candidates`` are base-ratio splits split_actions deferred because a
+    reduction was filed: booked unless a reduction here confirms their day."""
     moves: dict[tuple[str, date], Decimal] = {}
     shares: dict[tuple[str, date], Decimal | None] = {}
     for item in adjustments:
@@ -210,6 +213,13 @@ def build(
     actions, dropped = _one_per_day(actions)
     unresolved += [d for d in dropped if d["reason"] != _SAME_DAY_KEPT]
     skipped += [d for d in dropped if d["reason"] == _SAME_DAY_KEPT]
+    reduced_days = {(a["security_id"], a["ex_date"]) for a in actions if a["action_type"] == "capital_reduction"}
+    for c in candidates:
+        if (c["security_id"], c["ex_date"]) in reduced_days:
+            skipped.append({"stock_code": c["security_id"], "ex_date": c["ex_date"], "split_ratio": c["split_ratio"],
+                            "reason": "base-ratio split replaced by the filed reduction"})
+        else:
+            actions.append({**c, "evidence": {**c["evidence"], "deferred_from": "split_actions"}})
     return CapitalActions(actions, unresolved, skipped)
 
 

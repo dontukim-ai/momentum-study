@@ -346,4 +346,5 @@ def test_a_filed_capital_reduction_leaves_the_other_adjustment_to_the_reduction_
     reduction = _filed("042040", "CAPITAL_REDUCTION", day=date(2026, 5, 1))
     result = reconcile([adj], [_filed("042040", "REVERSE_SPLIT", day=date(2026, 5, 1))], reductions=[reduction])
     assert result.actions == [] and result.unresolved[0]["reason"] == "capital reduction filed; left to capital_actions"
+    assert result.unresolved[0]["candidate"]["split_ratio"] == "0.125"
     assert reconcile([adj], [_filed("042040", "REVERSE_SPLIT", day=date(2026, 5, 1))]).actions != []

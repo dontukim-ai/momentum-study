@@ -21,8 +21,10 @@ within one tick) is taken when the listed-share ratio lies within 30% of it
 (odd lots, conversions and issues on the same day move the count); every
 other ``OTHER`` detection is reported as unresolved. A capital-reduction
 filing (B-type 감자결정) of the stock within ``MAX_LEAD`` before the day
-leaves the detection to ``capital_actions``, which applies the filed
-fraction (042040 2026: filed 10:1, base moved 1/8).
+hands the agreed split to ``capital_actions`` as a ``candidate``: the filed
+reduction wins a day it confirms (042040 2026-06-26: filed 10:1, base moved
+1/8), and the candidate is booked otherwise (042040 2026-04-30: a 10:1
+merger two months before the reduction).
 """
 
 from __future__ import annotations
@@ -49,6 +51,7 @@ BASE_RATIO_BASIS = (
     "(user decision 2026-11-01); filing text not parsed"
 )
 SHARE_BAND = Decimal("0.30")
+DEFERRED = "capital reduction filed; left to capital_actions"
 _TICK = Decimal("0.005")
 _MAX_DENOMINATOR = 10
 
@@ -82,10 +85,8 @@ def _base_ratio(factor: Decimal) -> Fraction | None:
     return ratio if abs(factor - target) <= _TICK * target else None
 
 
-def _other(item: Adjustment, prior: list[DisclosureEvent], reduced: bool) -> tuple[str, str | None]:
+def _other(item: Adjustment, prior: list[DisclosureEvent]) -> tuple[str, str | None]:
     """(reason, ratio) for an OTHER detection: a ratio only when the shares confirm the base price."""
-    if reduced:
-        return "capital reduction filed; left to capital_actions", None
     if not prior:
         return "other adjustment with no split filing", None
     ratio = _base_ratio(item.factor)
@@ -131,7 +132,7 @@ def reconcile(
             # The original filing announces first; corrections only restate it.
             key=lambda e: (e.is_correction, e.available_at, e.rcept_no),
         )
-        base = {
+        base: dict[str, Any] = {
             "session": item.session.isoformat(),
             "symbol": item.symbol,
             "isin": item.isin,
@@ -140,9 +141,7 @@ def reconcile(
         }
         basis, chosen = RATIO_BASIS, item.ratio
         if other:
-            reduced = any(e.available_at <= opening and opening - e.available_at <= MAX_LEAD
-                          for e in reduced_by.get(item.symbol, []))
-            reason, agreed = _other(item, prior, reduced)
+            reason, agreed = _other(item, prior)
             if agreed is None:
                 unresolved.append({**base, "reason": reason, "factor": str(item.factor),
                                    "share_ratio": None if item.share_ratio is None else str(item.share_ratio),
@@ -166,7 +165,7 @@ def reconcile(
             unresolved.append({**base, "reason": "ratio is not a finite decimal"})
             continue
         source = prior[0]
-        actions.append(
+        action = (
             {
                 "security_id": item.symbol,
                 "action_type": "split",
@@ -186,6 +185,12 @@ def reconcile(
                 },
             }
         )
+        if other and any(e.available_at <= opening and opening - e.available_at <= MAX_LEAD
+                         for e in reduced_by.get(item.symbol, [])):
+            # capital_actions books it only when no filed reduction confirms this day
+            unresolved.append({**base, "reason": DEFERRED, "candidate": action})
+            continue
+        actions.append(action)
     return _same_issuer_classes(actions, unresolved)
 
 

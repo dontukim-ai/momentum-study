@@ -392,3 +392,17 @@ def test_two_reductions_confirming_one_relisting_day_are_not_both_booked():
     assert [a["evidence"]["rcept_no"] for a in kept] == ["B"]          # same fraction twice: the earlier filing
     bonus = {**red("C", "1", band), "action_type": "bonus_issue"}
     assert _one_per_day([bonus, red("A", "0.1", strict)])[0] == [bonus, red("A", "0.1", strict)]
+
+
+def test_a_deferred_base_ratio_split_is_booked_unless_a_reduction_takes_its_day(tmp_path):
+    def cand(day, ratio):
+        return {"security_id": "049470", "action_type": "split", "ex_date": day, "pay_date": None,
+                "split_ratio": ratio, "cash_amount": None, "available_at": "2024-03-01T18:00:00+09:00",
+                "evidence": {"rcept_no": "S1"}}
+
+    result = build(events(tmp_path), DETAILS, ADJUSTMENTS, SESSIONS, CONFIRMED,
+                   candidates=[cand("2024-05-22", "0.125"), cand("2024-04-29", "0.1")])
+    days = {(a["action_type"], a["ex_date"]) for a in result.actions if a["security_id"] == "049470"}
+    assert ("capital_reduction", "2024-05-22") in days and ("split", "2024-05-22") not in days
+    assert ("split", "2024-04-29") in days                                   # no reduction that day: booked
+    assert any(s["reason"] == "base-ratio split replaced by the filed reduction" for s in result.skipped)
