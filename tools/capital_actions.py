@@ -32,6 +32,8 @@ def main(argv: list[str] | None = None, **fetch_options: object) -> int:
     parser.add_argument("--adjustments", type=Path, required=True)
     parser.add_argument("--calendar", type=Path, required=True)
     parser.add_argument("--split-actions", type=Path)
+    parser.add_argument("--split-report", type=Path,
+                        help="split-report.json: its deferred base-ratio splits are booked here unless a reduction wins")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--pause", type=float, default=1.0)
     parser.add_argument("--no-fetch", action="store_true")
@@ -84,6 +86,12 @@ def main(argv: list[str] | None = None, **fetch_options: object) -> int:
             if args.split_actions
             else []
         )
+        deferred = (
+            [u["candidate"] for u in json.loads(args.split_report.read_text(encoding="utf-8"))["unresolved"]
+             if "candidate" in u]
+            if args.split_report
+            else []
+        )
         result = build(
             events,
             details,
@@ -91,6 +99,7 @@ def main(argv: list[str] | None = None, **fetch_options: object) -> int:
             sessions,
             date.fromisoformat(report["confirmed_through"]),
             existing,
+            deferred,
         )
     except (SpecUndefinedError, CollectError, OSError, ValueError, KeyError) as exc:
         print(f"capital-actions: {type(exc).__name__}: {exc}")

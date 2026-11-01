@@ -35,8 +35,10 @@ def main(argv: list[str] | None = None) -> int:
         pages = list_pages(args.dart_root, "I")
         if not pages:
             raise SpecUndefinedError("no collected I-type disclosure pages")
+        # B-type 감자결정 filings leave non-agreeing days to capital_actions
+        reductions = parse_list_pages(list_pages(args.dart_root, "B"))
         result = reconcile(
-            detect(args.fsc_root, args.start, args.end), parse_list_pages(pages)
+            detect(args.fsc_root, args.start, args.end), parse_list_pages(pages), reductions
         )
     except (SpecUndefinedError, OSError, ValueError, KeyError) as exc:
         print(f"split-actions: {type(exc).__name__}: {exc}")

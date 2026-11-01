@@ -347,3 +347,62 @@ def test_bonus_confirmed_by_whole_company_growth_when_treasury_excluded(tmp_path
     del details["20240314000001"]["nstk_ostk_cnt"]
     again = build(events(tmp_path), details, moved, SESSIONS, CONFIRMED)
     assert not [a for a in again.actions if a["action_type"] == "bonus_issue"]
+
+
+def test_reduction_confirmed_when_shares_and_price_sit_within_30pct_of_the_filing(tmp_path):
+    # 024810 2021-05-24: filing 10:1 (0.1), base moved 0.113964, shares 0.103480 (old 0.5% rule left it out)
+    loose = [dict(a) for a in ADJUSTMENTS]
+    loose[2] = {"session": "2024-05-22", "symbol": "049470", "factor": "0.113964", "share_ratio": "0.103480"}
+    result = build(events(tmp_path), DETAILS, loose, SESSIONS, CONFIRMED)
+    (reduction,) = [a for a in result.actions if a["action_type"] == "capital_reduction"]
+    assert D(reduction["split_ratio"]) == D("0.1")
+    assert reduction["ex_date"] == "2024-05-22" and "30%" in reduction["evidence"]["confirmed_by"]
+    # shares 20% off but the price five times off the filing: not this reduction
+    far = [dict(a) for a in ADJUSTMENTS]
+    far[2] = {"session": "2024-05-22", "symbol": "049470", "factor": "0.500000", "share_ratio": "0.120000"}
+    result = build(events(tmp_path), DETAILS, far, SESSIONS, CONFIRMED)
+    assert not [a for a in result.actions if a["action_type"] == "capital_reduction"]
+
+
+def test_a_strict_match_wins_over_an_earlier_banded_day(tmp_path):
+    # 344860 2020: the 30% band matched three sessions before the exact relisting; the exact day is the relisting
+    two = [dict(a) for a in ADJUSTMENTS]
+    two[2] = {"session": "2024-05-21", "symbol": "049470", "factor": "0.110000", "share_ratio": "0.120000"}
+    two.append({"session": "2024-05-22", "symbol": "049470", "factor": "0.104500", "share_ratio": "0.099998"})
+    result = build(events(tmp_path), DETAILS, two, SESSIONS, CONFIRMED)
+    (reduction,) = [a for a in result.actions if a["action_type"] == "capital_reduction"]
+    assert reduction["ex_date"] == "2024-05-22" and reduction["evidence"]["confirmed_by"] == "listed shares within 0.5%"
+
+
+def test_two_reductions_confirming_one_relisting_day_are_not_both_booked():
+    from momentum.krx.capital_actions import _one_per_day
+
+    def red(rcept, ratio, by, avail="2024-03-14T18:00:00+09:00"):
+        return {"security_id": "049470", "action_type": "capital_reduction", "ex_date": "2024-05-22",
+                "split_ratio": ratio, "available_at": avail, "evidence": {"rcept_no": rcept, "confirmed_by": by}}
+
+    strict = "listed shares within 0.5%"
+    band = "listed shares and base price within 30% (user decision 2026-11-01)"
+    kept, dropped = _one_per_day([red("A", "0.1", strict), red("B", "0.12", band)])
+    assert [a["evidence"]["rcept_no"] for a in kept] == ["A"] and dropped[0]["rcept_no"] == "B"
+    kept, dropped = _one_per_day([red("A", "0.1", band), red("B", "0.12", band)])
+    assert kept == [] and {d["rcept_no"] for d in dropped} == {"A", "B"}
+    assert dropped[0]["reason"] == "several filings confirm the same relisting day"
+    kept, _ = _one_per_day([red("A", "0.1", band, "2024-03-20T18:00:00+09:00"), red("B", "0.1", band)])
+    assert [a["evidence"]["rcept_no"] for a in kept] == ["B"]          # same fraction twice: the earlier filing
+    bonus = {**red("C", "1", band), "action_type": "bonus_issue"}
+    assert _one_per_day([bonus, red("A", "0.1", strict)])[0] == [bonus, red("A", "0.1", strict)]
+
+
+def test_a_deferred_base_ratio_split_is_booked_unless_a_reduction_takes_its_day(tmp_path):
+    def cand(day, ratio):
+        return {"security_id": "049470", "action_type": "split", "ex_date": day, "pay_date": None,
+                "split_ratio": ratio, "cash_amount": None, "available_at": "2024-03-01T18:00:00+09:00",
+                "evidence": {"rcept_no": "S1"}}
+
+    result = build(events(tmp_path), DETAILS, ADJUSTMENTS, SESSIONS, CONFIRMED,
+                   candidates=[cand("2024-05-22", "0.125"), cand("2024-04-29", "0.1")])
+    days = {(a["action_type"], a["ex_date"]) for a in result.actions if a["security_id"] == "049470"}
+    assert ("capital_reduction", "2024-05-22") in days and ("split", "2024-05-22") not in days
+    assert ("split", "2024-04-29") in days                                   # no reduction that day: booked
+    assert any(s["reason"] == "base-ratio split replaced by the filed reduction" for s in result.skipped)

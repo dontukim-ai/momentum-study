@@ -24,6 +24,11 @@ ratio the price does not confirm stays unresolved (2024: SNT에너지 announced
   0.1, base moved 0.1045; 031860 0.10 -> 0.0762). Treasury-share
   cancellations move no price and produce nothing; paid reductions (cash
   refunds) are not supported and stay unresolved.
+  User decision 2026-11-01: the share count also drifts on a relisting day
+  (odd lots, conversions; 024810 2021 0.1 -> 0.1035, 139050 2023 0.0667 ->
+  0.0738), so a day whose share ratio and base-price move both lie within
+  ``BAND`` (30%) of the filed fraction confirms it too; the filed fraction
+  is what the ledger applies.
 
 Subsidiary filings and filings without a listed stock code are ignored.
 """
@@ -46,6 +51,7 @@ from .dart_dividends import ex_dividend_date
 from .dart_events import DisclosureEvent
 
 TOLERANCE = Decimal("0.005")
+BAND = Decimal("0.30")
 # A reduction relists weeks after its record date (2024: 비트플래닛 record
 # 04-29, relisting planned 05-22); a price move later than this is not taken
 # as its effect.
@@ -123,9 +129,12 @@ def build(
     sessions: tuple[date, ...],
     confirmed_through: date,
     existing: Iterable[Mapping[str, Any]] = (),
+    candidates: Iterable[dict[str, Any]] = (),
 ) -> CapitalActions:
     """``details`` maps rcept_no to its detail item; ``existing`` are actions
-    already made elsewhere (splits), whose day a reduction must not repeat."""
+    already made elsewhere (splits), whose day a reduction must not repeat;
+    ``candidates`` are base-ratio splits split_actions deferred because a
+    reduction was filed: booked unless a reduction here confirms their day."""
     moves: dict[tuple[str, date], Decimal] = {}
     shares: dict[tuple[str, date], Decimal | None] = {}
     for item in adjustments:
@@ -201,7 +210,56 @@ def build(
             skipped.append({**base, "reason": "same day already has a split action"})
             continue
         actions.append(result)
+    actions, dropped = _one_per_day(actions)
+    unresolved += [d for d in dropped if d["reason"] != _SAME_DAY_KEPT]
+    skipped += [d for d in dropped if d["reason"] == _SAME_DAY_KEPT]
+    reduced_days = {(a["security_id"], a["ex_date"]) for a in actions if a["action_type"] == "capital_reduction"}
+    for c in candidates:
+        if (c["security_id"], c["ex_date"]) in reduced_days:
+            skipped.append({"stock_code": c["security_id"], "ex_date": c["ex_date"], "split_ratio": c["split_ratio"],
+                            "reason": "base-ratio split replaced by the filed reduction"})
+        else:
+            actions.append({**c, "evidence": {**c["evidence"], "deferred_from": "split_actions"}})
     return CapitalActions(actions, unresolved, skipped)
+
+
+_STRICT = "listed shares within 0.5%"
+_SAME_DAY_KEPT = "relisting day already confirmed by another filing"
+
+
+def _one_per_day(
+    actions: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """At most one reduction per (stock, relisting day).
+
+    With the 30% band two reductions (different record dates) can confirm the
+    same day. An exact (0.5%) match keeps its day; the same fraction filed
+    twice keeps the earlier filing; different fractions with no exact match
+    are all unresolved, since the ledger cannot apply both.
+    """
+    days: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for a in actions:
+        if a["action_type"] == "capital_reduction":
+            days.setdefault((a["security_id"], a["ex_date"]), []).append(a)
+    drop: dict[int, str] = {}
+    for same in days.values():
+        if len(same) < 2:
+            continue
+        exact = [a for a in same if a["evidence"].get("confirmed_by") == _STRICT]
+        fractions = {Decimal(a["split_ratio"]) for a in same}
+        if len(exact) == 1:
+            keep = exact[0]
+        elif not exact and len(fractions) == 1:
+            keep = min(same, key=lambda a: (a["available_at"], a["evidence"]["rcept_no"]))
+        else:
+            keep = None
+        for a in same:
+            if a is not keep:
+                drop[id(a)] = _SAME_DAY_KEPT if keep is not None else "several filings confirm the same relisting day"
+    kept = [a for a in actions if id(a) not in drop]
+    dropped = [{"stock_code": a["security_id"], "rcept_no": a["evidence"]["rcept_no"], "ex_date": a["ex_date"],
+                "split_ratio": a["split_ratio"], "reason": drop[id(a)]} for a in actions if id(a) in drop]
+    return kept, dropped
 
 
 def _source(
@@ -291,11 +349,20 @@ def _reduction(
         if symbol == code and record <= day <= record + MAX_RELISTING_LAG
     )
 
-    def confirms(day: date) -> bool:
+    def strict(day: date) -> bool:
         ratio = shares.get((code, day))
         return ratio is not None and _close(ratio, remaining) and moves[(code, day)] < 1
 
-    candidates = [day for day in window if confirms(day)]
+    def banded(day: date) -> bool:
+        ratio, move = shares.get((code, day)), moves[(code, day)]
+        return (ratio is not None and abs(ratio - remaining) <= BAND * remaining
+                and abs(move - remaining) <= BAND * remaining)
+
+    def confirms(day: date) -> bool:
+        return strict(day) or banded(day)
+
+    # an exact share match is the relisting; the 30% band only when no session matches exactly
+    candidates = [day for day in window if strict(day)] or [day for day in window if banded(day)]
     if not candidates:
         observed = {
             "expected_factor": str(remaining),
@@ -332,6 +399,8 @@ def _reduction(
             "planned_listing": latest.get("crsc_nstklstprd"),
             "price_factor": str(moves[(code, relisting)]),
             "share_ratio": str(shares[(code, relisting)]),
+            "confirmed_by": _STRICT if strict(relisting)
+            else "listed shares and base price within 30% (user decision 2026-11-01)",
             "filings": base["filings"],
         },
     }
