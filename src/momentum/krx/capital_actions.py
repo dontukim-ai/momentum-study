@@ -207,7 +207,49 @@ def build(
             skipped.append({**base, "reason": "same day already has a split action"})
             continue
         actions.append(result)
+    actions, dropped = _one_per_day(actions)
+    unresolved += [d for d in dropped if d["reason"] != _SAME_DAY_KEPT]
+    skipped += [d for d in dropped if d["reason"] == _SAME_DAY_KEPT]
     return CapitalActions(actions, unresolved, skipped)
+
+
+_STRICT = "listed shares within 0.5%"
+_SAME_DAY_KEPT = "relisting day already confirmed by another filing"
+
+
+def _one_per_day(
+    actions: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """At most one reduction per (stock, relisting day).
+
+    With the 30% band two reductions (different record dates) can confirm the
+    same day. An exact (0.5%) match keeps its day; the same fraction filed
+    twice keeps the earlier filing; different fractions with no exact match
+    are all unresolved, since the ledger cannot apply both.
+    """
+    days: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for a in actions:
+        if a["action_type"] == "capital_reduction":
+            days.setdefault((a["security_id"], a["ex_date"]), []).append(a)
+    drop: dict[int, str] = {}
+    for same in days.values():
+        if len(same) < 2:
+            continue
+        exact = [a for a in same if a["evidence"].get("confirmed_by") == _STRICT]
+        fractions = {Decimal(a["split_ratio"]) for a in same}
+        if len(exact) == 1:
+            keep = exact[0]
+        elif not exact and len(fractions) == 1:
+            keep = min(same, key=lambda a: (a["available_at"], a["evidence"]["rcept_no"]))
+        else:
+            keep = None
+        for a in same:
+            if a is not keep:
+                drop[id(a)] = _SAME_DAY_KEPT if keep is not None else "several filings confirm the same relisting day"
+    kept = [a for a in actions if id(a) not in drop]
+    dropped = [{"stock_code": a["security_id"], "rcept_no": a["evidence"]["rcept_no"], "ex_date": a["ex_date"],
+                "split_ratio": a["split_ratio"], "reason": drop[id(a)]} for a in actions if id(a) in drop]
+    return kept, dropped
 
 
 def _source(
@@ -347,7 +389,7 @@ def _reduction(
             "planned_listing": latest.get("crsc_nstklstprd"),
             "price_factor": str(moves[(code, relisting)]),
             "share_ratio": str(shares[(code, relisting)]),
-            "confirmed_by": "listed shares within 0.5%" if strict(relisting)
+            "confirmed_by": _STRICT if strict(relisting)
             else "listed shares and base price within 30% (user decision 2026-11-01)",
             "filings": base["filings"],
         },

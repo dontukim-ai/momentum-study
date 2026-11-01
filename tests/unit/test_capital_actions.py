@@ -372,3 +372,23 @@ def test_a_strict_match_wins_over_an_earlier_banded_day(tmp_path):
     result = build(events(tmp_path), DETAILS, two, SESSIONS, CONFIRMED)
     (reduction,) = [a for a in result.actions if a["action_type"] == "capital_reduction"]
     assert reduction["ex_date"] == "2024-05-22" and reduction["evidence"]["confirmed_by"] == "listed shares within 0.5%"
+
+
+def test_two_reductions_confirming_one_relisting_day_are_not_both_booked():
+    from momentum.krx.capital_actions import _one_per_day
+
+    def red(rcept, ratio, by, avail="2024-03-14T18:00:00+09:00"):
+        return {"security_id": "049470", "action_type": "capital_reduction", "ex_date": "2024-05-22",
+                "split_ratio": ratio, "available_at": avail, "evidence": {"rcept_no": rcept, "confirmed_by": by}}
+
+    strict = "listed shares within 0.5%"
+    band = "listed shares and base price within 30% (user decision 2026-11-01)"
+    kept, dropped = _one_per_day([red("A", "0.1", strict), red("B", "0.12", band)])
+    assert [a["evidence"]["rcept_no"] for a in kept] == ["A"] and dropped[0]["rcept_no"] == "B"
+    kept, dropped = _one_per_day([red("A", "0.1", band), red("B", "0.12", band)])
+    assert kept == [] and {d["rcept_no"] for d in dropped} == {"A", "B"}
+    assert dropped[0]["reason"] == "several filings confirm the same relisting day"
+    kept, _ = _one_per_day([red("A", "0.1", band, "2024-03-20T18:00:00+09:00"), red("B", "0.1", band)])
+    assert [a["evidence"]["rcept_no"] for a in kept] == ["B"]          # same fraction twice: the earlier filing
+    bonus = {**red("C", "1", band), "action_type": "bonus_issue"}
+    assert _one_per_day([bonus, red("A", "0.1", strict)])[0] == [bonus, red("A", "0.1", strict)]
