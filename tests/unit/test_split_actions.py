@@ -338,3 +338,12 @@ def test_other_adjustments_that_do_not_confirm_are_reported_not_dropped():
     assert unfiled.actions == [] and unfiled.unresolved[0]["reason"] == "other adjustment with no split filing"
     missing = reconcile([_adjustment("000003", "0.100000", None)], [_filed("000003", "REVERSE_SPLIT")])
     assert missing.unresolved[0]["reason"] == "listed shares do not confirm the base-price ratio"
+
+
+def test_a_filed_capital_reduction_leaves_the_other_adjustment_to_the_reduction_path():
+    # 042040 2026-06-26: a 10:1 reduction filing; the base moved 1/8, so the base ratio must not stand in for it
+    adj = _adjustment("042040", "0.125000", "0.100000", day=date(2026, 6, 26))
+    reduction = _filed("042040", "CAPITAL_REDUCTION", day=date(2026, 5, 1))
+    result = reconcile([adj], [_filed("042040", "REVERSE_SPLIT", day=date(2026, 5, 1))], reductions=[reduction])
+    assert result.actions == [] and result.unresolved[0]["reason"] == "capital reduction filed; left to capital_actions"
+    assert reconcile([adj], [_filed("042040", "REVERSE_SPLIT", day=date(2026, 5, 1))]).actions != []

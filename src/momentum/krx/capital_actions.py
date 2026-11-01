@@ -309,7 +309,8 @@ def _reduction(
     def confirms(day: date) -> bool:
         return strict(day) or banded(day)
 
-    candidates = [day for day in window if confirms(day)]
+    # an exact share match is the relisting; the 30% band only when no session matches exactly
+    candidates = [day for day in window if strict(day)] or [day for day in window if banded(day)]
     if not candidates:
         observed = {
             "expected_factor": str(remaining),

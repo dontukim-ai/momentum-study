@@ -362,3 +362,13 @@ def test_reduction_confirmed_when_shares_and_price_sit_within_30pct_of_the_filin
     far[2] = {"session": "2024-05-22", "symbol": "049470", "factor": "0.500000", "share_ratio": "0.120000"}
     result = build(events(tmp_path), DETAILS, far, SESSIONS, CONFIRMED)
     assert not [a for a in result.actions if a["action_type"] == "capital_reduction"]
+
+
+def test_a_strict_match_wins_over_an_earlier_banded_day(tmp_path):
+    # 344860 2020: the 30% band matched three sessions before the exact relisting; the exact day is the relisting
+    two = [dict(a) for a in ADJUSTMENTS]
+    two[2] = {"session": "2024-05-21", "symbol": "049470", "factor": "0.110000", "share_ratio": "0.120000"}
+    two.append({"session": "2024-05-22", "symbol": "049470", "factor": "0.104500", "share_ratio": "0.099998"})
+    result = build(events(tmp_path), DETAILS, two, SESSIONS, CONFIRMED)
+    (reduction,) = [a for a in result.actions if a["action_type"] == "capital_reduction"]
+    assert reduction["ex_date"] == "2024-05-22" and reduction["evidence"]["confirmed_by"] == "listed shares within 0.5%"

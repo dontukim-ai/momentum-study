@@ -19,7 +19,10 @@ dropped silently. With a prior split or reverse-split filing in the
 direction of the move, the exchange's base-price ratio (a simple fraction
 within one tick) is taken when the listed-share ratio lies within 30% of it
 (odd lots, conversions and issues on the same day move the count); every
-other ``OTHER`` detection is reported as unresolved.
+other ``OTHER`` detection is reported as unresolved. A capital-reduction
+filing (B-type 감자결정) of the stock within ``MAX_LEAD`` before the day
+leaves the detection to ``capital_actions``, which applies the filed
+fraction (042040 2026: filed 10:1, base moved 1/8).
 """
 
 from __future__ import annotations
@@ -79,8 +82,10 @@ def _base_ratio(factor: Decimal) -> Fraction | None:
     return ratio if abs(factor - target) <= _TICK * target else None
 
 
-def _other(item: Adjustment, prior: list[DisclosureEvent]) -> tuple[str, str | None]:
+def _other(item: Adjustment, prior: list[DisclosureEvent], reduced: bool) -> tuple[str, str | None]:
     """(reason, ratio) for an OTHER detection: a ratio only when the shares confirm the base price."""
+    if reduced:
+        return "capital reduction filed; left to capital_actions", None
     if not prior:
         return "other adjustment with no split filing", None
     ratio = _base_ratio(item.factor)
@@ -93,12 +98,18 @@ def _other(item: Adjustment, prior: list[DisclosureEvent]) -> tuple[str, str | N
 
 
 def reconcile(
-    adjustments: Iterable[Adjustment], disclosures: Iterable[DisclosureEvent]
+    adjustments: Iterable[Adjustment],
+    disclosures: Iterable[DisclosureEvent],
+    reductions: Iterable[DisclosureEvent] = (),
 ) -> Reconciliation:
     by_code: dict[str, list[DisclosureEvent]] = {}
     for event in disclosures:
         if event.stock_code and event.report_kind in {"STOCK_SPLIT", "REVERSE_SPLIT"}:
             by_code.setdefault(event.stock_code, []).append(event)
+    reduced_by: dict[str, list[DisclosureEvent]] = {}
+    for event in reductions:
+        if event.stock_code and event.report_kind == "CAPITAL_REDUCTION":
+            reduced_by.setdefault(event.stock_code, []).append(event)
     actions, unresolved = [], []
     for item in adjustments:
         other = item.kind == "OTHER"
@@ -129,7 +140,9 @@ def reconcile(
         }
         basis, chosen = RATIO_BASIS, item.ratio
         if other:
-            reason, agreed = _other(item, prior)
+            reduced = any(e.available_at <= opening and opening - e.available_at <= MAX_LEAD
+                          for e in reduced_by.get(item.symbol, []))
+            reason, agreed = _other(item, prior, reduced)
             if agreed is None:
                 unresolved.append({**base, "reason": reason, "factor": str(item.factor),
                                    "share_ratio": None if item.share_ratio is None else str(item.share_ratio),
