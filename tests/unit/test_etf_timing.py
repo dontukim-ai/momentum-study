@@ -33,7 +33,7 @@ def test_switches_trade_at_the_next_open_sized_on_the_deciding_close():
     result = et.backtest(data, "ma60", 5.0)
     fills = [f for f in result["fills"] if f.shares > 0]
     states = {k: et.hold(path[:k + 1], "ma60") for k in range(len(path))}
-    first_in = next(k for k in range(len(path)) if sessions[k + 1] >= t.ma.FIRST_TRADE and states[k])
+    first_in = next(k for k in range(len(path)) if sessions[k + 1] >= et.FIRST_TRADE and states[k])
     first_out = next(k for k in range(first_in + 1, len(path)) if states[k] is False)
     assert fills[0].side == "buy" and fills[0].session_date == sessions[first_in + 1]
     expected = int((Decimal(100_000_000) * Decimal("0.95") / Decimal(str(path[first_in]))).to_integral_value(ROUND_FLOOR))
@@ -53,9 +53,13 @@ def test_always_above_its_average_the_variant_is_nearly_the_benchmark():
 
 
 def test_unknown_variant_short_history_and_second_run_are_refused(tmp_path):
-    data, _ = t.make_data({"069500": [100.0] * 220}, n=220)
+    data, sessions = t.make_data({"069500": [100.0] * 220}, n=220)
+    et.backtest(data, "ma120", 5.0)                       # 2020-01-01 start: MA120 exists by 2020-07-01
+    late = sessions[60:]                                  # a 2020-03 start has no MA120 by 2020-07-01
+    data.sessions = tuple(late)
+    data.snapshot.bars = [b for b in data.snapshot.bars if b.session in set(late)]
     with pytest.raises(et.SpecUndefinedError, match="needs 120 closes"):
-        et.backtest(data, "ma120", 5.0)                   # 2020-01-01 start: no MA120 by 2020-04-01
+        et.backtest(data, "ma120", 5.0)
     with pytest.raises(et.SpecUndefinedError):
         et.backtest(data, "ma200", 5.0)
     record = tmp_path / "run.json"

@@ -2926,12 +2926,17 @@
    "cost_version": "편도 5bp(ETF, 매도세 없음)",
    "id": "v24/ma60",
    "name": "069500 종가 > MA60이면 보유, 아니면 현금",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-11-01",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-11-01",
+     "reason": "평가 전 출발일 변경(069500 이력 부족, MA120 불가)으로 v24b로 대체"
     }
    ]
   },
@@ -2952,12 +2957,17 @@
    "cost_version": "편도 5bp(ETF, 매도세 없음)",
    "id": "v24/ma120",
    "name": "069500 종가 > MA120이면 보유, 아니면 현금",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-11-01",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-11-01",
+     "reason": "평가 전 출발일 변경(069500 이력 부족, MA120 불가)으로 v24b로 대체"
     }
    ]
   },
@@ -2978,6 +2988,89 @@
    "cost_version": "편도 5bp(ETF, 매도세 없음)",
    "id": "v24/ma20_60",
    "name": "069500 MA20 > MA60이면 보유, 아니면 현금",
+   "stage": "closed",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-11-01",
+     "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-11-01",
+     "reason": "평가 전 출발일 변경(069500 이력 부족, MA120 불가)으로 v24b로 대체"
+    }
+   ]
+  },
+  {
+   "study": "v24b",
+   "family": "v24 069500 timing",
+   "kind": "strategy",
+   "registered": "2026-11-01",
+   "development": [
+    "2020-07-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 5bp(ETF, 매도세 없음)",
+   "id": "v24b/ma60",
+   "name": "069500 종가 > MA60이면 보유, 아니면 현금(2020-07 출발)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-11-01",
+     "reason": "registered"
+    }
+   ]
+  },
+  {
+   "study": "v24b",
+   "family": "v24 069500 timing",
+   "kind": "strategy",
+   "registered": "2026-11-01",
+   "development": [
+    "2020-07-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 5bp(ETF, 매도세 없음)",
+   "id": "v24b/ma120",
+   "name": "069500 종가 > MA120이면 보유, 아니면 현금(2020-07 출발)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-11-01",
+     "reason": "registered"
+    }
+   ]
+  },
+  {
+   "study": "v24b",
+   "family": "v24 069500 timing",
+   "kind": "strategy",
+   "registered": "2026-11-01",
+   "development": [
+    "2020-07-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 5bp(ETF, 매도세 없음)",
+   "id": "v24b/ma20_60",
+   "name": "069500 MA20 > MA60이면 보유, 아니면 현금(2020-07 출발)",
    "stage": "S0",
    "history": [
     {
