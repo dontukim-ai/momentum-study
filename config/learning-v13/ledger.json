@@ -2908,6 +2908,84 @@
      "reason": "우위 없음: 개발 묶음 평균 −1.88%, 확인 −5.34%"
     }
    ]
+  },
+  {
+   "study": "v24",
+   "family": "v24 069500 timing",
+   "kind": "strategy",
+   "registered": "2026-11-01",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 5bp(ETF, 매도세 없음)",
+   "id": "v24/ma60",
+   "name": "069500 종가 > MA60이면 보유, 아니면 현금",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-11-01",
+     "reason": "registered"
+    }
+   ]
+  },
+  {
+   "study": "v24",
+   "family": "v24 069500 timing",
+   "kind": "strategy",
+   "registered": "2026-11-01",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 5bp(ETF, 매도세 없음)",
+   "id": "v24/ma120",
+   "name": "069500 종가 > MA120이면 보유, 아니면 현금",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-11-01",
+     "reason": "registered"
+    }
+   ]
+  },
+  {
+   "study": "v24",
+   "family": "v24 069500 timing",
+   "kind": "strategy",
+   "registered": "2026-11-01",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 5bp(ETF, 매도세 없음)",
+   "id": "v24/ma20_60",
+   "name": "069500 MA20 > MA60이면 보유, 아니면 현금",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-11-01",
+     "reason": "registered"
+    }
+   ]
   }
  ],
  "curve": []
