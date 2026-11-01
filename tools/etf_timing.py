@@ -70,7 +70,9 @@ def hold(closes: Sequence[float], variant: str) -> bool | None:
     return closes[-1] > statistics.fmean(closes[-n:])
 
 
-def backtest(data: Any, variant: str, cost_bps: float) -> dict[str, Any]:
+def backtest(data: Any, variant: str, cost_bps: float, trace: list | None = None) -> dict[str, Any]:
+    """With ``trace``, each traded session appends (day, NAV, benchmark NAV, shares held, 069500 close) for the
+    diagnosis; the run is the same with or without it."""
     if variant not in VARIANTS:
         raise SpecUndefinedError(f"unknown v24 variant {variant!r}")
     sessions = list(data.sessions)
@@ -134,6 +136,9 @@ def backtest(data: Any, variant: str, cost_bps: float) -> dict[str, Any]:
             out["nav"].append(float(book.nav))
             out["bench"].append(float(bench.nav))
             out["held_sessions"] += bool(book.positions.get(ETF))
+            if trace is not None:
+                trace.append((day, float(book.nav), float(bench.nav), book.positions.get(ETF, 0),
+                              float(bar.close) if bar is not None else None))
     out["fills"] = book.fills
     return out
 
