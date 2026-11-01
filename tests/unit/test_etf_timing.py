@@ -66,3 +66,25 @@ def test_unknown_variant_short_history_and_second_run_are_refused(tmp_path):
     record.write_text(json.dumps({}))
     with pytest.raises(et.SpecUndefinedError):
         et.main(["--input", str(tmp_path), "--record", str(record)])
+
+
+def test_forward_starts_both_books_on_the_given_day_and_reports_only_that_window(capsys):
+    path = t.path_down_up_down(220)
+    data, sessions = t.make_data({"069500": path}, n=220)
+    start = sessions[150]
+    rep = et.forward_report(data, "ma60", 5.0, start)
+    assert rep["from"] == start.isoformat() and rep["to"] == sessions[-1].isoformat()
+    assert set(rep["period"]) >= {"strategy_cagr", "strategy_mdd", "069500_cagr", "069500_mdd"}
+    run = et.backtest(data, "ma60", 5.0, first_trade=start)
+    assert run["days"][0] == start and all(f.session_date >= start for f in run["fills"])
+    assert rep["pass"] == (rep["period"]["strategy_cagr"] >= rep["period"]["069500_cagr"]
+                           and rep["period"]["strategy_mdd"] <= rep["period"]["069500_mdd"])
+
+
+def test_forward_cli_writes_nothing_and_needs_no_record(tmp_path, monkeypatch, capsys):
+    path = t.path_down_up_down(220)
+    data, sessions = t.make_data({"069500": path}, n=220)
+    monkeypatch.setattr("momentum.agent.cli.read_input", lambda *a, **k: data)
+    assert et.main(["--input", str(tmp_path), "--forward-from", sessions[150].isoformat()]) == 0
+    out = capsys.readouterr().out
+    assert "ma60" in out and "forward" in out and list(tmp_path.iterdir()) == []

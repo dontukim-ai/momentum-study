@@ -3094,6 +3094,32 @@
      "reason": "E1 불통과: 연수익 +2.68%·+30.74% vs +6.43%·+32.85%"
     }
    ]
+  },
+  {
+   "id": "v25/ma60_forward",
+   "study": "v25",
+   "family": "v24 069500 timing",
+   "kind": "strategy",
+   "registered": "2026-11-01",
+   "name": "069500 종가 > MA60이면 보유, 아니면 현금 — 전진 기록(2026-11-02~2027-10)",
+   "development": [
+    "2026-11-02",
+    "2027-10-29"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 5bp(ETF, 매도세 없음)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-11-01",
+     "reason": "registered"
+    }
+   ]
   }
  ],
  "curve": []
