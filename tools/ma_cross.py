@@ -33,6 +33,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from momentum.config import ExecutionCfg, SpecUndefinedError
+from momentum.krx.market_events import MarketEvents
 from momentum.ledger.ledger import CorporateAction, Ledger
 from momentum.portfolio.targets import TargetOrder
 
@@ -120,11 +121,13 @@ JUMP_LIMIT = 0.30                            # KRX daily price limit since 2015-
 SHARE_ACTIONS = ("split", "bonus_issue", "capital_reduction")
 
 
-def unexplained(ratio: float, kinds: Sequence[str]) -> bool:
+def unexplained(ratio: float, kinds: Sequence[str], liquidating: bool = False) -> bool:
     """A move beyond the daily limit with no share action in between: an unrecorded split, merger or error.
 
     A limit-up or limit-down day can print a hair past 30% of the previous close (the limit is taken on the
     exchange's base price and rounded to the tick), so the line sits half a point beyond the limit."""
+    if liquidating:          # 정리매매 has no price limit: a filed liquidation's jump is a real price (user, 2026-11-01)
+        return False
     return abs(ratio - 1) > JUMP_LIMIT + 0.005 and not any(k in SHARE_ACTIONS for k in kinds)
 
 
@@ -214,7 +217,7 @@ def _universe(bars: dict, sessions: list[date], k: int, states: dict) -> dict[st
 
 def backtest(data: Any, cost_bps: float, trace: list | None = None, strict: bool = True,
              rule: Rule = RULES["v20"], first_trade: date = FIRST_TRADE,
-             last_day: date | None = None) -> dict[str, Any]:
+             last_day: date | None = None, events: MarketEvents | None = None) -> dict[str, Any]:
     """Run A on a ResearchInput: daily NAVs of the strategy and the 069500 benchmark, fills and counts.
 
     With ``trace``, each session appends (day, NAV, {symbol: (shares, mark, close, open)}) for every name
@@ -223,9 +226,14 @@ def backtest(data: Any, cost_bps: float, trace: list | None = None, strict: bool
 
     ``strict``: a held name whose open (or close) moves beyond the daily limit from its last close with no
     split, bonus issue or capital reduction in between stops the run (rule 3: an unrecorded share change
-    must not be booked as profit or loss). The diagnosis passes False and gets the cases in ``jumps``."""
+    must not be booked as profit or loss). The diagnosis passes False and gets the cases in ``jumps``.
+
+    ``events`` (momentum.krx.market_events): a jump within a filed liquidation is booked as a real price,
+    and a stock with a restructuring filing available at the decision is not bought and, if held, is sold
+    at the next open. Without it the run is the recorded v20~v23 one."""
     # ``first_trade``: no order fills before it (a forward record starts here); ``last_day``: sessions after it
     # are never read (a development-only run cannot see the validation half)
+    events = events or MarketEvents([])
     sessions = [d for d in data.sessions if last_day is None or d <= last_day]
     bars: dict[date, dict[str, Any]] = defaultdict(dict)
     for bar in data.snapshot.bars:
@@ -251,7 +259,7 @@ def backtest(data: Any, cost_bps: float, trace: list | None = None, strict: bool
     closes: dict[str, list[tuple[date, float]]] = defaultdict(list)
     counts = {"golden_in_top": 0, "dead_exits": 0, "entries_skipped_full": 0, "forced_exits": 0,
               "written_off": 0, "orders_waiting_no_adv": 0,
-              "orders_deferred_action": 0, "stop_exits": 0, "take_exits": 0}
+              "orders_deferred_action": 0, "stop_exits": 0, "take_exits": 0, "quarantine_exits": 0}
     out: dict[str, Any] = {"days": [], "nav": [], "bench": []}
     pending: list[TargetOrder] = []
     bench_pending: list[TargetOrder] = []
@@ -285,7 +293,7 @@ def backtest(data: Any, cost_bps: float, trace: list | None = None, strict: bool
                 last_day, last_close = closes[s][-1]
                 px = float(today[s].open) if today[s].open > 0 else float(today[s].close)
                 kinds = [a.action_type for a in data_actions.get(s, []) if last_day < a.ex_date <= day]
-                if unexplained(px / last_close, kinds):
+                if unexplained(px / last_close, kinds, events.liquidating(s, day)):
                     jumps.append({"symbol": s, "last_day": last_day.isoformat(), "day": day.isoformat(),
                                   "ratio": px / last_close})
                     if strict:
@@ -326,6 +334,9 @@ def backtest(data: Any, cost_bps: float, trace: list | None = None, strict: bool
             if s in held and s not in exiting and not _eligible(states.get(s)):
                 exiting.add(s)
                 counts["forced_exits"] += 1
+            if s in held and s not in exiting and events.quarantined(s, _decision(day)):
+                exiting.add(s)
+                counts["quarantine_exits"] += 1
             series = closes.get(s, [])
             if rule.exit == "stop_take" and s in held:
                 if s not in exiting and series and series[-1][0] == day and s in entry_px:
@@ -348,7 +359,7 @@ def backtest(data: Any, cost_bps: float, trace: list | None = None, strict: bool
                 if signal == "dead" and s not in exiting:
                     exiting.add(s)
                     counts["dead_exits"] += 1
-            elif signal == "golden" and _eligible(states.get(s)):
+            elif signal == "golden" and _eligible(states.get(s)) and not events.quarantined(s, _decision(day)):
                 candidates.append(s)
         # a sell stays on the book until it fills: a missing open or a long suspension only delays it
         pending += [TargetOrder(s, "sell", held[s], -1) for s in sorted(exiting)]
@@ -405,6 +416,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--record", type=Path, required=True, help="written once; an existing record stops the run")
     parser.add_argument("--variant", choices=sorted(RULES), default="v20")
+    parser.add_argument("--events", type=Path, help="market events (tools/market_events.py); none: as recorded")
     args = parser.parse_args(argv)
     if args.record.exists():
         raise SpecUndefinedError(f"{args.record} exists: the {args.variant} backtest is recorded once")
@@ -414,7 +426,8 @@ def main(argv: list[str] | None = None) -> int:
     data = read_input(root / "prices.csv", root / "securities.jsonl", root / "actions.json", root / "sessions.json",
                       securities_mode="session-confirmed")
     rule = RULES[args.variant]
-    out = {name: report(backtest(data, bps, rule=rule)) for name, bps in COSTS.items()}
+    events = MarketEvents.load(args.events) if args.events else None
+    out = {name: report(backtest(data, bps, rule=rule, events=events)) for name, bps in COSTS.items()}
     print(f"variant {rule}")
     for name, rep in out.items():
         print(f"== {name} ({COSTS[name]} bp one way)  E1 pass: {rep['e1_pass']}  dev excess t {rep['dev_excess_t']:.2f}")
