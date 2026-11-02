@@ -3131,19 +3131,24 @@
     "2026-10-20"
    ],
    "dev": {
-    "t": null,
-    "net_return": null,
+    "t": 3.35,
+    "net_return": -0.026,
     "mean_daily": null
    },
    "cost_version": "왕복 73bp(편도 36.5bp ×2), 상위 30 순초과",
    "id": "v26/kronos_small",
    "name": "Kronos-small 10세션 순위 신호(상위 300, 90세션 창)",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-11-01",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-11-02",
+     "reason": "RankIC +0.058(t 3.35)은 기준 3.29를 넘었지만 상위 30 순초과 −2.60%로 1차 불통과"
     }
    ]
   },
@@ -3157,19 +3162,24 @@
     "2026-10-20"
    ],
    "dev": {
-    "t": null,
-    "net_return": null,
+    "t": 2.31,
+    "net_return": -0.0322,
     "mean_daily": null
    },
    "cost_version": "왕복 73bp(편도 36.5bp ×2), 상위 30 순초과",
    "id": "v26/timesfm25",
    "name": "TimesFM 2.5 10세션 순위 신호(상위 300, 90세션 종가)",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-11-01",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-11-02",
+     "reason": "RankIC +0.043(t 2.31) 기준 미달, 상위 30 순초과 −3.22%로 1차 불통과"
     }
    ]
   },
@@ -3183,19 +3193,24 @@
     "2026-10-20"
    ],
    "dev": {
-    "t": null,
-    "net_return": null,
+    "t": 1.09,
+    "net_return": -0.0454,
     "mean_daily": null
    },
    "cost_version": "왕복 73bp(편도 36.5bp ×2), 상위 30 순초과",
    "id": "v26/reversal10",
    "name": "비교 규칙: −(10세션 수익률) 순위",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-11-01",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-11-02",
+     "reason": "RankIC +0.029(t 1.09) 기준 미달, 상위 30 순초과 −4.54%로 1차 불통과"
     }
    ]
   }
