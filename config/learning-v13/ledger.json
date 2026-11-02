@@ -3430,6 +3430,84 @@
      "reason": "개발 h20 묶음 평균 +1.63%(t 1.06, 기준 3.31 미달), 확인 −3.02%: 우위 없음"
     }
    ]
+  },
+  {
+   "kind": "strategy",
+   "registered": "2026-11-02",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
+   "study": "v31",
+   "family": "v31 diversity-weighted",
+   "id": "v31/dwp_p0",
+   "name": "시총 상위 200 동일 비중(p=0), 분기 리밸런싱, 95% 투자, R2 대비",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-11-02",
+     "reason": "registered"
+    }
+   ]
+  },
+  {
+   "kind": "strategy",
+   "registered": "2026-11-02",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
+   "study": "v31",
+   "family": "v31 diversity-weighted",
+   "id": "v31/dwp_p05",
+   "name": "시총 상위 200 다양성 가중 μ^0.5, 분기 리밸런싱, 95% 투자, R2 대비",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-11-02",
+     "reason": "registered"
+    }
+   ]
+  },
+  {
+   "kind": "strategy",
+   "registered": "2026-11-02",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "편도 36.5bp(1.5+25+세금 절반 10)",
+   "study": "v31",
+   "family": "v31 diversity-weighted",
+   "id": "v31/dwp_p08",
+   "name": "시총 상위 200 다양성 가중 μ^0.8, 분기 리밸런싱, 95% 투자, R2 대비",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-11-02",
+     "reason": "registered"
+    }
+   ]
   }
  ],
  "curve": []
