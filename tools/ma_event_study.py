@@ -116,8 +116,12 @@ def events(data: Any) -> list[dict[str, Any]]:
     return found
 
 
-def outcomes(data: Any, found: list[dict[str, Any]], h: int) -> tuple[list[dict[str, Any]], dict[str, int]]:
-    """Net excess of each event over ``h`` sessions, and the counts of events left out by reason."""
+def outcomes(data: Any, found: list[dict[str, Any]], h: int,
+             events: Any = None) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Net excess of each event over ``h`` sessions, and the counts of events left out by reason.
+
+    ``events`` (momentum.krx.market_events.MarketEvents, v26 on): a jump inside a filed liquidation is a real
+    price, as in tools/ma_cross.py; without it the run is the recorded v23 one."""
     sessions = list(data.sessions)
     series: dict[str, dict[int, Any]] = defaultdict(dict)
     index = {d: k for k, d in enumerate(sessions)}
@@ -146,7 +150,8 @@ def outcomes(data: Any, found: list[dict[str, Any]], h: int) -> tuple[list[dict[
                 continue
             kinds = [a.action_type for a in actions.get(s, []) if sessions[j0] < a.ex_date <= sessions[j1]]
             for px in (own[j1].open, own[j1].close):
-                if px > 0 and ma.unexplained(float(px / own[j0].close), kinds):
+                liquidating = events is not None and events.liquidating(s, sessions[j1])
+                if px > 0 and ma.unexplained(float(px / own[j0].close), kinds, liquidating):
                     jumped = True
         if jumped:
             left["unexplained"] += 1

@@ -20,6 +20,8 @@ momentum-agent = "momentum.agent.cli:main"
 
 [project.optional-dependencies]
 agent = ["kis-self-improving-agent>=0.5.2"]
+# v26 (tools/fm_rank.py) only: Kronos code is cloned at a pinned commit; TimesFM 2.5 ships in timesfm 2.0.x
+fm = ["torch>=2.0", "timesfm==2.0.2", "huggingface_hub>=0.28", "safetensors>=0.5.3", "einops>=0.7", "pandas>=2.0", "tqdm>=4.66"]
 
 [tool.uv.sources]
 kis-self-improving-agent = { path = "apps/kis-agent", editable = true }
