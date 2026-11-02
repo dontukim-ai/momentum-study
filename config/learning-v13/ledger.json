@@ -3213,6 +3213,58 @@
      "reason": "RankIC +0.029(t 1.09) 기준 미달, 상위 30 순초과 −4.54%로 1차 불통과"
     }
    ]
+  },
+  {
+   "study": "v27",
+   "family": "v27 5/20 cross path",
+   "kind": "strategy",
+   "registered": "2026-11-02",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "왕복 73bp(편도 36.5bp ×2)",
+   "id": "v27/gc5_20_h20",
+   "name": "5일선이 20일선 상향 돌파한 날 다음 시가 매수, 20세션 069500 대비 순초과",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-11-02",
+     "reason": "registered"
+    }
+   ]
+  },
+  {
+   "study": "v27",
+   "family": "v27 5/20 cross path",
+   "kind": "strategy",
+   "registered": "2026-11-02",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "왕복 73bp(편도 36.5bp ×2)",
+   "id": "v27/gc5_20_vol_h20",
+   "name": "5/20 상향 돌파 + 당일 거래량 ≥ 앞 20세션 평균 2배, 20세션 069500 대비 순초과",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-11-02",
+     "reason": "registered"
+    }
+   ]
   }
  ],
  "curve": []
