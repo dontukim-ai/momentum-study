@@ -324,14 +324,49 @@ def kronos_predictor(code_dir: Path, device: str = "cpu") -> tuple[Predictor, di
     return predict, {"kronos_code": head, "kronos_model": mrev, "kronos_tokenizer": trev}
 
 
+QKV = ("query", "key", "value")
+
+
+def fused_qkv(state: dict[str, Any], cat: Callable[[list[Any]], Any]) -> dict[str, Any]:
+    """The preregistered TimesFM 2.5 weights (last commit on or before WEIGHT_CUTOFF) keep each attention's
+    query, key and value as separate linears; timesfm 2.0.2 runs them as one ``qkv_proj`` whose output it
+    splits back into query, key, value in that order. Stacking the three along the output axis is the same
+    map, so the weights are the preregistered ones; a layer with only some of the three is refused."""
+    out: dict[str, Any] = {}
+    parts: dict[tuple[str, str], dict[str, Any]] = defaultdict(dict)
+    for name, value in state.items():
+        head, _, leaf = name.rpartition(".")
+        prefix, _, proj = head.rpartition(".")
+        if proj in QKV and prefix.endswith(".attn"):
+            parts[(prefix, leaf)][proj] = value
+        else:
+            out[name] = value
+    for (prefix, leaf), got in sorted(parts.items()):
+        if set(got) != set(QKV):
+            raise SpecUndefinedError(f"{prefix} {leaf}: only {sorted(got)} of query/key/value")
+        out[f"{prefix}.qkv_proj.{leaf}"] = cat([got[p] for p in QKV])
+    return out
+
+
 def timesfm_predictor() -> tuple[Predictor, dict[str, str]]:
     import numpy as np
     import timesfm  # type: ignore[import-not-found]
     import torch
 
     revision = timesfm_revision()
+    from huggingface_hub import hf_hub_download
+    from safetensors.torch import load_file  # type: ignore[import-not-found]
+
     torch.manual_seed(0)
-    model = timesfm.TimesFM_2p5_200M_torch.from_pretrained(TIMESFM_REPO, revision=revision)
+    # from_pretrained loads strictly into the fused layout and fails on these weights (first v26 launch,
+    # 2026-11-02, before any ranking); the file is the same, only its attention keys are stacked (fused_qkv).
+    # No torch.compile: it changes nothing in the numbers and is the slowest, least portable step on a Mac CPU
+    cls = timesfm.TimesFM_2p5_200M_torch
+    path = hf_hub_download(TIMESFM_REPO, cls.WEIGHTS_FILENAME, revision=revision)
+    model = cls(torch_compile=False)
+    model.model.load_state_dict(fused_qkv(load_file(path), lambda parts: torch.cat(parts, dim=0)), strict=True)
+    model.model.to(model.model.device)
+    model.model.eval()
     # inputs are 90 closes; the context is padded (masked) to the 32-step patch, so no input normalization
     # (it would average the padding in); TimesFM normalizes each series itself
     model.compile(timesfm.ForecastConfig(max_context=96, max_horizon=128, normalize_inputs=False,
