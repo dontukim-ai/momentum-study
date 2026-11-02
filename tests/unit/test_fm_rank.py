@@ -104,3 +104,17 @@ def test_an_oracle_ranks_well_the_baseline_is_scored_and_a_short_answer_is_refus
         assert s["pass"] == (s["mean_rank_ic"] > 0 and s["t_rank_ic"] >= fm.THRESHOLD and s["mean_top_net_excess"] > 0)
     with pytest.raises(fm.SpecUndefinedError):
         fm.run(data, {"kronos_small": lambda w, f: [[1.0] * 3 for _ in w], "timesfm25": flat})
+
+
+def test_unfused_attention_weights_are_stacked_query_key_value_and_a_partial_set_is_refused():
+    def cat(parts: list[list[int]]) -> list[int]:
+        return [x for p in parts for x in p]
+
+    state = {"stacked_xf.0.attn.query.weight": [1], "stacked_xf.0.attn.key.weight": [2],
+             "stacked_xf.0.attn.value.weight": [3], "stacked_xf.0.attn.out.weight": [9], "tokenizer.w": [7]}
+    assert fm.fused_qkv(state, cat) == {"stacked_xf.0.attn.qkv_proj.weight": [1, 2, 3],
+                                         "stacked_xf.0.attn.out.weight": [9], "tokenizer.w": [7]}
+    already = {"stacked_xf.0.attn.qkv_proj.weight": [1, 2, 3]}
+    assert fm.fused_qkv(already, cat) == already
+    with pytest.raises(fm.SpecUndefinedError):
+        fm.fused_qkv({"stacked_xf.0.attn.query.weight": [1], "stacked_xf.0.attn.key.weight": [2]}, cat)
