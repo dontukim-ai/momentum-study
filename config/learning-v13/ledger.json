@@ -3275,6 +3275,32 @@
      "reason": "개발 h20 묶음 평균 −2.55%(t −2.36), 확인 −5.38%: 우위 없음"
     }
    ]
+  },
+  {
+   "id": "v28/drop_rebound_h20",
+   "study": "v28",
+   "family": "v28 drop-rebound pattern",
+   "kind": "strategy",
+   "registered": "2026-11-02",
+   "name": "k−20→k−5 069500 대비 ≤ −6%p, k−5→k ≥ +10%p 첫날 다음 시가 매수, 20세션 순초과",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "왕복 73bp(편도 36.5bp ×2)",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-11-02",
+     "reason": "registered"
+    }
+   ]
   }
  ],
  "curve": []
