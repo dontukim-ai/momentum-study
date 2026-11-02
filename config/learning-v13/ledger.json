@@ -3224,19 +3224,24 @@
     "2023-06-30"
    ],
    "dev": {
-    "t": null,
-    "net_return": null,
+    "t": -2.55,
+    "net_return": -0.0181,
     "mean_daily": null
    },
    "cost_version": "왕복 73bp(편도 36.5bp ×2)",
    "id": "v27/gc5_20_h20",
    "name": "5일선이 20일선 상향 돌파한 날 다음 시가 매수, 20세션 069500 대비 순초과",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-11-02",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-11-02",
+     "reason": "개발 h20 묶음 평균 −1.81%(t −2.55), 확인 −4.15%: 우위 없음"
     }
    ]
   },
@@ -3250,19 +3255,24 @@
     "2023-06-30"
    ],
    "dev": {
-    "t": null,
-    "net_return": null,
+    "t": -2.36,
+    "net_return": -0.0255,
     "mean_daily": null
    },
    "cost_version": "왕복 73bp(편도 36.5bp ×2)",
    "id": "v27/gc5_20_vol_h20",
    "name": "5/20 상향 돌파 + 당일 거래량 ≥ 앞 20세션 평균 2배, 20세션 069500 대비 순초과",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-11-02",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-11-02",
+     "reason": "개발 h20 묶음 평균 −2.55%(t −2.36), 확인 −5.38%: 우위 없음"
     }
    ]
   }
