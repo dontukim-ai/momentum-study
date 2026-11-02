@@ -3288,17 +3288,22 @@
     "2023-06-30"
    ],
    "dev": {
-    "t": null,
-    "net_return": null,
+    "t": -3.82,
+    "net_return": -0.0327,
     "mean_daily": null
    },
    "cost_version": "왕복 73bp(편도 36.5bp ×2)",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-11-02",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-11-02",
+     "reason": "개발 h20 묶음 평균 −3.27%(t −3.82), 확인 −5.93%: 우위 없음(유의하게 음수)"
     }
    ]
   }
