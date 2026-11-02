@@ -4,6 +4,9 @@ Collect the periodic-report list first (key from the environment):
   uv run python tools/dart_collect.py --type A --start 2019-01-01 --end 2026-10-20
 Then fetch fnlttMultiAcnt for every listed company with an annual filing:
   uv run python tools/dart_financials.py collect --years 2018 2025 --root data/krx/raw
+the interim reports (v30, saved under dart_finq/, periods ending after --last skipped so that a report not
+yet due is never saved as "no data"):
+  uv run python tools/dart_financials.py collect-quarterly --years 2018 2026 --last 2026-06 --root data/krx/raw
 and build the JSONL for ``momentum-agent --financials``:
   uv run python tools/dart_financials.py build --root data/krx/raw --out data/krx/financials-v7
 
@@ -18,6 +21,7 @@ from pathlib import Path
 
 from momentum.krx.dart_collect import list_pages
 from momentum.krx.dart_financials import (
+    QUARTERLY_REPORTS,
     DartFinancialsFetcher,
     annual_filings,
     build_records,
@@ -30,11 +34,12 @@ from momentum.krx.fsc_collect import CollectError
 
 def main(argv: list[str] | None = None, **fetch_options: object) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("collect", "build"))
+    parser.add_argument("action", choices=("collect", "collect-quarterly", "build"))
     parser.add_argument("--root", type=Path, default=Path("data/krx/raw"))
     parser.add_argument("--years", type=int, nargs=2, metavar=("FIRST", "LAST"))
     parser.add_argument("--out", type=Path)
     parser.add_argument("--pause", type=float, default=1.0)
+    parser.add_argument("--last", help="collect-quarterly: last period end to fetch, YYYY-MM")
     args = parser.parse_args(argv)
     pages = list_pages(args.root, "A")
     if not pages:
@@ -55,6 +60,29 @@ def main(argv: list[str] | None = None, **fetch_options: object) -> int:
                 counts = fetcher.fetch_year(year, corps)
                 print(f"dart-financials: {year} {len(corps)} companies, "
                       f"{counts['fetched']} batches fetched, {counts['skipped']} skipped")
+        except CollectError as exc:
+            print(f"dart-financials: {exc}")
+            return 1
+        return 0
+    if args.action == "collect-quarterly":
+        if not args.years or args.years[0] > args.years[1] or args.pause < 0.1 or not args.last:
+            parser.error("collect-quarterly needs --years FIRST LAST, --last YYYY-MM and --pause >= 0.1")
+        try:
+            fetcher = DartFinancialsFetcher(
+                args.root, pause=args.pause,
+                progress=lambda m: print(f"dart-financials: {m}", file=sys.stderr, flush=True),
+                **fetch_options,  # type: ignore[arg-type]
+            )
+            for year in range(args.years[0], args.years[1] + 1):
+                # a company listed with an annual report for this year or the one before
+                corps = sorted(set(listed_corps(filings, year)) | set(listed_corps(filings, year - 1)))
+                for report, month in QUARTERLY_REPORTS.items():
+                    if f"{year}-{month:02d}" > args.last:
+                        print(f"dart-financials: {year} {report} skipped (after {args.last})")
+                        continue
+                    counts = fetcher.fetch_year(year, corps, report)
+                    print(f"dart-financials: {year} {report} {len(corps)} companies, "
+                          f"{counts['fetched']} batches fetched, {counts['skipped']} skipped")
         except CollectError as exc:
             print(f"dart-financials: {exc}")
             return 1
