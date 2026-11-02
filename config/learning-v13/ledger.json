@@ -3315,8 +3315,8 @@
     "2023-06-30"
    ],
    "dev": {
-    "t": null,
-    "net_return": null,
+    "t": -3.03,
+    "net_return": -0.0145,
     "mean_daily": null
    },
    "cost_version": "왕복 73bp(편도 36.5bp ×2)",
@@ -3324,12 +3324,17 @@
    "study": "v29",
    "family": "v29 no-news drop",
    "name": "5세션 069500 대비 하락 ≤ −3σ√5, k−5~k 공시 없음, 다음 시가 매수 5세션 순초과",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-11-02",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-11-02",
+     "reason": "개발 h5 묶음 평균 −1.45%(t −3.03), 확인 −1.82%: 우위 없음(음의 방향)"
     }
    ]
   },
@@ -3341,8 +3346,8 @@
     "2023-06-30"
    ],
    "dev": {
-    "t": null,
-    "net_return": null,
+    "t": -2.52,
+    "net_return": -0.021,
     "mean_daily": null
    },
    "cost_version": "왕복 73bp(편도 36.5bp ×2)",
@@ -3350,12 +3355,17 @@
    "study": "v29",
    "family": "v29 no-news drop",
    "name": "같은 사건, 20세션 순초과",
-   "stage": "S0",
+   "stage": "closed",
    "history": [
     {
      "stage": "S0",
      "date": "2026-11-02",
      "reason": "registered"
+    },
+    {
+     "stage": "closed",
+     "date": "2026-11-02",
+     "reason": "개발 h20 묶음 평균 −2.10%(t −2.52), 확인 −3.95%: 우위 없음(음의 방향)"
     }
    ]
   },
