@@ -146,3 +146,30 @@ def test_cli_build_writes_records_kis_agent_reads(tmp_path, capsys):
     assert (record.equity, record.assets, record.operating_income) == (1000, 5000, 10)
     assert history.financials("000001", KRX.observed_at(date(2024, 3, 14))) is None
     assert tool.main(["build", "--root", str(tmp_path / "empty"), "--out", str(tmp_path / "o2")]) == 1
+
+
+def test_interim_reports_go_to_their_own_folder_and_the_cli_skips_periods_not_yet_due(tmp_path, capsys):
+    calls = []
+
+    def http(url):
+        calls.append(url)
+        return 200, answer(account("00000001", "20240515000001", "CFS", "자산총계", "1"))
+
+    fetcher = DartFinancialsFetcher(tmp_path, environ={"OPENDART_API_KEY": "SECRET"}, http=http, sleep=lambda s: None)
+    assert fetcher.fetch_year(2024, ["00000001"], "11013") == {"fetched": 1, "skipped": 0}
+    assert "reprt_code=11013" in calls[0]
+    saved = list((tmp_path / "dart_finq" / "2024-11013").glob("*.json"))
+    assert len(saved) == 1 and json.loads(saved[0].read_bytes().partition(b"\n")[0])["reprt_code"] == "11013"
+    assert read_batches(tmp_path) == []                                   # the annual build never reads them
+    with pytest.raises(CollectError, match="reprt_code"):
+        fetcher.batch_path(2024, ["00000001"], "99999")
+    write_list(tmp_path)
+    spec = importlib.util.spec_from_file_location("dart_financials_tool", Path(__file__).parents[2] / "tools/dart_financials.py")
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    calls.clear()
+    assert tool.main(["collect-quarterly", "--root", str(tmp_path), "--years", "2024", "2024", "--last", "2024-06"],
+                     environ={"OPENDART_API_KEY": "SECRET"}, http=http, sleep=lambda s: None) == 0
+    out = capsys.readouterr().out
+    assert "2024 11014 skipped (after 2024-06)" in out
+    assert sorted(u.split("reprt_code=")[1][:5] for u in calls) == ["11012", "11013"]   # never 11014

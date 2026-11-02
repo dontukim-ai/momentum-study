@@ -3306,6 +3306,110 @@
      "reason": "개발 h20 묶음 평균 −3.27%(t −3.82), 확인 −5.93%: 우위 없음(유의하게 음수)"
     }
    ]
+  },
+  {
+   "kind": "strategy",
+   "registered": "2026-11-02",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "왕복 73bp(편도 36.5bp ×2)",
+   "id": "v29/drop_nonews_h5",
+   "study": "v29",
+   "family": "v29 no-news drop",
+   "name": "5세션 069500 대비 하락 ≤ −3σ√5, k−5~k 공시 없음, 다음 시가 매수 5세션 순초과",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-11-02",
+     "reason": "registered"
+    }
+   ]
+  },
+  {
+   "kind": "strategy",
+   "registered": "2026-11-02",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "왕복 73bp(편도 36.5bp ×2)",
+   "id": "v29/drop_nonews_h20",
+   "study": "v29",
+   "family": "v29 no-news drop",
+   "name": "같은 사건, 20세션 순초과",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-11-02",
+     "reason": "registered"
+    }
+   ]
+  },
+  {
+   "kind": "strategy",
+   "registered": "2026-11-02",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "왕복 73bp(편도 36.5bp ×2)",
+   "id": "v30/drop_lowf_h5",
+   "study": "v30",
+   "family": "v30 drop vs fundamental volatility",
+   "name": "v29 급락 중 분기 영업이익/자산 변동성 하위 1/3, 5세션 순초과",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-11-02",
+     "reason": "registered"
+    }
+   ]
+  },
+  {
+   "kind": "strategy",
+   "registered": "2026-11-02",
+   "development": [
+    "2020-04-01",
+    "2023-06-30"
+   ],
+   "dev": {
+    "t": null,
+    "net_return": null,
+    "mean_daily": null
+   },
+   "cost_version": "왕복 73bp(편도 36.5bp ×2)",
+   "id": "v30/drop_lowf_h20",
+   "study": "v30",
+   "family": "v30 drop vs fundamental volatility",
+   "name": "같은 사건, 20세션 순초과",
+   "stage": "S0",
+   "history": [
+    {
+     "stage": "S0",
+     "date": "2026-11-02",
+     "reason": "registered"
+    }
+   ]
   }
  ],
  "curve": []

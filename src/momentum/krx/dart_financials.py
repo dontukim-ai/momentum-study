@@ -37,6 +37,8 @@ from .fsc_collect import CollectError, Http, http_get
 
 MULTI_URL = "https://opendart.fss.or.kr/api/fnlttMultiAcnt.json"
 ANNUAL_REPORT = "11011"
+# v30: the three interim reports and the month their (December fiscal year) period ends
+QUARTERLY_REPORTS = {"11013": 3, "11012": 6, "11014": 9}
 BATCH = 100
 ACCOUNTS = {"자본총계": "equity", "자산총계": "assets", "영업이익": "operating_income"}
 LISTED = ("Y", "K", "N")  # KOSPI, KOSDAQ, KONEX
@@ -124,16 +126,21 @@ class DartFinancialsFetcher:
         self.http, self.sleep, self.pause, self.progress = http, sleep, pause, progress
         self._requested = False
 
-    def batch_path(self, year: int, corps: Sequence[str]) -> Path:
+    def batch_path(self, year: int, corps: Sequence[str], report: str = ANNUAL_REPORT) -> Path:
+        """Annual batches stay where they always were; interim ones (v30) go to ``dart_finq/<year>-<code>``."""
         name = hashlib.sha256(",".join(corps).encode()).hexdigest()[:16]
-        return self.root / "dart_fin" / str(year) / f"{name}.json"
+        if report == ANNUAL_REPORT:
+            return self.root / "dart_fin" / str(year) / f"{name}.json"
+        if report not in QUARTERLY_REPORTS:
+            raise CollectError(f"unknown reprt_code {report!r}")
+        return self.root / "dart_finq" / f"{year}-{report}" / f"{name}.json"
 
-    def _request(self, year: int, corps: Sequence[str]) -> bytes:
+    def _request(self, year: int, corps: Sequence[str], report: str = ANNUAL_REPORT) -> bytes:
         if self._requested:
             self.sleep(self.pause)
         self._requested = True
         query = {"crtfc_key": self._key, "corp_code": ",".join(corps),
-                 "bsns_year": str(year), "reprt_code": ANNUAL_REPORT}
+                 "bsns_year": str(year), "reprt_code": report}
         url = MULTI_URL + "?" + urlencode(query)
         for attempt in range(3):
             try:
@@ -157,22 +164,25 @@ class DartFinancialsFetcher:
             raise CollectError(f"OpenDART status {code!r}")
         return body
 
-    def fetch_year(self, year: int, corps: Sequence[str]) -> dict[str, int]:
+    def fetch_year(self, year: int, corps: Sequence[str], report: str = ANNUAL_REPORT) -> dict[str, int]:
         counts = {"fetched": 0, "skipped": 0}
         corps = sorted(corps)
         for start in range(0, len(corps), BATCH):
             chunk = corps[start:start + BATCH]
-            path = self.batch_path(year, chunk)
+            path = self.batch_path(year, chunk, report)
             if path.exists():
                 counts["skipped"] += 1
                 continue
-            body = self._request(year, chunk)
+            body = self._request(year, chunk, report)
             path.parent.mkdir(parents=True, exist_ok=True)
             temporary = path.with_suffix(".partial")
-            temporary.write_bytes(json.dumps({"bsns_year": year, "corp_codes": chunk}).encode() + b"\n" + body)
+            header = {"bsns_year": year, "corp_codes": chunk}
+            if report != ANNUAL_REPORT:
+                header["reprt_code"] = report
+            temporary.write_bytes(json.dumps(header).encode() + b"\n" + body)
             os.replace(temporary, path)
             counts["fetched"] += 1
-            self.progress(f"{year} batch {start // BATCH + 1}: {len(body)} bytes")
+            self.progress(f"{year} {report} batch {start // BATCH + 1}: {len(body)} bytes")
         return counts
 
 
