@@ -1,0 +1,16 @@
+v19b daily 2026-11-02, run 2026-11-02 16:12:51 KST, main 6ff0fe4
+   Building momentum @ file:///Users/dongchulkim/dev/quant/wt-v19b-daily
+      Built momentum @ file:///Users/dongchulkim/dev/quant/wt-v19b-daily
+Uninstalled 1 package in 1ms
+Installed 1 package in 1ms
+kis-minute-history: 069500 done {'skipped': 5, 'fetched': 1} 3s
+kis-minute-history: 1 symbols 2026-10-26~2026-11-02 {'skipped': 5, 'fetched': 1}
+collect_exit=0
+v19b ONLINE, 069500, forward 2026-10-26~2026-11-02 (record seeded by every development day)
+forward seed sha256 de14cf0a585caf0bf3d4475aff703cb94a8beedb3983a4c4148db94964e016ad
+cell          flat         n     acc            95% CI        p  day_t  brier    wtd     bp   bp_t    big
+ONLINE h5       1%      1957  48.80% [46.59%,51.01%]  8.6e-01  -1.02 0.2567 -0.036  -0.70  -2.50  45.9%
+* p < 0.0500 (Bonferroni over 1 cells); day_t treats each test day as one observation
+wtd: hits minus misses weighed by move size; bp: mean signed return per call before costs (bp_t by day); big: accuracy on the largest quarter of moves
+{"cell": {"accuracy": 0.48799182422074605, "bonferroni_significant": false, "brier": 0.2567191460396116, "calibration": [[0.2, 5, 0.24116857868183428, 0.4], [0.3, 98, 0.36463914340718373, 0.5510204081632653], [0.4, 821, 0.46010689346788897, 0.5237515225334958], [0.5, 930, 0.5403633435248295, 0.5021505376344086], [0.6, 149, 0.6301048767318905, 0.4697986577181208], [0.7, 6, 0.7336940836940838, 0.8333333333333334]], "called": 1957, "ci95": [0.4658905283282638, 0.5101401719587967], "confidence": [{"accuracy": 0.4975369458128079, "band": "0.00-0.02", "n": 406}, {"accuracy": 0.5037707390648567, "band": "0.02-0.05", "n": 663}, {"accuracy": 0.4714285714285714, "band": "0.05-0.10", "n": 630}, {"accuracy": 0.4728682170542636, "band": "0.10-0.50", "n": 258}], "coverage": 0.9597842079450711, "day_t": -1.0201163807772806, "days": 6, "flat_share": 0.01497584541062802, "large_move_accuracy": 0.45918367346938777, "log_loss": 0.7069092728332926, "magnitude_weighted": -0.036114005629825585, "moving": 2039, "p_binomial": 0.8610498800224443, "samples": 2070, "signed_return_bp": -0.6958945919691734, "signed_return_day_t": -2.49858004446142}, "days": ["2026-10-26", "2026-11-02"], "forward_seed_sha256": "de14cf0a585caf0bf3d4475aff703cb94a8beedb3983a4c4148db94964e016ad", "seed_days": ["2025-10-27", "2026-06-30"], "seed_sha256": "de14cf0a585caf0bf3d4475aff703cb94a8beedb3983a4c4148db94964e016ad"}
+score_exit=0
