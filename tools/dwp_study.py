@@ -170,7 +170,7 @@ def backtest(data: Any, shares: Any, p: float, cost_bps: float, market: Any = No
                     counts["sells_carried"] += 1
                 elif o.side == "buy" and left > 0:
                     counts["buys_cancelled" if left == o.shares else "buys_short"] += 1
-            # 069500's own distributions are booked like the stocks' dividends (tools/ma_cross.py passes none)
+            # 069500's own distributions are booked like the stocks' dividends (as tools/ma_cross.py now does too)
             etf_actions = [a for a in actions_by_day.get(day, []) if a.security_id == ma.MARKET_ETF]
             bench.step_session(day, prev, etf_actions, bench_pending, opens, ma._adv(bars, lookback, bench_pending),
                                close_px)

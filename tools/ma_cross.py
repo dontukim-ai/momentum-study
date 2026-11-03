@@ -311,7 +311,11 @@ def backtest(data: Any, cost_bps: float, trace: list | None = None, strict: bool
                     entry_px[fill.security_id] = float(fill.price)
             for s_ in [s_ for s_ in entry_px if not book.positions.get(s_)]:
                 entry_px.pop(s_)
-            bench.step_session(day, prev, [], bench_pending, opens, _adv(bars, lookback, bench_pending), close_px)
+            # 069500's own distributions reach the benchmark like the stocks' dividends reach the strategy
+            # (v20~v23 passed none; their inputs had no 069500 rows, so those runs are unchanged)
+            etf_actions = [a for a in actions_by_day.get(day, []) if a.security_id == MARKET_ETF]
+            bench.step_session(day, prev, etf_actions, bench_pending, opens, _adv(bars, lookback, bench_pending),
+                               close_px)
         for s, b in today.items():
             closes[s].append((day, float(b.close)))
         pending, bench_pending = [], []
