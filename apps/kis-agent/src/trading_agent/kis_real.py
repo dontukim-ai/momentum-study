@@ -36,8 +36,11 @@ READ_ROUTES = {
     "minute": ("/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice", "FHKST03010200"),
     # Past-date one-minute bars; KIS keeps about a year (intraday-candidates-v10 §5).
     "minute_daily": ("/uapi/domestic-stock/v1/quotations/inquire-time-dailychartprice", "FHKST03010230"),
+    # Past daily closes of a stock/ETF and of a sector index, 100 per read (entry-timing study, 2026-11-03).
+    "daily": ("/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice", "FHKST03010100"),
+    "index_daily": ("/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice", "FHKUP03500100"),
 }
-MARKET_READS = ("quote", "asking", "minute", "minute_daily")
+MARKET_READS = ("quote", "asking", "minute", "minute_daily", "daily", "index_daily")
 MINUTE_HISTORY_DAYS = 380
 
 
@@ -180,6 +183,39 @@ class KisRealReadOnly:
                 for row in rows):
             raise AgentError("Missing real minute-bar rows")
         return result
+
+    def _daily_range(self, start: date, end: date) -> tuple[str, str]:
+        today = datetime.now(KST).date()
+        if type(start) is not date or type(end) is not date or not start <= end <= today:
+            raise AgentError("A past date range (start <= end <= today) is required")
+        return start.strftime("%Y%m%d"), end.strftime("%Y%m%d")
+
+    @staticmethod
+    def _daily_rows(result: dict, close: str) -> dict:
+        rows = result.get("output2")
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            raise AgentError("Missing real daily-bar rows")
+        # an empty page answers with one row of blanks; keep only dated rows with the close field
+        result["output2"] = [row for row in rows if row.get("stck_bsop_date") and close in row]
+        return result
+
+    def daily_bars(self, symbol: str, start: date, end: date) -> dict:
+        """Up to 100 daily bars of a stock or ETF, newest first, unadjusted prices, ending at or before ``end``."""
+        first, last = self._daily_range(start, end)
+        result = self.request("daily", {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": _symbol(symbol),
+                                        "FID_INPUT_DATE_1": first, "FID_INPUT_DATE_2": last,
+                                        "FID_PERIOD_DIV_CODE": "D", "FID_ORG_ADJ_PRC": "1"})
+        return self._daily_rows(result, "stck_clpr")
+
+    def index_daily(self, code: str, start: date, end: date) -> dict:
+        """Up to 100 daily closes of a KRX index (four digits, e.g. 2001 KOSPI 200), newest first."""
+        if not isinstance(code, str) or not re.fullmatch(r"[0-9]{4}", code):
+            raise AgentError("A four-digit KRX index code is required")
+        first, last = self._daily_range(start, end)
+        result = self.request("index_daily", {"FID_COND_MRKT_DIV_CODE": "U", "FID_INPUT_ISCD": code,
+                                              "FID_INPUT_DATE_1": first, "FID_INPUT_DATE_2": last,
+                                              "FID_PERIOD_DIV_CODE": "D"})
+        return self._daily_rows(result, "bstp_nmix_prpr")
 
     def balance(self) -> dict:
         rows, summaries = self._pages("balance", {**self.account_params(), "AFHR_FLPR_YN": "N", "OFL_YN": "",

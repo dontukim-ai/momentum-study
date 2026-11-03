@@ -250,3 +250,51 @@ class PastMinuteBarTests(unittest.TestCase):
             with self.assertRaisesRegex(AgentError, "retained minute-bar window"):
                 self.client.minute_bars_on("069500", day, "100000")
         self.assertEqual(self.calls, [])
+
+
+class DailyBarTests(unittest.TestCase):
+    """Past daily closes of an ETF and of an index (FHKST03010100, FHKUP03500100), read-only market data."""
+
+    def setUp(self):
+        self.env = patch.dict("os.environ", REAL_ENV, clear=True)
+        self.env.start()
+        self.calls = []
+        self.client = KisRealReadOnly(self.transport, minimum_interval=.1)
+
+    def tearDown(self):
+        self.env.stop()
+
+    def transport(self, method, url, headers, body):
+        self.calls.append((method, url, headers, body))
+        if method == "POST":
+            return {"access_token": "token", "expires_in": 86400}
+        if urlparse(url).path.endswith("inquire-daily-indexchartprice"):
+            return {"rt_cd": "0", "output1": {}, "output2": [
+                {"stck_bsop_date": "20030102", "bstp_nmix_prpr": "76.36"}, {"stck_bsop_date": ""}]}
+        return {"rt_cd": "0", "output1": {}, "output2": [{"stck_bsop_date": "20030102", "stck_clpr": "7560"}]}
+
+    def test_daily_reads_use_their_tr_ids_and_date_range_without_account_identity(self):
+        start, end = datetime(1990, 1, 1).date(), datetime(2003, 1, 2).date()
+        etf = self.client.daily_bars("069500", start, end)
+        index = self.client.index_daily("2001", start, end)
+        self.assertEqual(etf["output2"], [{"stck_bsop_date": "20030102", "stck_clpr": "7560"}])
+        self.assertEqual(index["output2"], [{"stck_bsop_date": "20030102", "bstp_nmix_prpr": "76.36"}])  # blank row out
+        gets = [c for c in self.calls if c[0] == "GET"]
+        self.assertEqual([c[2]["tr_id"] for c in gets], ["FHKST03010100", "FHKUP03500100"])
+        etf_q, index_q = (parse_qs(urlparse(c[1]).query) for c in gets)
+        self.assertEqual((etf_q["FID_INPUT_DATE_1"], etf_q["FID_INPUT_DATE_2"]), (["19900101"], ["20030102"]))
+        self.assertEqual((etf_q["FID_COND_MRKT_DIV_CODE"], etf_q["FID_ORG_ADJ_PRC"]), (["J"], ["1"]))
+        self.assertEqual((index_q["FID_COND_MRKT_DIV_CODE"], index_q["FID_INPUT_ISCD"]), (["U"], ["2001"]))
+        for query in (etf_q, index_q):
+            self.assertNotIn("CANO", query)
+
+    def test_bad_ranges_and_codes_are_rejected_before_any_request(self):
+        today = datetime.now(KST).date()
+        for call in (lambda: self.client.daily_bars("069500", today, today - timedelta(days=1)),
+                     lambda: self.client.daily_bars("069500", today, today + timedelta(days=1)),
+                     lambda: self.client.index_daily("200", today, today),
+                     lambda: self.client.index_daily("KS200", today, today),
+                     lambda: self.client.daily_bars("69500", today, today)):
+            with self.assertRaises(AgentError):
+                call()
+        self.assertEqual(self.calls, [])
