@@ -376,7 +376,7 @@ def legal_names(root: Path) -> dict[str, str]:
 
 
 DETAIL_URL = "https://opendart.fss.or.kr/api/{api}.json"
-DETAIL_APIS = ("fricDecsn", "crDecsn")
+DETAIL_APIS = ("fricDecsn", "pifricDecsn", "crDecsn")
 
 
 class DartDetailFetcher:

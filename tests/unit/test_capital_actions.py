@@ -406,3 +406,34 @@ def test_a_deferred_base_ratio_split_is_booked_unless_a_reduction_takes_its_day(
     assert ("capital_reduction", "2024-05-22") in days and ("split", "2024-05-22") not in days
     assert ("split", "2024-04-29") in days                                   # no reduction that day: booked
     assert any(s["reason"] == "base-ratio split replaced by the filed reduction" for s in result.skipped)
+
+
+def test_paid_and_bonus_issue_books_its_bonus_part(tmp_path):
+    # 112610 2021 shape (v31 stop): 유무상증자결정, 1 bonus share per share,
+    # base moved x1.998821 on the ex-date. Only the bonus part is booked.
+    rows = [row("20240314000007", "112610", "씨에스윈드", "주요사항보고서(유무상증자결정)", "20240314")]
+    page = tmp_path / "pifric.json"
+    page.write_text(json.dumps({"status": "000", "list": rows}), encoding="utf-8")
+    filed = parse_list_pages([page])
+    detail = {"20240314000007": {
+        "piic_nstk_ostk_cnt": "3,800,000",
+        "fric_nstk_ascnt_ps_ostk": "1",
+        "fric_nstk_asstd": "2024년 04월 08일",
+        "fric_nstk_lstprd": "2024년 04월 26일",
+    }}
+    moved = [{"session": "2024-04-05", "symbol": "112610", "factor": "1.998821"}]
+    result = build(filed, detail, moved, SESSIONS, CONFIRMED)
+    [bonus] = result.actions
+    assert (bonus["action_type"], bonus["ex_date"], bonus["pay_date"], bonus["split_ratio"]) == (
+        "bonus_issue", "2024-04-05", "2024-04-26", "1")
+    assert bonus["evidence"]["paid_part_not_modelled"] is True
+    # A paid part that moves the base beyond 0.5% of the bonus is not booked.
+    far = build(filed, detail, [dict(moved[0], factor="1.90")], SESSIONS, CONFIRMED)
+    assert not far.actions and far.unresolved[0]["reason"].startswith("price adjustment 1.90")
+    # Field names not as expected: unresolved with the answer's keys, nothing guessed.
+    odd = {"20240314000007": {"nstk_asstd": "2024년 04월 08일", "nstk_ascnt_ps_ostk": "1"}}
+    unread = build(filed, odd, moved, SESSIONS, CONFIRMED)
+    assert not unread.actions
+    assert unread.unresolved[0]["reason"] == (
+        "pifricDecsn answer has no fric_nstk_asstd; keys ['nstk_ascnt_ps_ostk', 'nstk_asstd']")
+    DartDetailFetcher(tmp_path, "pifricDecsn", environ={"OPENDART_API_KEY": KEY})
