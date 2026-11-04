@@ -228,13 +228,13 @@ def review_text(review: dict[str, Any]) -> str:
     """One block for the daily txt; report only."""
     def f(x: float | None, spec: str) -> str:
         return "n/a" if x is None else format(x, spec)
-    lines = [f"pattern review (report only, not the judgement): {review['calls']} calls by "
-             f"{review['patterns_spoke']} patterns; {review['patterns_tested']} patterns with >= {review['minimum']} "
-             f"calls hold {review['calls_tested']}",
-             f"  heterogeneity chi2 {f(review['heterogeneity_chi2'], '.1f')} p {f(review['heterogeneity_p'], '.3g')} "
+    lines = [(f"pattern review (report only, not the judgement): {review['calls']} calls by "
+              f"{review['patterns_spoke']} patterns; {review['patterns_tested']} patterns with >= {review['minimum']} "
+              f"calls hold {review['calls_tested']}"),
+             (f"  heterogeneity chi2 {f(review['heterogeneity_chi2'], '.1f')} p {f(review['heterogeneity_p'], '.3g')} "
              f"(optimistic: overlapping outcomes); split half r {f(review['split_half_r'], '+.3f')} "
              f"p {f(review['split_half_p'], '.3g')} over {review['split_half_patterns']} patterns; "
-             f"beyond 3 sd {review['beyond_3sd']} (coin {review['beyond_3sd_expected']:.1f})"]
+             f"beyond 3 sd {review['beyond_3sd']} (coin {review['beyond_3sd_expected']:.1f})")]
     lines += [f"  {e['pattern']}: {e['calls']} calls, hit {e['hit_rate']:.1%}, z {e['z']:+.2f}, "
               f"Bonferroni p {e['bonferroni_p']:.3g}" for e in review["extremes"]]
     return "\n".join(lines)
