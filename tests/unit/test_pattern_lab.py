@@ -161,3 +161,47 @@ def test_online_never_uses_an_outcome_before_it_is_known():
 def test_online_learns_a_planted_pattern():
     result = lab.online(planted_days(8), initial=4)
     assert result["cell"]["accuracy"] > 0.6
+
+
+def _calls(rates, n, days=20, seed=0):
+    """Predictions from patterns with fixed hit rates: p > 0.5 always, so a hit is an up outcome."""
+    rng = np.random.default_rng(seed)
+    keys, p, y, d = [], [], [], []
+    for key, rate in rates.items():
+        for k in range(n):
+            keys.append(key)
+            p.append(0.6)
+            y.append(1.0 if rng.random() < rate else -1.0)
+            d.append(k % days)
+    return keys, np.array(p), np.array(y), np.array(d)
+
+
+def test_pattern_review_finds_patterns_that_really_differ():
+    rates = {f"5:{i}": (0.70 if i % 2 else 0.30) for i in range(20)}
+    review = lab.pattern_review(*_calls(rates, 200))
+    assert review["patterns_tested"] == 20 and review["calls_tested"] == 4000
+    assert review["heterogeneity_p"] < 1e-6
+    assert review["split_half_r"] > 0.8 and review["split_half_p"] < 1e-3
+    assert review["beyond_3sd"] == 20 and review["beyond_3sd_expected"] == pytest.approx(20 * 0.0027, rel=0.01)
+
+
+def test_pattern_review_on_coin_patterns_finds_nothing():
+    review = lab.pattern_review(*_calls({f"5:{i}": 0.5 for i in range(40)}, 200, seed=1))
+    assert review["heterogeneity_p"] > 0.01 and review["split_half_p"] > 0.01
+
+
+def test_pattern_review_counts_but_does_not_test_rare_patterns_and_skips_abstentions():
+    keys, p, y, d = _calls({"5:a": 0.5, "1:b": 0.5}, 40)
+    keys += ["5:a", "5:a"]
+    p = np.append(p, [0.5, 0.6])          # an abstention, and a call on a flat outcome
+    y = np.append(y, [1.0, 0.0])
+    d = np.append(d, [0, 0])
+    review = lab.pattern_review(keys, p, y, d, minimum=41)
+    assert review["patterns_spoke"] == 2 and review["calls"] == 80
+    assert review["patterns_tested"] == 0 and review["heterogeneity_p"] is None
+
+
+def test_online_reports_which_pattern_spoke():
+    result = lab.online(planted_days(8), initial=4)
+    assert len(result["keys"]) == len(result["p"])
+    assert all(k is None or k.split(":")[0] in {"1", "2", "3", "4", "5"} for k in result["keys"])

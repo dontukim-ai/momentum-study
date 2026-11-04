@@ -118,12 +118,16 @@ class OnlineRecord:
             c = self.counts[k - 1].setdefault(tuple(types[-k:]), [0, 0])
             c[0 if outcome > 0 else 1] += 1
 
-    def prob(self, types: tuple) -> float:
+    def speaker(self, types: tuple) -> tuple[str | None, float]:
+        """The pattern that speaks (``"<length>:<types>"``, None when none has enough record) and its probability."""
         for k in range(BARS, 0, -1):
             c = self.counts[k - 1].get(tuple(types[-k:]))
             if c and sum(c) >= self.minimum:
-                return (c[0] + 1) / (sum(c) + 2)
-        return 0.5
+                return f"{k}:{','.join(map(str, types[-k:]))}", (c[0] + 1) / (sum(c) + 2)
+        return None, 0.5
+
+    def prob(self, types: tuple) -> float:
+        return self.speaker(types)[1]
 
     def digest(self) -> str:
         text = json.dumps([sorted((",".join(map(str, key)), c) for key, c in level.items()) for level in self.counts])
@@ -142,7 +146,7 @@ def online(data: dict, initial: int, minimum: int = ONLINE_MIN) -> dict[str, Any
         for pattern, y in zip(map(tuple, bar_types(s["X"], s["mag"])), s[f"y{H}"], strict=True):
             rec.add(pattern, y)
     seed = rec.digest()
-    ps, ys, rs, ds = [], [], [], []
+    ps, ys, rs, ds, keys = [], [], [], [], []
     for n, day in enumerate(days[initial:], start=initial):
         s = data[day]
         types = list(map(tuple, bar_types(s["X"], s["mag"])))
@@ -151,7 +155,9 @@ def online(data: dict, initial: int, minimum: int = ONLINE_MIN) -> dict[str, Any
             while pending < k and s["i"][pending] + H <= minute:
                 rec.add(types[pending], s[f"y{H}"][pending])
                 pending += 1
-            ps.append(rec.prob(types[k]))
+            key, prob = rec.speaker(types[k])
+            keys.append(key)
+            ps.append(prob)
         for k in range(pending, len(types)):
             rec.add(types[k], s[f"y{H}"][k])
         ys.append(s[f"y{H}"])
@@ -159,7 +165,79 @@ def online(data: dict, initial: int, minimum: int = ONLINE_MIN) -> dict[str, Any
         ds.append(np.full(len(types), n))
     p, y, r, d = np.array(ps), np.concatenate(ys), np.concatenate(rs), np.concatenate(ds)
     return {"days": [days[initial], days[-1]], "seed_days": [days[0], days[initial - 1]], "seed_sha256": seed,
-            "p": p, "cell": direction_lab.score(p, y, d, r)}
+            "p": p, "keys": keys, "cell": direction_lab.score(p, y, d, r),
+            "pattern_review": pattern_review(keys, p, y, d)}
+
+
+REVIEW_MIN = 30                                  # v19b pattern review: a pattern is tested once it made this many calls
+
+
+def pattern_review(keys: list[str | None], p: np.ndarray, y: np.ndarray, d: np.ndarray,
+                   minimum: int = REVIEW_MIN) -> dict[str, Any]:
+    """Report only (2026-11-04 user request, never part of the v19b judgement): do the speaking patterns' hit
+    rates differ by more than chance?
+
+    Calls are scored as in ``direction_lab.score`` (abstentions and flat outcomes left out). Patterns with at
+    least ``minimum`` calls are tested three ways, all fixed before the review is run:
+    - heterogeneity: chi-square on the patterns' hit/miss table (overlapping five-minute outcomes make the
+      calls dependent, so this p is optimistic);
+    - split half: correlation of each pattern's hit rate in the first and the second half of the days. A real
+      difference shows up in both halves; the halves are disjoint in time, so overlap does not inflate it;
+    - patterns beyond three standard deviations from a coin (0.5), against the number a coin would give.
+    """
+    from scipy import stats
+
+    called = (p != 0.5) & (y != 0) & np.array([k is not None for k in keys], dtype=bool)
+    hits = (p > 0.5) == (y > 0)
+    groups: dict[str, list[int]] = {}
+    for i in np.flatnonzero(called):
+        groups.setdefault(str(keys[i]), []).append(int(i))
+    tested = {k: np.array(v) for k, v in groups.items() if len(v) >= minimum}
+    out: dict[str, Any] = {"minimum": minimum, "calls": int(called.sum()), "patterns_spoke": len(groups),
+                           "patterns_tested": len(tested), "calls_tested": int(sum(len(v) for v in tested.values())),
+                           "heterogeneity_chi2": None, "heterogeneity_p": None, "split_half_patterns": 0,
+                           "split_half_r": None, "split_half_p": None, "beyond_3sd": 0,
+                           "beyond_3sd_expected": 2 * float(stats.norm.sf(3)) * len(tested), "extremes": []}
+    if len(tested) < 2:
+        return out
+    table = np.array([[hits[v].sum(), (~hits[v]).sum()] for v in tested.values()])
+    if (table.sum(axis=0) > 0).all():
+        chi2, pval, _, _ = stats.chi2_contingency(table, correction=False)
+        out["heterogeneity_chi2"], out["heterogeneity_p"] = float(chi2), float(pval)
+    cut = np.median(np.unique(d[called]))
+    first, second = [], []
+    for v in tested.values():
+        a, b = v[d[v] <= cut], v[d[v] > cut]
+        if len(a) and len(b):
+            first.append(hits[a].mean())
+            second.append(hits[b].mean())
+    out["split_half_patterns"] = len(first)
+    if len(first) >= 3 and np.std(first) > 0 and np.std(second) > 0:
+        r, pval = stats.pearsonr(first, second)
+        out["split_half_r"], out["split_half_p"] = float(r), float(pval)
+    z = {k: (hits[v].sum() - len(v) / 2) / np.sqrt(len(v) / 4) for k, v in tested.items()}
+    out["beyond_3sd"] = sum(abs(x) > 3 for x in z.values())
+    top = sorted(z, key=lambda k: -abs(z[k]))[:5]
+    out["extremes"] = [{"pattern": k, "calls": len(tested[k]), "hit_rate": float(hits[tested[k]].mean()),
+                        "z": float(z[k]), "bonferroni_p": min(1.0, float(2 * stats.norm.sf(abs(z[k]))) * len(tested))}
+                       for k in top]
+    return out
+
+
+def review_text(review: dict[str, Any]) -> str:
+    """One block for the daily txt; report only."""
+    def f(x: float | None, spec: str) -> str:
+        return "n/a" if x is None else format(x, spec)
+    lines = [(f"pattern review (report only, not the judgement): {review['calls']} calls by "
+              f"{review['patterns_spoke']} patterns; {review['patterns_tested']} patterns with >= {review['minimum']} "
+              f"calls hold {review['calls_tested']}"),
+             (f"  heterogeneity chi2 {f(review['heterogeneity_chi2'], '.1f')} p {f(review['heterogeneity_p'], '.3g')} "
+             f"(optimistic: overlapping outcomes); split half r {f(review['split_half_r'], '+.3f')} "
+             f"p {f(review['split_half_p'], '.3g')} over {review['split_half_patterns']} patterns; "
+             f"beyond 3 sd {review['beyond_3sd']} (coin {review['beyond_3sd_expected']:.1f})")]
+    lines += [f"  {e['pattern']}: {e['calls']} calls, hit {e['hit_rate']:.1%}, z {e['z']:+.2f}, "
+              f"Bonferroni p {e['bonferroni_p']:.3g}" for e in review["extremes"]]
+    return "\n".join(lines)
 
 
 def fit(model: str, X: np.ndarray, y: np.ndarray, k: int = K) -> Any:
@@ -335,7 +413,8 @@ def _online(args: argparse.Namespace) -> int:
     print(f"forward seed sha256 {full.digest()}")
     cells = {f"ONLINE h{H}": result["cell"]}
     direction_lab._table(cells, _bonferroni(cells))
-    print(json.dumps({key: v for key, v in result.items() if key != "p"} | {"forward_seed_sha256": full.digest()},
+    print(review_text(result["pattern_review"]))
+    print(json.dumps({key: v for key, v in result.items() if key not in ("p", "keys")} | {"forward_seed_sha256": full.digest()},
                      sort_keys=True, default=float))
     return 0
 
