@@ -121,3 +121,29 @@
 - **수정 (사용자 승인 2026-11-04 "v31 입력 수정 진행해"):** `pifricDecsn` 상세를 받아 무상 부분을 무상증자와 같은 규칙으로 기록한다(`docs/blueprint/data-sources.md`). 연구 입력은 새 데이터 버전으로 다시 만들고 기존 v2d를 덮어쓰지 않는다.
 - **다시 실행의 근거:** 판정 기준, 변형, 유니버스, 일정, 비용은 바꾸지 않는다. 바뀌는 것은 입력의 기업행동 누락뿐이다. 결과를 보기 전의 입력 결함 수정이므로 사전 등록에 어긋나지 않는다. 시험 장부 항목(`v31/*`)도 그대로 둔다.
 - **남는 위험:** 격리되지 않은 설명 없는 급변 253건 가운데 이번 수정으로 설명되지 않는 건을 보유하면 다시 멈춘다. 다시 멈추면 같은 방식으로 보고만 하고, 규칙을 바꾸지 않는다.
+
+**재구성 결과 (2026-11-04 맥, d7b1664, `data/krx/v2-2026-11-04e/`, v2d 덮어쓰지 않음)**
+- `pifricDecsn` 원공시 77건을 모두 받았다. 필드명 가정(`fric_`·`piic_`)이 맞았다.
+- 유무상증자 무상 부분 66건을 기록했다(모두 `paid_part_not_modelled`). 미해결 7건: 권리락 시가 뒤 공시 5, 달력 시작 전 1, 달력 확인 범위 밖 1.
+- 112610: `bonus_issue` ex 2021-02-08, 1주당 1주, 기준가 ×1.998821.
+- 행 수: 분할 443 → 443, 감자·무상증자 649 → 715(+66, 사라진 행 0, 중복 0). 연구 입력 `actions.json` 9,085행.
+- 격리되지 않은 설명 없는 급변 253 → 230건(보통주 210 → 187). 112610은 목록에서 빠졌다.
+
+## 8. 기준의 분배금 입력 (2026-11-04 사용자 결정 "1번 수동 분배금 파일로 진행해", 성과 계산 전)
+
+- **발견:** PR #195 조사에서 연구 입력에 069500 분배금 행이 0건임이 드러났다. ETF는 DART 현금배당 공시를 내지 않아 배당 경로에 들어오지 않는다. §6의 "기준이 자기 분배금을 받는다"가 입력에서 실현되지 않아, 기준이 연 1.5~2%p(검증 안 된 추정) 낮게 잡힐 수 있었다. E1의 "연수익 ≥ 069500"에 직접 걸린다.
+- **수정:** 사용자가 2020년 이후 069500 분배금 이력을 운용사·KIND 화면에서 손으로 옮겨 `data/krx/kind/069500-distributions.csv`에 둔다(자동 수집 없음, 재배포 금지). 형식과 규칙은 `momentum.krx.etf_distributions`:
+  - 열 `record_date,pay_date,cash_per_unit,announced`(ISO 날짜, 1좌당 원, 구분 기호 없음)
+  - 권리락은 주식 배당과 같은 T+2 규칙(기준일 이전 마지막 세션의 전 세션), 공개 시각은 공시일 18:00 KST, 권리락 시가 전에 공개되지 않은 금액은 거부
+  - 지급일이 세션이 아니면 다음 세션으로 미룬다
+- **새 입력:** `tools/etf_distributions.py`가 v2e `research`에 분배금을 더한 `data/krx/v2-2026-11-04e/research-dist`를 새로 쓴다(덮어쓰지 않음). v31은 이 입력으로 실행한다.
+- 판정 기준, 변형, 유니버스, 일정, 비용, 시험 장부는 그대로다.
+
+**실행 (맥, 사용자 파일이 준비된 뒤)**
+
+    uv run python tools/etf_distributions.py --file data/krx/kind/069500-distributions.csv \
+        --calendar <v2e 재구성에 쓴 calendar> --research data/krx/v2-2026-11-04e/research \
+        --out data/krx/v2-2026-11-04e/research-dist
+    uv run --extra agent python tools/dwp_study.py --input data/krx/v2-2026-11-04e/research-dist \
+        --events data/krx/v2-2026-11-01/market-events.json --shares data/krx/dwp-v31/shares.csv \
+        --record data/krx/dwp-v31/run.json
