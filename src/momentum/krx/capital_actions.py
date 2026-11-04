@@ -31,6 +31,14 @@ ratio the price does not confirm stays unresolved (2024: SNT에너지 announced
   is what the ledger applies.
 
 Subsidiary filings and filings without a listed stock code are ignored.
+
+유무상증자결정 (paid and bonus issue together, v31 input fix 2026-11-04,
+112610 2021: ex 2021-02-08, base moved x1.9988 for 1 bonus share per share)
+books only its bonus part, by the same rule and the same 0.5% price
+confirmation as a plain bonus issue. The paid part (subscription rights) is
+not modelled: the holder does not subscribe, so whatever the rights dilution
+moves beyond the bonus stays in the price as a real loss. A paid part large
+enough to move the base beyond 0.5% leaves the filing unresolved.
 """
 
 from __future__ import annotations
@@ -56,7 +64,12 @@ BAND = Decimal("0.30")
 # 04-29, relisting planned 05-22); a price move later than this is not taken
 # as its effect.
 MAX_RELISTING_LAG = timedelta(days=120)
-KINDS = {"BONUS_ISSUE": "fricDecsn", "CAPITAL_REDUCTION": "crDecsn"}
+KINDS = {"BONUS_ISSUE": "fricDecsn", "BONUS_AND_RIGHTS": "pifricDecsn", "CAPITAL_REDUCTION": "crDecsn"}
+# 유무상증자결정 answers carry the bonus part under ``fric_`` and the paid part
+# under ``piic_`` (OpenDART pifricDecsn, field names to be checked against the
+# first saved answers: a missing bonus field leaves the filing unresolved with
+# the answer's keys, never guessed).
+PREFIX = {"BONUS_ISSUE": "", "BONUS_AND_RIGHTS": "fric_"}
 
 
 @dataclass(frozen=True)
@@ -163,10 +176,14 @@ def build(
             else:
                 unresolved.append({**base, "reason": "detail answer not collected"})
             continue
+        if event.report_kind in PREFIX and PREFIX[event.report_kind] + "nstk_asstd" not in detail:
+            unresolved.append({**base, "reason": f"{KINDS[event.report_kind]} answer has no "
+                               f"{PREFIX[event.report_kind]}nstk_asstd; keys {sorted(detail)}"})
+            continue
         try:
             key_day = (
-                korean_day(detail.get("nstk_asstd"))
-                if event.report_kind == "BONUS_ISSUE"
+                korean_day(detail.get(PREFIX[event.report_kind] + "nstk_asstd"))
+                if event.report_kind in PREFIX
                 else korean_day(detail.get("cr_std"))
             )
         except SpecUndefinedError as exc:
@@ -188,8 +205,8 @@ def build(
         }
         result: dict[str, Any] | str | tuple[str, dict[str, Any]]
         try:
-            if kind == "BONUS_ISSUE":
-                result = _bonus(base, filings, moves, sessions, confirmed_through)
+            if kind in PREFIX:
+                result = _bonus(base, filings, moves, sessions, confirmed_through, PREFIX[kind])
             else:
                 result = _reduction(base, filings, moves, shares, confirmed_through)
         except SpecUndefinedError as exc:
@@ -275,18 +292,19 @@ def _bonus(
     moves: Mapping[tuple[str, date], Decimal],
     sessions: tuple[date, ...],
     confirmed_through: date,
+    prefix: str = "",
 ) -> dict[str, Any] | str:
     record = date.fromisoformat(base["record_date"])
     ex = ex_dividend_date(record, sessions, confirmed_through)
     source = _source(filings, ex)
     if source is None:
         return "filed after the ex-date open"
-    ratio = number(source[1].get("nstk_ascnt_ps_ostk"))
+    ratio = number(source[1].get(prefix + "nstk_ascnt_ps_ostk"))
     if ratio is None or ratio <= 0:
         return "no common-share allotment ratio"
-    if any(number(d.get("nstk_ascnt_ps_ostk")) != ratio for _, d in filings):
+    if any(number(d.get(prefix + "nstk_ascnt_ps_ostk")) != ratio for _, d in filings):
         return "allotment ratio changed between filings"
-    listing = korean_day(filings[-1][1].get("nstk_lstprd"))
+    listing = korean_day(filings[-1][1].get(prefix + "nstk_lstprd"))
     if listing is None or listing <= ex:
         return f"listing date {listing} not after ex-date {ex}"
     factor = moves.get((base["stock_code"], ex))
@@ -294,8 +312,8 @@ def _bonus(
     # whole-company growth 1 + new shares / shares before, slightly below
     # 1 + the per-share allotment holders receive (2020-2024: 62 of 64
     # filings unconfirmed against 1 + ratio matched this within 0.5%).
-    new = number(source[1].get("nstk_ostk_cnt"))
-    before = number(source[1].get("bfic_tisstk_ostk"))
+    new = number(source[1].get(prefix + "nstk_ostk_cnt"))
+    before = number(source[1].get(prefix + "bfic_tisstk_ostk"))
     effective = 1 + new / before if new and before else None
     if factor is not None and _close(factor, 1 + ratio):
         basis = "1 + allotment"
@@ -318,7 +336,8 @@ def _bonus(
             "price_factor": str(factor),
             "confirmed_by": basis,
             "filings": base["filings"],
-            "class_share_ratio_ignored": source[1].get("nstk_ascnt_ps_iostk"),
+            "class_share_ratio_ignored": source[1].get(prefix + "nstk_ascnt_ps_iostk"),
+            **({"paid_part_not_modelled": True} if prefix else {}),
         },
     }
 
