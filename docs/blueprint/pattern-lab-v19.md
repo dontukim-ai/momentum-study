@@ -235,3 +235,22 @@ uv run python tools/pattern_lab.py online-score --bars data/kis/minute-history
   3. **3표준편차 밖 패턴 수:** 동전(50%) 기준 z가 ±3을 넘는 패턴 수와, 동전이라면 나올 기대 개수(패턴 수 × 0.27%). 상위 5개 패턴은 Bonferroni p와 함께 보인다.
 - **읽는 법 (미리 정함):** 반분 상관이 양수이고 p < 0.01이며 이질성 p도 작을 때만 "패턴별 차이가 재현된다"고 쓴다. 3표준편차 밖 패턴 수만 많고 반분 상관이 없으면 우연한 쏠림으로 쓴다.
 - **실행:** `online-eval`(개발 구간)과 `online-score`(매일 전진) 출력에 함께 나온다. 개발 구간 진단은 맥에서 `online-eval`로 1회 낸다. 이미 본 개발 결과를 다시 계산하는 것이고 판정에 쓰지 않는다. 전진 구간은 날이 적어 60거래일 전에는 시험할 패턴이 거의 없다.
+
+**개발 구간 진단 결과 (2026-11-04 맥 1회, a4cbbcb, exit 0, 보고 전용)**
+
+시작 기록 sha256과 개발 결과 표(n 40,379, 50.60%)는 이전과 같았다. 진단을 넣어도 예측은 바뀌지 않았다.
+
+```
+pattern review (report only, not the judgement): 40379 calls by 1264 patterns; 536 patterns with >= 30 calls hold 32314
+  heterogeneity chi2 547.0 p 0.35 (optimistic: overlapping outcomes); split half r +0.060 p 0.164 over 535 patterns; beyond 3 sd 0 (coin 1.4)
+  3:1,0,2: 36 calls, hit 72.2%, z +2.67, Bonferroni p 1
+  3:9,2,1: 33 calls, hit 27.3%, z -2.61, Bonferroni p 1
+  3:6,6,8: 100 calls, hit 63.0%, z +2.60, Bonferroni p 1
+  3:1,3,2: 35 calls, hit 28.6%, z -2.54, Bonferroni p 1
+  3:7,2,0: 40 calls, hit 30.0%, z -2.53, Bonferroni p 1
+```
+
+- **미리 정한 기준으로 읽으면 "패턴별 차이가 재현되지 않는다".** 반분 상관 r +0.060(p 0.164)은 기준(양수이면서 p < 0.01)에 못 미친다. 이질성 p 0.35는 겹침 때문에 낙관적인 값인데도 크다.
+- 3표준편차 밖 패턴은 0개로, 동전 기대값 1.4개보다 적다. 가장 튀는 패턴(72%, 27% 등)은 30~40회짜리이고 Bonferroni p가 모두 1이다.
+- 예측의 80%(32,314/40,379)를 30회 이상 쓰인 536개 패턴이 냈다. 이 패턴들의 적중률 차이는 표본 크기로 설명되는 흩어짐과 구별되지 않는다.
+- 판정(§10.3)과 시험 장부는 그대로다. 이 결과로 패턴을 고르지 않는다.
