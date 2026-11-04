@@ -120,6 +120,18 @@ def test_buys_the_open_after_a_golden_cross_and_sells_the_open_after_the_dead_cr
     assert bench == []                                # the benchmark keeps its own ledger
 
 
+
+def test_the_benchmark_books_069500s_own_distributions():
+    # v20~v23 stepped the benchmark with no actions; an ETF distribution must reach its ledger like a dividend
+    paid = SimpleNamespace(action=CorporateAction("069500", "cash_dividend", date(2020, 5, 4), date(2020, 5, 20),
+                                                  None, Decimal(100)),
+                           available_at=datetime.combine(date(2020, 4, 20), datetime.min.time(), KST))
+    paths = {"005930": [100.0] * 220, "069500": [10000.0] * 220}
+    plain, _ = make_data(paths)
+    with_div, _ = make_data(paths, actions=[paid])
+    gap = ma.backtest(with_div, 36.5)["bench"][-1] - ma.backtest(plain, 36.5)["bench"][-1]
+    assert gap == pytest.approx(9_500 * 100)                    # 0.95 x 1e8 / 10,000 units x 100 won
+
 def test_a_split_is_no_dead_cross_and_the_ledger_scales_the_holding():
     path = path_down_up_down(220)
     marks = golden_and_dead_days(path, weekdays(220))
