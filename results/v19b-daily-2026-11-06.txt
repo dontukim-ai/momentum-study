@@ -1,0 +1,18 @@
+v19b daily 2026-11-06, run 2026-11-06 16:11:11 KST, main 26a6edf
+   Building momentum @ file:///Users/dongchulkim/dev/quant/wt-v19b-daily
+      Built momentum @ file:///Users/dongchulkim/dev/quant/wt-v19b-daily
+Uninstalled 1 package in 0.96ms
+Installed 1 package in 1ms
+kis-minute-history: 069500 done {'skipped': 9, 'fetched': 1} 2s
+kis-minute-history: 1 symbols 2026-10-26~2026-11-06 {'skipped': 9, 'fetched': 1}
+collect_exit=0
+v19b ONLINE, 069500, forward 2026-10-26~2026-11-06 (record seeded by every development day)
+forward seed sha256 de14cf0a585caf0bf3d4475aff703cb94a8beedb3983a4c4148db94964e016ad
+cell          flat         n     acc            95% CI        p  day_t  brier    wtd     bp   bp_t    big
+ONLINE h5       1%      3251  49.15% [47.44%,50.87%]  8.4e-01  -0.89 0.2570 -0.027  -0.61  -1.32  47.4%
+* p < 0.0500 (Bonferroni over 1 cells); day_t treats each test day as one observation
+wtd: hits minus misses weighed by move size; bp: mean signed return per call before costs (bp_t by day); big: accuracy on the largest quarter of moves
+pattern review (report only, not the judgement): 3251 calls by 1085 patterns; 0 patterns with >= 30 calls hold 0
+  heterogeneity chi2 n/a p n/a (optimistic: overlapping outcomes); split half r n/a p n/a over 0 patterns; beyond 3 sd 0 (coin 0.0)
+{"cell": {"accuracy": 0.4915410642879114, "bonferroni_significant": false, "brier": 0.2569903008001442, "calibration": [[0.2, 7, 0.23393141600610168, 0.42857142857142855], [0.3, 175, 0.3660600078977054, 0.5542857142857143], [0.4, 1349, 0.4601932785939797, 0.49147516679021497], [0.5, 1588, 0.5403212594421591, 0.48425692695214106], [0.6, 231, 0.6306393925178034, 0.45021645021645024], [0.7, 12, 0.7325523427948609, 0.5833333333333334]], "called": 3251, "ci95": [0.47437595659562015, 0.508726139678435], "confidence": [{"accuracy": 0.5150602409638554, "band": "0.00-0.02", "n": 664}, {"accuracy": 0.5062611806797853, "band": "0.02-0.05", "n": 1118}, {"accuracy": 0.4760536398467433, "band": "0.05-0.10", "n": 1044}, {"accuracy": 0.4541176470588235, "band": "0.10-0.50", "n": 425}], "coverage": 0.9547723935389134, "day_t": -0.8932640424037821, "days": 10, "flat_share": 0.013043478260869565, "large_move_accuracy": 0.4735547355473555, "log_loss": 0.7075287818714273, "magnitude_weighted": -0.027373459798126852, "moving": 3405, "p_binomial": 0.8369877589015289, "samples": 3450, "signed_return_bp": -0.6090216919174674, "signed_return_day_t": -1.3161110494802184}, "days": ["2026-10-26", "2026-11-06"], "forward_seed_sha256": "de14cf0a585caf0bf3d4475aff703cb94a8beedb3983a4c4148db94964e016ad", "pattern_review": {"beyond_3sd": 0, "beyond_3sd_expected": 0.0, "calls": 3251, "calls_tested": 0, "extremes": [], "heterogeneity_chi2": null, "heterogeneity_p": null, "minimum": 30, "patterns_spoke": 1085, "patterns_tested": 0, "split_half_p": null, "split_half_patterns": 0, "split_half_r": null}, "seed_days": ["2025-10-27", "2026-06-30"], "seed_sha256": "de14cf0a585caf0bf3d4475aff703cb94a8beedb3983a4c4148db94964e016ad"}
+score_exit=0
