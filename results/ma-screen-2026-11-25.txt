@@ -1,0 +1,30 @@
+ma screen 2026-11-25, run 2026-11-26 13:30:01 KST, main 26a6edf
+   Building momentum @ file:///Users/dongchulkim/dev/quant/wt-ma-screen
+      Built momentum @ file:///Users/dongchulkim/dev/quant/wt-ma-screen
+Uninstalled 1 package in 0.88ms
+Installed 1 package in 1ms
+fsc-collect: stock 2026-11-25 page 1: HTTP 200, 273846 bytes
+fsc-collect: stock 2026-11-25 page 2: HTTP 200, 273940 bytes
+fsc-collect: stock 2026-11-25 page 3: HTTP 200, 241056 bytes
+fsc-collect: 1 fetched, 0 skipped, 0 errors
+collect_exit=0
+saved 2026-11-25 (2879 rows)
+이평선 조회 2026-11-25 (금융위 종가, 거래대금 상위 300종목)
+정배열 31종목, 역배열 128종목 | 이력 부족 제외 25, 기준가 조정 반영 13
+
+[골든크로스 (20일선이 60일선 위로)] 1종목
+  카카오뱅크(323410) 종가 22,000 MA20 20,636 MA60 20,619 거래대금 129억
+
+[데드크로스 (20일선이 60일선 아래로)] 2종목
+  성호전자(043260) 종가 21,700 MA20 23,559 MA60 23,843 거래대금 497억
+  한양디지텍(078350) 종가 19,450 MA20 27,962 MA60 28,199 거래대금 158억
+
+[정배열 새 진입 (5>20>60>120)] 2종목
+  비나텍(126340) 종가 86,600 MA20 88,365 MA60 83,598 거래대금 153억
+  라온로보틱스(232680) 종가 12,710 MA20 11,870 MA60 10,423 거래대금 146억
+
+[역배열 새 진입 (5<20<60<120)] 0종목
+
+조회 도구이며 매매 신호가 아니다(v20 B).
+{"adjusted": 13, "bear": 128, "bear_new": [], "bull": 31, "bull_new": [{"close": 86600.0, "code": "126340", "ma20": 88365.0, "ma60": 83598.33333333333, "name": "비나텍", "value_20d": 15302714727.5}, {"close": 12710.0, "code": "232680", "ma20": 11870.5, "ma60": 10423.333333333334, "name": "라온로보틱스", "value_20d": 14571464064.25}], "day": "2026-11-25", "dead": [{"close": 21700.0, "code": "043260", "ma20": 23559.0, "ma60": 23842.833333333332, "name": "성호전자", "value_20d": 49744408101.5}, {"close": 19450.0, "code": "078350", "ma20": 27962.5, "ma60": 28198.666666666668, "name": "한양디지텍", "value_20d": 15756587750.75}], "golden": [{"close": 22000.0, "code": "323410", "ma20": 20635.5, "ma60": 20618.833333333332, "name": "카카오뱅크", "value_20d": 12881881434.0}], "quoted_today": 2557, "short_history": 25, "universe": 300}
+screen_exit=0
